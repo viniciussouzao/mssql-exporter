@@ -56,6 +56,9 @@ func main() {
 		collector.NewIOFileStatsCollector(db),
 		collector.NewSessionsCollector(db),
 		collector.NewServerInfoCollector(db),
+		collector.NewMemoryClerksCollector(db),
+		collector.NewBackupsCollector(db),
+		collector.NewTempDBCollector(db),
 	)
 
 	slog.Info("sql server exporter is running in :9187 /metrics")
