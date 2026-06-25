@@ -3,8 +3,8 @@ package collector
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"log/slog"
+	"strconv"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/viniciussouzao/mssql-exporter/internal/db"
@@ -65,7 +65,7 @@ func (c *SQLServerMemoryClerks) Collect(ch chan<- prometheus.Metric) {
 			float64(memoryUsedKB),
 			clerkType,
 			clerkName,
-			fmt.Sprintf("%d", memoryNodeID),
+			strconv.Itoa(memoryNodeID),
 		)
 	}
 }
