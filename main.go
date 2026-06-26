@@ -11,6 +11,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/viniciussouzao/mssql-exporter/internal/collector"
 	"github.com/viniciussouzao/mssql-exporter/internal/db"
+	"github.com/viniciussouzao/mssql-exporter/internal/oscollector"
 )
 
 func init() {
@@ -60,6 +61,11 @@ func main() {
 		collector.NewBackupsCollector(db),
 		collector.NewTempDBCollector(db),
 	)
+
+	if os.Getenv("ENABLE_OS_COLLECTORS") == "true" {
+		oscollector.Register(prometheus.DefaultRegisterer)
+		slog.Info("os collectors enabled")
+	}
 
 	slog.Info("sql server exporter is running in :9187 /metrics")
 	http.Handle("/metrics", promhttp.Handler())
