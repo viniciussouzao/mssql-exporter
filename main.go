@@ -1,9 +1,12 @@
 package main
 
 import (
+	"context"
+	"database/sql"
 	"log/slog"
 	"net/http"
 	"os"
+	"time"
 
 	_ "github.com/denisenkom/go-mssqldb"
 	"github.com/joho/godotenv"
@@ -52,7 +55,15 @@ func main() {
 
 	slog.Info("successfully connected and pinged sql server")
 
-	prometheus.MustRegister(
+	instanceName := queryServerName(db)
+	slog.Info("sql server instance", slog.String("instance", instanceName))
+
+	reg := prometheus.WrapRegistererWith(
+		prometheus.Labels{"sqlserver_instance": instanceName},
+		prometheus.DefaultRegisterer,
+	)
+
+	reg.MustRegister(
 		collector.NewWaitStatsCollector(db),
 		collector.NewIOFileStatsCollector(db),
 		collector.NewSessionsCollector(db),
@@ -63,11 +74,24 @@ func main() {
 	)
 
 	if os.Getenv("ENABLE_OS_COLLECTORS") == "true" {
-		oscollector.Register(prometheus.DefaultRegisterer)
+		oscollector.Register(reg)
 		slog.Info("os collectors enabled")
 	}
 
 	slog.Info("sql server exporter is running in :9187 /metrics")
 	http.Handle("/metrics", promhttp.Handler())
 	http.ListenAndServe(":9187", nil)
+}
+
+func queryServerName(db *sql.DB) string {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	var name string
+	err := db.QueryRowContext(ctx, "SELECT @@SERVERNAME").Scan(&name)
+	if err != nil {
+		slog.Error("failed to query @@SERVERNAME, using empty label", slog.Any("error", err))
+		return ""
+	}
+	return name
 }
