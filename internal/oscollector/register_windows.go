@@ -12,5 +12,7 @@ func Register(r prometheus.Registerer) {
 		newDiskIOCollector(),
 		newDiskUsageCollector(),
 		newNetworkCollector(),
+		newProcessCollector(),
+		newBootTimeCollector(),
 	)
 }
