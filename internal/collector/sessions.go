@@ -7,7 +7,6 @@ import (
 	"log/slog"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/viniciussouzao/mssql-exporter/internal/db"
 )
 
 type SQLServerSessions struct {
@@ -35,10 +34,7 @@ func (c *SQLServerSessions) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.sessionState
 }
 
-func (c *SQLServerSessions) Scrape(ch chan<- prometheus.Metric) error {
-	ctx, cancel := context.WithTimeout(context.Background(), db.CurrentOptions().ConnTimeout)
-	defer cancel()
-
+func (c *SQLServerSessions) Scrape(ctx context.Context, ch chan<- prometheus.Metric) error {
 	rows, err := c.db.QueryContext(ctx, `
 	SELECT status, COUNT(*) AS session_count
 	FROM sys.dm_exec_sessions

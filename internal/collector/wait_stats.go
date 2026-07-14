@@ -7,7 +7,6 @@ import (
 	"log/slog"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/viniciussouzao/mssql-exporter/internal/db"
 )
 
 type SQLServerWaitStats struct {
@@ -53,10 +52,7 @@ func (c *SQLServerWaitStats) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.maxWaitTimeMs
 }
 
-func (c *SQLServerWaitStats) Scrape(ch chan<- prometheus.Metric) error {
-	ctx, cancel := context.WithTimeout(context.Background(), db.CurrentOptions().ConnTimeout)
-	defer cancel()
-
+func (c *SQLServerWaitStats) Scrape(ctx context.Context, ch chan<- prometheus.Metric) error {
 	rows, err := c.db.QueryContext(ctx, `
 	SELECT wait_type, wait_time_ms, waiting_tasks_count, max_wait_time_ms
 	FROM sys.dm_os_wait_stats

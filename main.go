@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"time"
 
 	_ "github.com/denisenkom/go-mssqldb"
 	"github.com/joho/godotenv"
@@ -43,23 +42,28 @@ func main() {
 		os.Exit(1)
 	}
 
-	db := db.DB()
+	conn := db.DB()
 
-	if err := db.Ping(); err != nil {
+	pingCtx, cancelPing := context.WithTimeout(context.Background(), db.CurrentOptions().ConnTimeout)
+	err = conn.PingContext(pingCtx)
+	cancelPing()
+
+	var instanceName string
+	if err != nil {
 		slog.Warn("sql server is unreachable at startup, retrying on every scrape (sqlserver_up will report 0)", slog.Any("error", err))
+		slog.Warn("sqlserver_instance label will stay empty until the exporter restarts with sql server reachable")
 	} else {
 		slog.Info("successfully connected and pinged sql server")
+		instanceName = queryServerName(conn)
+		slog.Info("sql server instance", slog.String("instance", instanceName))
 	}
-
-	instanceName := queryServerName(db)
-	slog.Info("sql server instance", slog.String("instance", instanceName))
 
 	reg := prometheus.WrapRegistererWith(
 		prometheus.Labels{"sqlserver_instance": instanceName},
 		prometheus.DefaultRegisterer,
 	)
 
-	reg.MustRegister(collector.NewExporter(db, cfg.EnabledCollectors))
+	reg.MustRegister(collector.NewExporter(conn, cfg.EnabledCollectors))
 
 	if cfg.EnableOSCollectors {
 		oscollector.Register(reg)
@@ -74,12 +78,12 @@ func main() {
 	}
 }
 
-func queryServerName(db *sql.DB) string {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+func queryServerName(conn *sql.DB) string {
+	ctx, cancel := context.WithTimeout(context.Background(), db.CurrentOptions().ConnTimeout)
 	defer cancel()
 
 	var name string
-	err := db.QueryRowContext(ctx, "SELECT @@SERVERNAME").Scan(&name)
+	err := conn.QueryRowContext(ctx, "SELECT @@SERVERNAME").Scan(&name)
 	if err != nil {
 		slog.Error("failed to query @@SERVERNAME, using empty label", slog.Any("error", err))
 		return ""

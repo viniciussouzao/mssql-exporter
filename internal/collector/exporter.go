@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -12,11 +13,12 @@ import (
 
 // Scraper is implemented by every SQL Server collector. Scrape returns an
 // error instead of logging it so the Exporter can expose per-collector
-// success/duration metrics and log failures uniformly.
+// success/duration metrics and log failures uniformly. The context carries
+// the shared scrape deadline; scrapers must pass it to every query.
 type Scraper interface {
 	Name() string
 	Describe(ch chan<- *prometheus.Desc)
-	Scrape(ch chan<- prometheus.Metric) error
+	Scrape(ctx context.Context, ch chan<- prometheus.Metric) error
 }
 
 // scraperNames holds the registration order; each name is also the flag
@@ -53,11 +55,17 @@ func ScraperNames() []string {
 	return names
 }
 
+// pinger is the subset of *sql.DB the Exporter needs for the availability
+// check; it exists so tests can fake reachability.
+type pinger interface {
+	PingContext(ctx context.Context) error
+}
+
 // Exporter is the top-level prometheus.Collector. It pings SQL Server on
 // every scrape (exposed as sqlserver_up), runs the enabled scrapers and
 // exposes per-scraper duration and success metrics.
 type Exporter struct {
-	db       *sql.DB
+	db       pinger
 	scrapers []Scraper
 
 	up             *prometheus.Desc
@@ -75,7 +83,10 @@ func NewExporter(db *sql.DB, enabled map[string]bool) *Exporter {
 		}
 		scrapers = append(scrapers, scraperFactories[name](db))
 	}
+	return newExporter(db, scrapers)
+}
 
+func newExporter(db pinger, scrapers []Scraper) *Exporter {
 	return &Exporter{
 		db:       db,
 		scrapers: scrapers,
@@ -106,6 +117,9 @@ func (e *Exporter) Describe(ch chan<- *prometheus.Desc) {
 	}
 }
 
+// Collect pings SQL Server and, when reachable, runs every enabled scraper
+// concurrently under a single shared deadline (ConnTimeout), so the total
+// scrape time is bounded by one timeout instead of the sum of all scrapers.
 func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 	ctx, cancel := context.WithTimeout(context.Background(), db.CurrentOptions().ConnTimeout)
 	defer cancel()
@@ -117,18 +131,25 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 	}
 	ch <- prometheus.MustNewConstMetric(e.up, prometheus.GaugeValue, 1)
 
+	var wg sync.WaitGroup
 	for _, s := range e.scrapers {
-		start := time.Now()
-		err := s.Scrape(ch)
-		duration := time.Since(start).Seconds()
+		wg.Add(1)
+		go func(s Scraper) {
+			defer wg.Done()
 
-		success := 1.0
-		if err != nil {
-			success = 0
-			slog.Error("collector scrape failed", slog.String("collector", s.Name()), slog.Any("error", err))
-		}
+			start := time.Now()
+			err := s.Scrape(ctx, ch)
+			duration := time.Since(start).Seconds()
 
-		ch <- prometheus.MustNewConstMetric(e.scrapeDuration, prometheus.GaugeValue, duration, s.Name())
-		ch <- prometheus.MustNewConstMetric(e.scrapeSuccess, prometheus.GaugeValue, success, s.Name())
+			success := 1.0
+			if err != nil {
+				success = 0
+				slog.Error("collector scrape failed", slog.String("collector", s.Name()), slog.Any("error", err))
+			}
+
+			ch <- prometheus.MustNewConstMetric(e.scrapeDuration, prometheus.GaugeValue, duration, s.Name())
+			ch <- prometheus.MustNewConstMetric(e.scrapeSuccess, prometheus.GaugeValue, success, s.Name())
+		}(s)
 	}
+	wg.Wait()
 }

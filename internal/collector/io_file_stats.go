@@ -7,7 +7,6 @@ import (
 	"log/slog"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/viniciussouzao/mssql-exporter/internal/db"
 )
 
 type SQLServerIOFileStats struct {
@@ -82,10 +81,7 @@ func (c *SQLServerIOFileStats) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.stallWriteMs
 }
 
-func (c *SQLServerIOFileStats) Scrape(ch chan<- prometheus.Metric) error {
-	ctx, cancel := context.WithTimeout(context.Background(), db.CurrentOptions().ConnTimeout)
-	defer cancel()
-
+func (c *SQLServerIOFileStats) Scrape(ctx context.Context, ch chan<- prometheus.Metric) error {
 	rows, err := c.db.QueryContext(ctx, `
 	SELECT
             DB_NAME(vfs.database_id) AS db_name,

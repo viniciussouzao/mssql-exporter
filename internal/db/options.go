@@ -24,8 +24,12 @@ type Options struct {
 
 var actualOpts *Options
 
-// CurrentOptions returns the current database connection options.
+// CurrentOptions returns the current database connection options, falling
+// back to the defaults when Connect has not been called yet.
 func CurrentOptions() *Options {
+	if actualOpts == nil {
+		return DefaultOptions()
+	}
 	return actualOpts
 }
 

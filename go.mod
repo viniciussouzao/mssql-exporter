@@ -6,6 +6,7 @@ require (
 	github.com/denisenkom/go-mssqldb v0.12.3
 	github.com/joho/godotenv v1.5.1
 	github.com/prometheus/client_golang v1.23.2
+	github.com/prometheus/client_model v0.6.2
 	github.com/shirou/gopsutil/v4 v4.26.5
 	github.com/spf13/pflag v1.0.10
 	github.com/yusufpapurcu/wmi v1.2.4
@@ -23,7 +24,6 @@ require (
 	github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
-	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/prometheus/common v0.66.1 // indirect
 	github.com/prometheus/procfs v0.16.1 // indirect
 	github.com/tklauser/go-sysconf v0.3.16 // indirect

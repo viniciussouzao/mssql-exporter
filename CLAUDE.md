@@ -82,7 +82,8 @@ process never exits because SQL Server is down.
 type Scraper interface {
     Name() string                                  // snake_case, used in --collector.<name>
     Describe(ch chan<- *prometheus.Desc)
-    Scrape(ch chan<- prometheus.Metric) error      // returns error instead of logging
+    // ctx carries the shared scrape deadline; scrapers run concurrently
+    Scrape(ctx context.Context, ch chan<- prometheus.Metric) error
 }
 ```
 
@@ -112,11 +113,8 @@ func (c *CollectorName) Describe(ch chan<- *prometheus.Desc) {
     ch <- c.metricName
 }
 
-func (c *CollectorName) Scrape(ch chan<- prometheus.Metric) error {
-    ctx, cancel := context.WithTimeout(context.Background(), db.CurrentOptions().ConnTimeout)
-    defer cancel()
-
-    // Query SQL Server DMVs
+func (c *CollectorName) Scrape(ctx context.Context, ch chan<- prometheus.Metric) error {
+    // Query SQL Server DMVs (ctx carries the shared scrape deadline)
     rows, err := c.db.QueryContext(ctx, "SELECT ...")
     if err != nil {
         return fmt.Errorf("failed to query ...: %w", err)
@@ -134,7 +132,8 @@ func (c *CollectorName) Scrape(ch chan<- prometheus.Metric) error {
 ```
 
 **Important Conventions**:
-- Always use `context.WithTimeout()` with `db.CurrentOptions().ConnTimeout`
+- Never create your own context: use the `ctx` passed to `Scrape` (it carries
+  the shared scrape deadline; scrapers run concurrently under one timeout)
 - Always `defer func() { _ = rows.Close() }()` after querying
 - Query failures: return the error (the Exporter logs it and reports
   `scrape_collector_success 0`); row-scan failures: log and `continue`
@@ -232,7 +231,6 @@ import (
     "log/slog"
 
     "github.com/prometheus/client_golang/prometheus"
-    "github.com/viniciussouzao/mssql-exporter/internal/db"
 )
 
 type YourCollector struct {
@@ -258,10 +256,7 @@ func (c *YourCollector) Describe(ch chan<- *prometheus.Desc) {
     ch <- c.metricDesc
 }
 
-func (c *YourCollector) Scrape(ch chan<- prometheus.Metric) error {
-    ctx, cancel := context.WithTimeout(context.Background(), db.CurrentOptions().ConnTimeout)
-    defer cancel()
-
+func (c *YourCollector) Scrape(ctx context.Context, ch chan<- prometheus.Metric) error {
     rows, err := c.db.QueryContext(ctx, `
         SELECT column1, column2
         FROM sys.dm_your_dmv

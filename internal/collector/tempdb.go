@@ -8,7 +8,6 @@ import (
 	"log/slog"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/viniciussouzao/mssql-exporter/internal/db"
 )
 
 type SQLServerTempDB struct {
@@ -70,17 +69,14 @@ func (c *SQLServerTempDB) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.tempTablesCreated
 }
 
-func (c *SQLServerTempDB) Scrape(ch chan<- prometheus.Metric) error {
+func (c *SQLServerTempDB) Scrape(ctx context.Context, ch chan<- prometheus.Metric) error {
 	return errors.Join(
-		c.collectFileSpaceUsage(ch),
-		c.collectPerfCounters(ch),
+		c.collectFileSpaceUsage(ctx, ch),
+		c.collectPerfCounters(ctx, ch),
 	)
 }
 
-func (c *SQLServerTempDB) collectFileSpaceUsage(ch chan<- prometheus.Metric) error {
-	ctx, cancel := context.WithTimeout(context.Background(), db.CurrentOptions().ConnTimeout)
-	defer cancel()
-
+func (c *SQLServerTempDB) collectFileSpaceUsage(ctx context.Context, ch chan<- prometheus.Metric) error {
 	row := c.db.QueryRowContext(ctx, `
 		SELECT
 			SUM(unallocated_extent_page_count)       * 8,
@@ -103,10 +99,7 @@ func (c *SQLServerTempDB) collectFileSpaceUsage(ch chan<- prometheus.Metric) err
 	return nil
 }
 
-func (c *SQLServerTempDB) collectPerfCounters(ch chan<- prometheus.Metric) error {
-	ctx, cancel := context.WithTimeout(context.Background(), db.CurrentOptions().ConnTimeout)
-	defer cancel()
-
+func (c *SQLServerTempDB) collectPerfCounters(ctx context.Context, ch chan<- prometheus.Metric) error {
 	rows, err := c.db.QueryContext(ctx, `
 		SELECT RTRIM(counter_name), cntr_value
 		FROM sys.dm_os_performance_counters

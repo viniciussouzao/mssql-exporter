@@ -8,7 +8,6 @@ import (
 	"log/slog"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/viniciussouzao/mssql-exporter/internal/db"
 )
 
 type SQLServerDatabases struct {
@@ -63,18 +62,15 @@ func (c *SQLServerDatabases) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.logUsedPercent
 }
 
-func (c *SQLServerDatabases) Scrape(ch chan<- prometheus.Metric) error {
+func (c *SQLServerDatabases) Scrape(ctx context.Context, ch chan<- prometheus.Metric) error {
 	return errors.Join(
-		c.collectStates(ch),
-		c.collectFileSizes(ch),
-		c.collectLogUsage(ch),
+		c.collectStates(ctx, ch),
+		c.collectFileSizes(ctx, ch),
+		c.collectLogUsage(ctx, ch),
 	)
 }
 
-func (c *SQLServerDatabases) collectStates(ch chan<- prometheus.Metric) error {
-	ctx, cancel := context.WithTimeout(context.Background(), db.CurrentOptions().ConnTimeout)
-	defer cancel()
-
+func (c *SQLServerDatabases) collectStates(ctx context.Context, ch chan<- prometheus.Metric) error {
 	rows, err := c.db.QueryContext(ctx, `
 		SELECT name, state_desc, recovery_model_desc
 		FROM sys.databases
@@ -98,10 +94,7 @@ func (c *SQLServerDatabases) collectStates(ch chan<- prometheus.Metric) error {
 	return rows.Err()
 }
 
-func (c *SQLServerDatabases) collectFileSizes(ch chan<- prometheus.Metric) error {
-	ctx, cancel := context.WithTimeout(context.Background(), db.CurrentOptions().ConnTimeout)
-	defer cancel()
-
+func (c *SQLServerDatabases) collectFileSizes(ctx context.Context, ch chan<- prometheus.Metric) error {
 	rows, err := c.db.QueryContext(ctx, `
 		SELECT
 			DB_NAME(database_id) AS db_name,
@@ -140,10 +133,7 @@ func (c *SQLServerDatabases) collectFileSizes(ch chan<- prometheus.Metric) error
 	return rows.Err()
 }
 
-func (c *SQLServerDatabases) collectLogUsage(ch chan<- prometheus.Metric) error {
-	ctx, cancel := context.WithTimeout(context.Background(), db.CurrentOptions().ConnTimeout)
-	defer cancel()
-
+func (c *SQLServerDatabases) collectLogUsage(ctx context.Context, ch chan<- prometheus.Metric) error {
 	rows, err := c.db.QueryContext(ctx, `
 		SELECT RTRIM(instance_name), cntr_value
 		FROM sys.dm_os_performance_counters

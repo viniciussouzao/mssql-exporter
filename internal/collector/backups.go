@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/viniciussouzao/mssql-exporter/internal/db"
 )
 
 type SQLServerBackups struct {
@@ -50,10 +49,7 @@ func (c *SQLServerBackups) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.lastSizeBytes
 }
 
-func (c *SQLServerBackups) Scrape(ch chan<- prometheus.Metric) error {
-	ctx, cancel := context.WithTimeout(context.Background(), db.CurrentOptions().ConnTimeout)
-	defer cancel()
-
+func (c *SQLServerBackups) Scrape(ctx context.Context, ch chan<- prometheus.Metric) error {
 	rows, err := c.db.QueryContext(ctx, `
 		SELECT
 			bs.database_name,

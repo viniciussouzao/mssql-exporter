@@ -7,7 +7,6 @@ import (
 	"log/slog"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/viniciussouzao/mssql-exporter/internal/db"
 )
 
 type SQLServerPerfCounters struct {
@@ -97,10 +96,7 @@ func (c *SQLServerPerfCounters) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.pageSplits
 }
 
-func (c *SQLServerPerfCounters) Scrape(ch chan<- prometheus.Metric) error {
-	ctx, cancel := context.WithTimeout(context.Background(), db.CurrentOptions().ConnTimeout)
-	defer cancel()
-
+func (c *SQLServerPerfCounters) Scrape(ctx context.Context, ch chan<- prometheus.Metric) error {
 	rows, err := c.db.QueryContext(ctx, `
 		SELECT RTRIM(counter_name), cntr_value
 		FROM sys.dm_os_performance_counters

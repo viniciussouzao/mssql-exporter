@@ -7,7 +7,6 @@ import (
 	"fmt"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/viniciussouzao/mssql-exporter/internal/db"
 )
 
 type SQLServerProperties struct {
@@ -107,10 +106,7 @@ func (c *SQLServerProperties) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.availablePhysicalMemoryKB
 }
 
-func (c *SQLServerProperties) Scrape(ch chan<- prometheus.Metric) error {
-	ctx, cancel := context.WithTimeout(context.Background(), db.CurrentOptions().ConnTimeout)
-	defer cancel()
-
+func (c *SQLServerProperties) Scrape(ctx context.Context, ch chan<- prometheus.Metric) error {
 	var errs []error
 
 	row := c.db.QueryRowContext(ctx, `
