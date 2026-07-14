@@ -328,7 +328,8 @@ The exporter queries these Dynamic Management Views (DMVs):
 ## Testing Strategy
 
 ### Current State
-- No unit tests yet (project is in early stage)
+- Unit tests for `internal/config` (flag/env/YAML precedence, validation) — run with `make test`
+- No unit tests for collectors yet
 - Manual testing via local SQL Server instance
 - Integration testing with Prometheus scraping
 

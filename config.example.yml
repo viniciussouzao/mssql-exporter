@@ -5,7 +5,7 @@
 # since process arguments are visible via `ps`/task manager; use SQL_SERVER_DSN
 # or this file instead.
 
-dsn: "sqlserver://sa:MyStrongP@ss@localhost:1433?database=master&app+name=mssql-exporter"
+dsn: "sqlserver://sa:MyStrongP%40ss@localhost:1433?database=master&app+name=mssql-exporter"
 
 web:
   listen_address: ":9187"

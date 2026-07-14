@@ -75,7 +75,7 @@ editing environment variables is more cumbersome than pointing at a file next
 to the executable). See `config.example.yml`:
 
 ```yaml
-dsn: "sqlserver://sa:MyStrongP@ss@localhost:1433?database=master"
+dsn: "sqlserver://sa:MyStrongP%40ss@localhost:1433?database=master"
 web:
   listen_address: ":9187"
   telemetry_path: "/metrics"

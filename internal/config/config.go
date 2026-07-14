@@ -3,8 +3,11 @@ package config
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"runtime/debug"
+	"strconv"
+	"strings"
 
 	"github.com/spf13/pflag"
 	"gopkg.in/yaml.v3"
@@ -14,6 +17,11 @@ const (
 	defaultWebListenAddress = ":9187"
 	defaultWebTelemetryPath = "/metrics"
 )
+
+// ErrExitRequested is returned by Load when the requested action was fully
+// handled by the flag parsing itself (--help or --version) and the program
+// should exit successfully without starting the exporter.
+var ErrExitRequested = errors.New("exit requested")
 
 // Config holds the resolved exporter configuration, merged from CLI flags,
 // environment variables and an optional YAML config file.
@@ -43,7 +51,8 @@ type fileConfig struct {
 
 // Load parses CLI flags from args (typically os.Args[1:]) and merges them
 // with environment variables and an optional YAML config file (--config.file)
-// to produce the final Config.
+// to produce the final Config. It returns ErrExitRequested when --help or
+// --version was handled and the caller should exit with status 0.
 func Load(args []string) (*Config, error) {
 	fs := pflag.NewFlagSet("mssql-exporter", pflag.ContinueOnError)
 
@@ -55,14 +64,14 @@ func Load(args []string) (*Config, error) {
 
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, pflag.ErrHelp) {
-			os.Exit(0)
+			return nil, ErrExitRequested
 		}
 		return nil, err
 	}
 
 	if *showVersion {
 		fmt.Println(versionString())
-		os.Exit(0)
+		return nil, ErrExitRequested
 	}
 
 	var fc fileConfig
@@ -85,6 +94,9 @@ func Load(args []string) (*Config, error) {
 	if fs.Changed("web.listen-address") {
 		cfg.WebListenAddress = *webListenAddress
 	}
+	if cfg.WebListenAddress == "" {
+		return nil, fmt.Errorf("web.listen-address must not be empty")
+	}
 
 	cfg.WebTelemetryPath = defaultWebTelemetryPath
 	if fc.Web.TelemetryPath != "" {
@@ -93,10 +105,18 @@ func Load(args []string) (*Config, error) {
 	if fs.Changed("web.telemetry-path") {
 		cfg.WebTelemetryPath = *webTelemetryPath
 	}
+	if !strings.HasPrefix(cfg.WebTelemetryPath, "/") {
+		return nil, fmt.Errorf("web.telemetry-path must start with '/'")
+	}
 
 	cfg.EnableOSCollectors = fc.Collectors.OSCollectors
 	if v := os.Getenv("ENABLE_OS_COLLECTORS"); v != "" {
-		cfg.EnableOSCollectors = v == "true"
+		enabled, err := strconv.ParseBool(v)
+		if err != nil {
+			slog.Warn("invalid ENABLE_OS_COLLECTORS value, ignoring", slog.String("value", v))
+		} else {
+			cfg.EnableOSCollectors = enabled
+		}
 	}
 	if fs.Changed("collector.os-collectors") {
 		cfg.EnableOSCollectors = *enableOSCollectors
@@ -107,7 +127,7 @@ func Load(args []string) (*Config, error) {
 		cfg.DSN = v
 	}
 	if cfg.DSN == "" {
-		return nil, fmt.Errorf("SQL_SERVER_DSN not set via environment variable nor config file")
+		return nil, fmt.Errorf("SQL_SERVER_DSN not set via environment variable or config file")
 	}
 
 	return cfg, nil

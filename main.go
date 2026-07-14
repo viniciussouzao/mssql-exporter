@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"log/slog"
 	"net/http"
 	"os"
@@ -28,6 +29,9 @@ func init() {
 func main() {
 	cfg, err := config.Load(os.Args[1:])
 	if err != nil {
+		if errors.Is(err, config.ErrExitRequested) {
+			return
+		}
 		slog.Error("failed to load configuration", slog.Any("error", err))
 		os.Exit(1)
 	}
@@ -35,15 +39,15 @@ func main() {
 	opts := db.DefaultOptions()
 
 	if err := db.Connect(cfg.DSN, opts); err != nil {
-		slog.Error("failed to connect to sql server:", slog.Any("error", err))
-		return
+		slog.Error("failed to connect to sql server", slog.Any("error", err))
+		os.Exit(1)
 	}
 
 	db := db.DB()
 
 	if err := db.Ping(); err != nil {
-		slog.Error("failed to ping sql server:", slog.Any("error", err))
-		return
+		slog.Error("failed to ping sql server", slog.Any("error", err))
+		os.Exit(1)
 	}
 
 	slog.Info("successfully connected and pinged sql server")
@@ -74,7 +78,8 @@ func main() {
 	slog.Info("sql server exporter is running", slog.String("address", cfg.WebListenAddress), slog.String("telemetry_path", cfg.WebTelemetryPath))
 	http.Handle(cfg.WebTelemetryPath, promhttp.Handler())
 	if err := http.ListenAndServe(cfg.WebListenAddress, nil); err != nil {
-		slog.Error("failed to start http server:", slog.Any("error", err))
+		slog.Error("failed to start http server", slog.Any("error", err))
+		os.Exit(1)
 	}
 }
 
