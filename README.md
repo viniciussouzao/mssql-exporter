@@ -108,41 +108,39 @@ Connection pool/timeouts: adjust defaults in `internal/db/options.go` (`DefaultO
 
 ## Permissions
 
-The DMVs used by the exporter require `VIEW SERVER STATE`, and the collectors
-that read file metadata from `sys.master_files` (`io_file_stats`, `databases`
-sizes and `volumes`) additionally require `VIEW ANY DEFINITION` — without it
-`sys.master_files` silently returns zero rows. Grant both to a dedicated
-monitoring login:
+For **all default collectors** to succeed, the monitoring login needs the
+following complete setup:
 
 ```sql
+-- Server-level: required by the DMV-based collectors.
+-- VIEW ANY DEFINITION is needed by io_file_stats, databases (sizes) and
+-- volumes: without it sys.master_files silently returns zero rows.
 GRANT VIEW SERVER STATE TO [your_login];
 GRANT VIEW ANY DEFINITION TO [your_login];
+
+-- msdb: required by the agent_jobs collector (enabled by default).
+USE msdb;
+CREATE USER [your_login] FOR LOGIN [your_login];
+GRANT SELECT ON dbo.sysjobs TO [your_login];
+GRANT SELECT ON dbo.sysjobhistory TO [your_login];
 ```
 
-This single grant covers every default collector on all supported SQL Server
-versions: on SQL Server 2022+ it implies the more granular
-`VIEW SERVER PERFORMANCE STATE` / `VIEW SERVER SECURITY STATE` permissions
-that Microsoft now documents as the minimum for individual DMVs.
+Without the msdb grants, `agent_jobs` reports
+`sqlserver_scrape_collector_success{collector="agent_jobs"} 0` on every
+scrape (the other collectors are unaffected); either apply the grants above
+or disable it with `--collector.agent_jobs=false` if you don't monitor Agent
+jobs (e.g. environments where SQL Agent is disabled).
 
 Notes:
 
 - The `backups` collector reads `msdb.dbo.backupset`, which is readable by
   `public` on default installations — no extra grant is usually needed.
-- The `agent_jobs` collector needs SELECT on two msdb tables:
-
-  ```sql
-  USE msdb;
-  CREATE USER [your_login] FOR LOGIN [your_login];
-  GRANT SELECT ON dbo.sysjobs TO [your_login];
-  GRANT SELECT ON dbo.sysjobhistory TO [your_login];
-  ```
-
-  Without these grants the collector reports
-  `sqlserver_scrape_collector_success{collector="agent_jobs"} 0`; disable it
-  with `--collector.agent_jobs=false` if you don't monitor Agent jobs.
-- On SQL Server 2022+ you can go even more restrictive and grant only
-  `VIEW SERVER PERFORMANCE STATE` if you disable the collectors that need
-  more (e.g. `server_info` reads security-related server properties).
+- On SQL Server 2022+, `VIEW SERVER STATE` implies the more granular
+  `VIEW SERVER PERFORMANCE STATE` / `VIEW SERVER SECURITY STATE` permissions
+  that Microsoft now documents as the minimum for individual DMVs. You can go
+  even more restrictive and grant only `VIEW SERVER PERFORMANCE STATE` if you
+  disable the collectors that need more (e.g. `server_info` reads
+  security-related server properties).
 
 The exporter reads from (among others):
 
@@ -243,6 +241,14 @@ Metric names are stable and follow Prometheus best practices. Selected examples:
   - `sqlserver_agent_job_last_run_status{job_name="nightly-backup"} 1`
   - `sqlserver_agent_job_last_run_timestamp_seconds{job_name="nightly-backup"} 1789344000`
   - `sqlserver_agent_job_last_run_duration_seconds{job_name="nightly-backup"} 42`
+
+  There is intentionally no aggregate "failed jobs" metric — derive it in
+  PromQL, which also tells you *which* jobs failed:
+
+  ```promql
+  count(sqlserver_agent_job_last_run_status == 0)   # how many jobs failed last run
+  sqlserver_agent_job_last_run_status == 0          # which jobs failed last run
+  ```
 
 - Volumes
   - `sqlserver_volume_total_bytes{volume_mount_point="C:\\"} 1962694664192`

@@ -44,6 +44,13 @@ Progress legend: [ ] not started · [~] in progress · [x] done
   `internal/collector/agent_jobs.go`: enabled state, last run outcome,
   timestamp and duration; requires SELECT grants on the two msdb tables
   (documented in README)
+  - Decision (2026-07-14): the originally planned aggregate "failed jobs
+    count" metric was dropped in favor of PromQL derivation
+    (`count(sqlserver_agent_job_last_run_status == 0)`), documented in the
+    README — per-job status is strictly more informative
+  - Decision (2026-07-14): stays enabled by default (SQL Agent is rarely
+    disabled outside dev/QA); the required msdb grants are documented as
+    part of the standard permissions setup
 
 ## Phase 4 — Environment & hardening
 

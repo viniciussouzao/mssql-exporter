@@ -55,10 +55,12 @@ func (c *SQLServerBlocking) Scrape(ctx context.Context, ch chan<- prometheus.Met
 }
 
 func (c *SQLServerBlocking) collectBlocked(ctx context.Context, ch chan<- prometheus.Metric) error {
+	// blocking_session_id > 0 only: negative values are documented sentinels
+	// (orphaned/deferred transactions, untracked latch owners), not sessions.
 	row := c.db.QueryRowContext(ctx, `
 		SELECT COUNT(*), ISNULL(MAX(wait_time), 0)
 		FROM sys.dm_exec_requests
-		WHERE blocking_session_id <> 0
+		WHERE blocking_session_id > 0
 	`)
 
 	var blocked, maxWaitMs float64

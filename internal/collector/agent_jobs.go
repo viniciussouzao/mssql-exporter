@@ -75,7 +75,9 @@ func (c *SQLServerAgentJobs) Scrape(ctx context.Context, ch chan<- prometheus.Me
 		OUTER APPLY (
 			SELECT TOP 1 run_status, run_date, run_time, run_duration
 			FROM msdb.dbo.sysjobhistory h
-			WHERE h.job_id = j.job_id AND h.step_id = 0
+			WHERE h.job_id = j.job_id
+				AND h.step_id = 0
+				AND h.run_status IN (0, 1, 2, 3) -- completed outcomes only (4 = in progress, 5 = unknown)
 			ORDER BY h.run_date DESC, h.run_time DESC
 		) h
 	`)

@@ -94,33 +94,45 @@ func (c *SQLServerAvailabilityGroups) collectReplicaStates(ctx context.Context, 
 	var scanErrs []error
 	for rows.Next() {
 		var agName, replicaServer string
-		var role, syncHealth float64
+		// State columns are NULL for disconnected/transitioning remote
+		// replicas; emit only what SQL Server actually knows instead of
+		// failing the scrape during the exact incident being monitored.
+		var role, syncHealth sql.NullFloat64
 		if err := rows.Scan(&agName, &replicaServer, &role, &syncHealth); err != nil {
 			scanErrs = append(scanErrs, fmt.Errorf("failed to scan replica state row: %w", err))
 			continue
 		}
 
-		ch <- prometheus.MustNewConstMetric(c.replicaRole, prometheus.GaugeValue, role, agName, replicaServer)
-		ch <- prometheus.MustNewConstMetric(c.replicaSyncHlth, prometheus.GaugeValue, syncHealth, agName, replicaServer)
+		if role.Valid {
+			ch <- prometheus.MustNewConstMetric(c.replicaRole, prometheus.GaugeValue, role.Float64, agName, replicaServer)
+		}
+		if syncHealth.Valid {
+			ch <- prometheus.MustNewConstMetric(c.replicaSyncHlth, prometheus.GaugeValue, syncHealth.Float64, agName, replicaServer)
+		}
 	}
 
 	return errors.Join(append(scanErrs, rows.Err())...)
 }
 
 func (c *SQLServerAvailabilityGroups) collectDatabaseStates(ctx context.Context, ch chan<- prometheus.Metric) error {
+	// database_id is instance-scoped and unsafe for rows describing remote
+	// replicas; group_database_id is the identifier shared by all replicas,
+	// so the name is resolved through sys.availability_databases_cluster.
 	rows, err := c.db.QueryContext(ctx, `
 		SELECT
 			ag.name,
 			ar.replica_server_name,
-			DB_NAME(drs.database_id),
+			adc.database_name,
 			drs.synchronization_state,
-			ISNULL(drs.log_send_queue_size, 0),
-			ISNULL(drs.redo_queue_size, 0)
+			drs.log_send_queue_size,
+			drs.redo_queue_size
 		FROM sys.dm_hadr_database_replica_states drs
 		INNER JOIN sys.availability_replicas ar
 			ON drs.replica_id = ar.replica_id
 		INNER JOIN sys.availability_groups ag
 			ON drs.group_id = ag.group_id
+		INNER JOIN sys.availability_databases_cluster adc
+			ON adc.group_database_id = drs.group_database_id
 	`)
 	if err != nil {
 		return fmt.Errorf("failed to query dm_hadr_database_replica_states: %w", err)
@@ -129,21 +141,26 @@ func (c *SQLServerAvailabilityGroups) collectDatabaseStates(ctx context.Context,
 
 	var scanErrs []error
 	for rows.Next() {
-		var agName, replicaServer string
-		var dbName sql.NullString
-		var syncState, logSendQueueKB, redoQueueKB float64
+		var agName, replicaServer, dbName string
+		// NULL queue/state values mean SQL Server has no usable measurement
+		// (e.g. disconnected replica) — omitting the sample is correct;
+		// converting to zero would make an outage look healthy.
+		var syncState, logSendQueueKB, redoQueueKB sql.NullFloat64
 		if err := rows.Scan(&agName, &replicaServer, &dbName, &syncState, &logSendQueueKB, &redoQueueKB); err != nil {
 			scanErrs = append(scanErrs, fmt.Errorf("failed to scan database replica state row: %w", err))
 			continue
 		}
-		if !dbName.Valid {
-			continue
-		}
 
-		labels := []string{agName, replicaServer, dbName.String}
-		ch <- prometheus.MustNewConstMetric(c.dbSyncState, prometheus.GaugeValue, syncState, labels...)
-		ch <- prometheus.MustNewConstMetric(c.dbLogSendQueueKB, prometheus.GaugeValue, logSendQueueKB, labels...)
-		ch <- prometheus.MustNewConstMetric(c.dbRedoQueueKB, prometheus.GaugeValue, redoQueueKB, labels...)
+		labels := []string{agName, replicaServer, dbName}
+		if syncState.Valid {
+			ch <- prometheus.MustNewConstMetric(c.dbSyncState, prometheus.GaugeValue, syncState.Float64, labels...)
+		}
+		if logSendQueueKB.Valid {
+			ch <- prometheus.MustNewConstMetric(c.dbLogSendQueueKB, prometheus.GaugeValue, logSendQueueKB.Float64, labels...)
+		}
+		if redoQueueKB.Valid {
+			ch <- prometheus.MustNewConstMetric(c.dbRedoQueueKB, prometheus.GaugeValue, redoQueueKB.Float64, labels...)
+		}
 	}
 
 	return errors.Join(append(scanErrs, rows.Err())...)
