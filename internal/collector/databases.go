@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log/slog"
 
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -80,10 +79,11 @@ func (c *SQLServerDatabases) collectStates(ctx context.Context, ch chan<- promet
 	}
 	defer func() { _ = rows.Close() }()
 
+	var scanErrs []error
 	for rows.Next() {
 		var name, stateDesc, recoveryModelDesc string
 		if err := rows.Scan(&name, &stateDesc, &recoveryModelDesc); err != nil {
-			slog.Error("failed to scan sys.databases row", slog.Any("error", err))
+			scanErrs = append(scanErrs, fmt.Errorf("failed to scan sys.databases row: %w", err))
 			continue
 		}
 
@@ -91,7 +91,7 @@ func (c *SQLServerDatabases) collectStates(ctx context.Context, ch chan<- promet
 		ch <- prometheus.MustNewConstMetric(c.recoveryModel, prometheus.GaugeValue, 1, name, recoveryModelDesc)
 	}
 
-	return rows.Err()
+	return errors.Join(append(scanErrs, rows.Err())...)
 }
 
 func (c *SQLServerDatabases) collectFileSizes(ctx context.Context, ch chan<- prometheus.Metric) error {
@@ -109,12 +109,13 @@ func (c *SQLServerDatabases) collectFileSizes(ctx context.Context, ch chan<- pro
 	}
 	defer func() { _ = rows.Close() }()
 
+	var scanErrs []error
 	for rows.Next() {
 		var dbName sql.NullString
 		var fileType int
 		var sizeBytes float64
 		if err := rows.Scan(&dbName, &fileType, &sizeBytes); err != nil {
-			slog.Error("failed to scan database file size row", slog.Any("error", err))
+			scanErrs = append(scanErrs, fmt.Errorf("failed to scan database file size row: %w", err))
 			continue
 		}
 		// DB_NAME can return NULL for databases in transient states (drop/restore in progress).
@@ -130,7 +131,7 @@ func (c *SQLServerDatabases) collectFileSizes(ctx context.Context, ch chan<- pro
 		}
 	}
 
-	return rows.Err()
+	return errors.Join(append(scanErrs, rows.Err())...)
 }
 
 func (c *SQLServerDatabases) collectLogUsage(ctx context.Context, ch chan<- prometheus.Metric) error {
@@ -146,16 +147,17 @@ func (c *SQLServerDatabases) collectLogUsage(ctx context.Context, ch chan<- prom
 	}
 	defer func() { _ = rows.Close() }()
 
+	var scanErrs []error
 	for rows.Next() {
 		var dbName string
 		var value float64
 		if err := rows.Scan(&dbName, &value); err != nil {
-			slog.Error("failed to scan log usage row", slog.Any("error", err))
+			scanErrs = append(scanErrs, fmt.Errorf("failed to scan log usage row: %w", err))
 			continue
 		}
 
 		ch <- prometheus.MustNewConstMetric(c.logUsedPercent, prometheus.GaugeValue, value, dbName)
 	}
 
-	return rows.Err()
+	return errors.Join(append(scanErrs, rows.Err())...)
 }

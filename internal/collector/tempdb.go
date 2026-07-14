@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log/slog"
 
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -111,11 +110,12 @@ func (c *SQLServerTempDB) collectPerfCounters(ctx context.Context, ch chan<- pro
 	}
 	defer func() { _ = rows.Close() }()
 
+	var scanErrs []error
 	for rows.Next() {
 		var counterName string
 		var value float64
 		if err := rows.Scan(&counterName, &value); err != nil {
-			slog.Error("failed to scan tempdb perf counter row", slog.Any("error", err))
+			scanErrs = append(scanErrs, fmt.Errorf("failed to scan tempdb perf counter row: %w", err))
 			continue
 		}
 
@@ -127,5 +127,5 @@ func (c *SQLServerTempDB) collectPerfCounters(ctx context.Context, ch chan<- pro
 		}
 	}
 
-	return rows.Err()
+	return errors.Join(append(scanErrs, rows.Err())...)
 }

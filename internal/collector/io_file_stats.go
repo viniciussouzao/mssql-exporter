@@ -3,8 +3,8 @@ package collector
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
-	"log/slog"
 
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -106,6 +106,7 @@ func (c *SQLServerIOFileStats) Scrape(ctx context.Context, ch chan<- prometheus.
 	}
 	defer func() { _ = rows.Close() }()
 
+	var scanErrs []error
 	for rows.Next() {
 		var (
 			dbName, fileName, fileType, physicalName string
@@ -126,7 +127,7 @@ func (c *SQLServerIOFileStats) Scrape(ctx context.Context, ch chan<- prometheus.
 			&stallRead,
 			&stallWrite,
 		); err != nil {
-			slog.Error("failed to scan io file stats row", slog.Any("error", err))
+			scanErrs = append(scanErrs, fmt.Errorf("failed to scan io file stats row: %w", err))
 			continue
 		}
 
@@ -140,5 +141,5 @@ func (c *SQLServerIOFileStats) Scrape(ctx context.Context, ch chan<- prometheus.
 		ch <- prometheus.MustNewConstMetric(c.stallWriteMs, prometheus.CounterValue, stallWrite, labels...)
 	}
 
-	return rows.Err()
+	return errors.Join(append(scanErrs, rows.Err())...)
 }

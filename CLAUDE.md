@@ -122,12 +122,14 @@ func (c *CollectorName) Scrape(ctx context.Context, ch chan<- prometheus.Metric)
     defer func() { _ = rows.Close() }()
 
     // Scan and emit metrics
+    var scanErrs []error
     for rows.Next() {
-        // scan errors: log with slog.Error and `continue` (partial data is fine)
+        // scan errors: accumulate and `continue` — later rows still emit
+        // metrics, but the scrape is reported as failed (success 0)
         ch <- prometheus.MustNewConstMetric(c.metricName, prometheus.GaugeValue, value, labels...)
     }
 
-    return rows.Err()
+    return errors.Join(append(scanErrs, rows.Err())...)
 }
 ```
 
@@ -136,7 +138,10 @@ func (c *CollectorName) Scrape(ctx context.Context, ch chan<- prometheus.Metric)
   the shared scrape deadline; scrapers run concurrently under one timeout)
 - Always `defer func() { _ = rows.Close() }()` after querying
 - Query failures: return the error (the Exporter logs it and reports
-  `scrape_collector_success 0`); row-scan failures: log and `continue`
+  `scrape_collector_success 0`)
+- Row-scan failures: accumulate in a `scanErrs` slice and `continue`, then
+  `return errors.Join(append(scanErrs, rows.Err())...)` — partial metrics are
+  still emitted, but any failed row marks the scrape as unsuccessful
 - Multi-query scrapers combine errors with `errors.Join` (see tempdb, databases)
 - Metric names follow pattern: `sqlserver_<category>_<metric>`
 - Cumulative DMV counters use `prometheus.CounterValue` with `_total` suffix;
@@ -227,8 +232,8 @@ package collector
 import (
     "context"
     "database/sql"
+    "errors"
     "fmt"
-    "log/slog"
 
     "github.com/prometheus/client_golang/prometheus"
 )
@@ -267,11 +272,12 @@ func (c *YourCollector) Scrape(ctx context.Context, ch chan<- prometheus.Metric)
     }
     defer func() { _ = rows.Close() }()
 
+    var scanErrs []error
     for rows.Next() {
         var label string
         var value float64
         if err := rows.Scan(&label, &value); err != nil {
-            slog.Error("failed to scan your_dmv row", slog.Any("error", err))
+            scanErrs = append(scanErrs, fmt.Errorf("failed to scan your_dmv row: %w", err))
             continue
         }
 
@@ -283,7 +289,7 @@ func (c *YourCollector) Scrape(ctx context.Context, ch chan<- prometheus.Metric)
         )
     }
 
-    return rows.Err()
+    return errors.Join(append(scanErrs, rows.Err())...)
 }
 ```
 
@@ -402,7 +408,7 @@ The exporter queries these Dynamic Management Views (DMVs):
 1. Add new `*prometheus.Desc` field to collector struct
 2. Initialize descriptor in constructor with proper labels
 3. Add to `Describe()` method
-4. Query and emit metric in `Collect()` method
+4. Query and emit metric in `Scrape()` method
 5. Update README.md with new metric documentation
 
 ### Task: Update Dependencies
@@ -412,10 +418,10 @@ The exporter queries these Dynamic Management Views (DMVs):
 4. Verify metrics still work correctly
 
 ### Task: Improve Error Handling
-1. Look for error conditions that aren't logged
-2. Add `slog.Error()` calls with context
-3. Ensure `defer rows.Close()` is present
-4. Verify context timeouts are used
+1. Query failures must be returned from `Scrape()` (not just logged)
+2. Ensure `defer func() { _ = rows.Close() }()` is present
+3. Accumulate row-scan errors and join them with `rows.Err()` at the end
+4. Verify queries use the `ctx` passed to `Scrape()` (no local timeouts)
 
 ## Known Issues & Future Work
 

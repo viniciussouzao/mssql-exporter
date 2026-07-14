@@ -3,8 +3,8 @@ package collector
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
-	"log/slog"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -78,6 +78,7 @@ func (c *SQLServerBackups) Scrape(ctx context.Context, ch chan<- prometheus.Metr
 	}
 	defer func() { _ = rows.Close() }()
 
+	var scanErrs []error
 	for rows.Next() {
 		var (
 			dbName      string
@@ -88,7 +89,7 @@ func (c *SQLServerBackups) Scrape(ctx context.Context, ch chan<- prometheus.Metr
 		)
 
 		if err := rows.Scan(&dbName, &backupType, &finishDate, &startDate, &sizeBytes); err != nil {
-			slog.Error("failed to scan backupset row", slog.Any("error", err))
+			scanErrs = append(scanErrs, fmt.Errorf("failed to scan backupset row: %w", err))
 			continue
 		}
 
@@ -100,5 +101,5 @@ func (c *SQLServerBackups) Scrape(ctx context.Context, ch chan<- prometheus.Metr
 		ch <- prometheus.MustNewConstMetric(c.lastSizeBytes, prometheus.GaugeValue, sizeBytes, labels...)
 	}
 
-	return rows.Err()
+	return errors.Join(append(scanErrs, rows.Err())...)
 }

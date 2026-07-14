@@ -3,8 +3,8 @@ package collector
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
-	"log/slog"
 
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -67,6 +67,7 @@ func (c *SQLServerWaitStats) Scrape(ctx context.Context, ch chan<- prometheus.Me
 
 	defer func() { _ = rows.Close() }()
 
+	var scanErrs []error
 	for rows.Next() {
 		var waitType string
 		var waitTimeMs float64
@@ -75,7 +76,7 @@ func (c *SQLServerWaitStats) Scrape(ctx context.Context, ch chan<- prometheus.Me
 
 		err := rows.Scan(&waitType, &waitTimeMs, &waitingTasks, &maxWaitTimeMs)
 		if err != nil {
-			slog.Error("failed to scan wait stats row", slog.Any("error", err))
+			scanErrs = append(scanErrs, fmt.Errorf("failed to scan wait stats row: %w", err))
 			continue
 		}
 
@@ -101,5 +102,5 @@ func (c *SQLServerWaitStats) Scrape(ctx context.Context, ch chan<- prometheus.Me
 		)
 	}
 
-	return rows.Err()
+	return errors.Join(append(scanErrs, rows.Err())...)
 }

@@ -101,11 +101,25 @@ Connection pool/timeouts: adjust defaults in `internal/db/options.go` (`DefaultO
 
 ## Permissions
 
-Some DMVs require `VIEW SERVER STATE`. Grant minimally:
+The DMVs used by the exporter require `VIEW SERVER STATE`. Grant it to a
+dedicated monitoring login:
 
 ```sql
 GRANT VIEW SERVER STATE TO [your_login];
 ```
+
+This single grant covers every default collector on all supported SQL Server
+versions: on SQL Server 2022+ it implies the more granular
+`VIEW SERVER PERFORMANCE STATE` / `VIEW SERVER SECURITY STATE` permissions
+that Microsoft now documents as the minimum for individual DMVs.
+
+Notes:
+
+- The `backups` collector reads `msdb.dbo.backupset`, which is readable by
+  `public` on default installations — no extra grant is usually needed.
+- On SQL Server 2022+ you can go even more restrictive and grant only
+  `VIEW SERVER PERFORMANCE STATE` if you disable the collectors that need
+  more (e.g. `server_info` reads security-related server properties).
 
 The exporter reads from (among others):
 
@@ -115,6 +129,10 @@ The exporter reads from (among others):
 - `sys.dm_os_wait_stats`
 - `sys.dm_os_sys_info`
 - `sys.dm_os_sys_memory`
+- `sys.dm_os_memory_clerks`
+- `sys.dm_os_performance_counters`
+- `sys.databases`
+- `msdb.dbo.backupset`
 - `SERVERPROPERTY(...)`
 
 ## Availability & Self-Metrics
@@ -127,6 +145,12 @@ scrape — alert on `sqlserver_up` instead of watching the process:
 - `sqlserver_scrape_collector_success{collector="wait_stats"} 0|1` — whether each collector succeeded.
 
 When `sqlserver_up` is 0, individual collectors are skipped for that scrape.
+
+**Known limitation**: every metric carries a `sqlserver_instance` label
+resolved once at startup (`SELECT @@SERVERNAME`). If SQL Server is unreachable
+at that moment the label stays empty until the exporter restarts — the metrics
+themselves recover automatically, only this label does not. For a stable
+identity prefer the `sqlserver_servername` metric or Prometheus target labels.
 
 ## Exposed Metrics
 

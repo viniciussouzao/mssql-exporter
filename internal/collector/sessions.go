@@ -3,8 +3,8 @@ package collector
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
-	"log/slog"
 
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -47,12 +47,13 @@ func (c *SQLServerSessions) Scrape(ctx context.Context, ch chan<- prometheus.Met
 
 	defer func() { _ = rows.Close() }()
 
+	var scanErrs []error
 	for rows.Next() {
 		var sessionState string
 		var sessionCount int64
 
 		if err := rows.Scan(&sessionState, &sessionCount); err != nil {
-			slog.Error("failed to scan sessions row", slog.Any("error", err))
+			scanErrs = append(scanErrs, fmt.Errorf("failed to scan sessions row: %w", err))
 			continue
 		}
 
@@ -64,5 +65,5 @@ func (c *SQLServerSessions) Scrape(ctx context.Context, ch chan<- prometheus.Met
 		)
 	}
 
-	return rows.Err()
+	return errors.Join(append(scanErrs, rows.Err())...)
 }

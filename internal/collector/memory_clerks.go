@@ -3,8 +3,8 @@ package collector
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
-	"log/slog"
 	"strconv"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -46,6 +46,7 @@ func (c *SQLServerMemoryClerks) Scrape(ctx context.Context, ch chan<- prometheus
 	}
 	defer func() { _ = rows.Close() }()
 
+	var scanErrs []error
 	for rows.Next() {
 		var (
 			clerkType    string
@@ -55,7 +56,7 @@ func (c *SQLServerMemoryClerks) Scrape(ctx context.Context, ch chan<- prometheus
 		)
 
 		if err := rows.Scan(&clerkType, &clerkName, &memoryNodeID, &memoryUsedKB); err != nil {
-			slog.Error("failed to scan memory_clerks row", slog.Any("error", err))
+			scanErrs = append(scanErrs, fmt.Errorf("failed to scan memory_clerks row: %w", err))
 			continue
 		}
 
@@ -69,5 +70,5 @@ func (c *SQLServerMemoryClerks) Scrape(ctx context.Context, ch chan<- prometheus
 		)
 	}
 
-	return rows.Err()
+	return errors.Join(append(scanErrs, rows.Err())...)
 }

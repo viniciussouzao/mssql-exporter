@@ -3,8 +3,8 @@ package collector
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
-	"log/slog"
 
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -119,11 +119,12 @@ func (c *SQLServerPerfCounters) Scrape(ctx context.Context, ch chan<- prometheus
 
 	var hitRatio, hitRatioBase float64
 
+	var scanErrs []error
 	for rows.Next() {
 		var counterName string
 		var value float64
 		if err := rows.Scan(&counterName, &value); err != nil {
-			slog.Error("failed to scan performance counter row", slog.Any("error", err))
+			scanErrs = append(scanErrs, fmt.Errorf("failed to scan performance counter row: %w", err))
 			continue
 		}
 
@@ -159,5 +160,5 @@ func (c *SQLServerPerfCounters) Scrape(ctx context.Context, ch chan<- prometheus
 		ch <- prometheus.MustNewConstMetric(c.bufferCacheHitRatio, prometheus.GaugeValue, hitRatio/hitRatioBase)
 	}
 
-	return rows.Err()
+	return errors.Join(append(scanErrs, rows.Err())...)
 }
