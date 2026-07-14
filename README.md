@@ -169,8 +169,12 @@ Add Prometheus (http://prometheus:9090 inside Compose network or http://localhos
 
 ## Roadmap
 
+See [ROADMAP.md](ROADMAP.md) for the full phased plan. Highlights:
+
+- Performance counters and per-database collectors.
+- `sqlserver_up` metric and per-collector enable/disable flags.
+- Blocking/locks, Availability Groups and SQL Agent jobs collectors.
 - Optional TLS and basic auth for the HTTP endpoint.
-- More collectors (locks, memory clerks, tempdb, AGs, backups, etc.).
 
 ---
 

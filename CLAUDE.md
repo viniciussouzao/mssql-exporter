@@ -382,11 +382,11 @@ The exporter queries these Dynamic Management Views (DMVs):
 - Limited test coverage
 - No `--config.file` auto-discovery (must be passed explicitly)
 
-### Roadmap (from README)
-- Optional TLS and basic auth for HTTP endpoint
-- More collectors: locks, availability groups
-- Health check endpoint
-- Metrics for query performance and execution plans
+### Roadmap
+See `ROADMAP.md` for the authoritative phased plan (performance counters,
+databases collector, `sqlserver_up` + per-collector toggles, blocking/AG/Agent
+jobs collectors, TLS/basic auth, health check endpoint). Update it as features
+land: move items to the "Done" section and keep phases current.
 
 ## Troubleshooting Guide
 
