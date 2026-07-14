@@ -5,4 +5,6 @@ scrape_configs:
   - job_name: 'sqlserver_exporter'
     scrape_interval: 15s
     static_configs:
-      - targets: ['mssql-exporter:9187']
+      # host.docker.internal reaches the exporter running on the Docker host;
+      # switch to 'mssql-exporter:9187' if you enable the exporter service in docker-compose.yml
+      - targets: ['host.docker.internal:9187']
