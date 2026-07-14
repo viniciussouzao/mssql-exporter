@@ -87,6 +87,10 @@ func (c *SQLServerDatabases) collectStates(ch chan<- prometheus.Metric) {
 		ch <- prometheus.MustNewConstMetric(c.state, prometheus.GaugeValue, 1, name, stateDesc)
 		ch <- prometheus.MustNewConstMetric(c.recoveryModel, prometheus.GaugeValue, 1, name, recoveryModelDesc)
 	}
+
+	if err := rows.Err(); err != nil {
+		slog.Error("error iterating sys.databases rows", slog.Any("error", err))
+	}
 }
 
 func (c *SQLServerDatabases) collectFileSizes(ch chan<- prometheus.Metric) {
@@ -109,20 +113,28 @@ func (c *SQLServerDatabases) collectFileSizes(ch chan<- prometheus.Metric) {
 	defer func() { _ = rows.Close() }()
 
 	for rows.Next() {
-		var dbName string
+		var dbName sql.NullString
 		var fileType int
 		var sizeBytes float64
 		if err := rows.Scan(&dbName, &fileType, &sizeBytes); err != nil {
 			slog.Error("failed to scan database file size row", slog.Any("error", err))
 			continue
 		}
+		// DB_NAME can return NULL for databases in transient states (drop/restore in progress).
+		if !dbName.Valid {
+			continue
+		}
 
 		switch fileType {
 		case 0:
-			ch <- prometheus.MustNewConstMetric(c.dataSizeBytes, prometheus.GaugeValue, sizeBytes, dbName)
+			ch <- prometheus.MustNewConstMetric(c.dataSizeBytes, prometheus.GaugeValue, sizeBytes, dbName.String)
 		case 1:
-			ch <- prometheus.MustNewConstMetric(c.logSizeBytes, prometheus.GaugeValue, sizeBytes, dbName)
+			ch <- prometheus.MustNewConstMetric(c.logSizeBytes, prometheus.GaugeValue, sizeBytes, dbName.String)
 		}
+	}
+
+	if err := rows.Err(); err != nil {
+		slog.Error("error iterating database file size rows", slog.Any("error", err))
 	}
 }
 
@@ -152,5 +164,9 @@ func (c *SQLServerDatabases) collectLogUsage(ch chan<- prometheus.Metric) {
 		}
 
 		ch <- prometheus.MustNewConstMetric(c.logUsedPercent, prometheus.GaugeValue, value, dbName)
+	}
+
+	if err := rows.Err(); err != nil {
+		slog.Error("error iterating log usage rows", slog.Any("error", err))
 	}
 }

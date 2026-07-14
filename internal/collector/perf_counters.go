@@ -97,7 +97,7 @@ func (c *SQLServerPerfCounters) Collect(ch chan<- prometheus.Metric) {
 	defer cancel()
 
 	rows, err := c.db.QueryContext(ctx, `
-		SELECT RTRIM(object_name), RTRIM(counter_name), cntr_value
+		SELECT RTRIM(counter_name), cntr_value
 		FROM sys.dm_os_performance_counters
 		WHERE (object_name LIKE '%SQL Statistics%'
 				AND counter_name IN ('Batch Requests/sec', 'SQL Compilations/sec', 'SQL Re-Compilations/sec'))
@@ -120,9 +120,9 @@ func (c *SQLServerPerfCounters) Collect(ch chan<- prometheus.Metric) {
 	var hitRatio, hitRatioBase float64
 
 	for rows.Next() {
-		var objectName, counterName string
+		var counterName string
 		var value float64
-		if err := rows.Scan(&objectName, &counterName, &value); err != nil {
+		if err := rows.Scan(&counterName, &value); err != nil {
 			slog.Error("failed to scan performance counter row", slog.Any("error", err))
 			continue
 		}
@@ -151,6 +151,10 @@ func (c *SQLServerPerfCounters) Collect(ch chan<- prometheus.Metric) {
 		case "Page Splits/sec":
 			ch <- prometheus.MustNewConstMetric(c.pageSplits, prometheus.CounterValue, value)
 		}
+	}
+
+	if err := rows.Err(); err != nil {
+		slog.Error("error iterating performance counter rows", slog.Any("error", err))
 	}
 
 	// "Buffer cache hit ratio" is a fraction counter: the raw value only makes
