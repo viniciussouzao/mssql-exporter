@@ -3,6 +3,7 @@ package collector
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -39,13 +40,17 @@ func NewBackupsCollector(db *sql.DB) *SQLServerBackups {
 	}
 }
 
+func (c *SQLServerBackups) Name() string {
+	return "backups"
+}
+
 func (c *SQLServerBackups) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.lastCompletedAt
 	ch <- c.lastDurationSecs
 	ch <- c.lastSizeBytes
 }
 
-func (c *SQLServerBackups) Collect(ch chan<- prometheus.Metric) {
+func (c *SQLServerBackups) Scrape(ch chan<- prometheus.Metric) error {
 	ctx, cancel := context.WithTimeout(context.Background(), db.CurrentOptions().ConnTimeout)
 	defer cancel()
 
@@ -73,8 +78,7 @@ func (c *SQLServerBackups) Collect(ch chan<- prometheus.Metric) {
 			AND bs.backup_finish_date = latest.max_finish
 	`)
 	if err != nil {
-		slog.Error("failed to query backupset", slog.Any("error", err))
-		return
+		return fmt.Errorf("failed to query backupset: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
@@ -99,4 +103,6 @@ func (c *SQLServerBackups) Collect(ch chan<- prometheus.Metric) {
 		ch <- prometheus.MustNewConstMetric(c.lastDurationSecs, prometheus.GaugeValue, duration, labels...)
 		ch <- prometheus.MustNewConstMetric(c.lastSizeBytes, prometheus.GaugeValue, sizeBytes, labels...)
 	}
+
+	return rows.Err()
 }

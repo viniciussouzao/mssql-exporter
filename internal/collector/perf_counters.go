@@ -3,6 +3,7 @@ package collector
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"log/slog"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -79,6 +80,10 @@ func NewPerfCountersCollector(db *sql.DB) *SQLServerPerfCounters {
 	}
 }
 
+func (c *SQLServerPerfCounters) Name() string {
+	return "perf_counters"
+}
+
 func (c *SQLServerPerfCounters) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.batchRequests
 	ch <- c.sqlCompilations
@@ -92,7 +97,7 @@ func (c *SQLServerPerfCounters) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.pageSplits
 }
 
-func (c *SQLServerPerfCounters) Collect(ch chan<- prometheus.Metric) {
+func (c *SQLServerPerfCounters) Scrape(ch chan<- prometheus.Metric) error {
 	ctx, cancel := context.WithTimeout(context.Background(), db.CurrentOptions().ConnTimeout)
 	defer cancel()
 
@@ -112,8 +117,7 @@ func (c *SQLServerPerfCounters) Collect(ch chan<- prometheus.Metric) {
 				AND counter_name = 'Page Splits/sec')
 	`)
 	if err != nil {
-		slog.Error("failed to query dm_os_performance_counters", slog.Any("error", err))
-		return
+		return fmt.Errorf("failed to query dm_os_performance_counters: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
@@ -153,13 +157,11 @@ func (c *SQLServerPerfCounters) Collect(ch chan<- prometheus.Metric) {
 		}
 	}
 
-	if err := rows.Err(); err != nil {
-		slog.Error("error iterating performance counter rows", slog.Any("error", err))
-	}
-
 	// "Buffer cache hit ratio" is a fraction counter: the raw value only makes
 	// sense divided by its "base" counter, so it is emitted after the scan.
 	if hitRatioBase > 0 {
 		ch <- prometheus.MustNewConstMetric(c.bufferCacheHitRatio, prometheus.GaugeValue, hitRatio/hitRatioBase)
 	}
+
+	return rows.Err()
 }

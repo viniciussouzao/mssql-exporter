@@ -3,6 +3,8 @@ package collector
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"fmt"
 	"log/slog"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -55,6 +57,10 @@ func NewTempDBCollector(db *sql.DB) *SQLServerTempDB {
 	}
 }
 
+func (c *SQLServerTempDB) Name() string {
+	return "tempdb"
+}
+
 func (c *SQLServerTempDB) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.freeSpaceKB
 	ch <- c.versionStoreKB
@@ -64,12 +70,14 @@ func (c *SQLServerTempDB) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.tempTablesCreated
 }
 
-func (c *SQLServerTempDB) Collect(ch chan<- prometheus.Metric) {
-	c.collectFileSpaceUsage(ch)
-	c.collectPerfCounters(ch)
+func (c *SQLServerTempDB) Scrape(ch chan<- prometheus.Metric) error {
+	return errors.Join(
+		c.collectFileSpaceUsage(ch),
+		c.collectPerfCounters(ch),
+	)
 }
 
-func (c *SQLServerTempDB) collectFileSpaceUsage(ch chan<- prometheus.Metric) {
+func (c *SQLServerTempDB) collectFileSpaceUsage(ch chan<- prometheus.Metric) error {
 	ctx, cancel := context.WithTimeout(context.Background(), db.CurrentOptions().ConnTimeout)
 	defer cancel()
 
@@ -84,17 +92,18 @@ func (c *SQLServerTempDB) collectFileSpaceUsage(ch chan<- prometheus.Metric) {
 
 	var freeKB, versionStoreKB, internalKB, userKB float64
 	if err := row.Scan(&freeKB, &versionStoreKB, &internalKB, &userKB); err != nil {
-		slog.Error("failed to scan tempdb file space usage", slog.Any("error", err))
-		return
+		return fmt.Errorf("failed to query tempdb file space usage: %w", err)
 	}
 
 	ch <- prometheus.MustNewConstMetric(c.freeSpaceKB, prometheus.GaugeValue, freeKB)
 	ch <- prometheus.MustNewConstMetric(c.versionStoreKB, prometheus.GaugeValue, versionStoreKB)
 	ch <- prometheus.MustNewConstMetric(c.internalObjectsKB, prometheus.GaugeValue, internalKB)
 	ch <- prometheus.MustNewConstMetric(c.userObjectsKB, prometheus.GaugeValue, userKB)
+
+	return nil
 }
 
-func (c *SQLServerTempDB) collectPerfCounters(ch chan<- prometheus.Metric) {
+func (c *SQLServerTempDB) collectPerfCounters(ch chan<- prometheus.Metric) error {
 	ctx, cancel := context.WithTimeout(context.Background(), db.CurrentOptions().ConnTimeout)
 	defer cancel()
 
@@ -105,8 +114,7 @@ func (c *SQLServerTempDB) collectPerfCounters(ch chan<- prometheus.Metric) {
 		AND RTRIM(counter_name) IN ('Active Temp Tables', 'Temp Tables Creation Rate')
 	`)
 	if err != nil {
-		slog.Error("failed to query tempdb performance counters", slog.Any("error", err))
-		return
+		return fmt.Errorf("failed to query tempdb performance counters: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
@@ -125,4 +133,6 @@ func (c *SQLServerTempDB) collectPerfCounters(ch chan<- prometheus.Metric) {
 			ch <- prometheus.MustNewConstMetric(c.tempTablesCreated, prometheus.CounterValue, value)
 		}
 	}
+
+	return rows.Err()
 }

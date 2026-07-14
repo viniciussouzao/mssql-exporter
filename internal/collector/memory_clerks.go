@@ -3,6 +3,7 @@ package collector
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"log/slog"
 	"strconv"
 
@@ -27,11 +28,15 @@ func NewMemoryClerksCollector(db *sql.DB) *SQLServerMemoryClerks {
 	}
 }
 
+func (c *SQLServerMemoryClerks) Name() string {
+	return "memory_clerks"
+}
+
 func (c *SQLServerMemoryClerks) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.memoryUsedKB
 }
 
-func (c *SQLServerMemoryClerks) Collect(ch chan<- prometheus.Metric) {
+func (c *SQLServerMemoryClerks) Scrape(ch chan<- prometheus.Metric) error {
 	ctx, cancel := context.WithTimeout(context.Background(), db.CurrentOptions().ConnTimeout)
 	defer cancel()
 
@@ -41,8 +46,7 @@ func (c *SQLServerMemoryClerks) Collect(ch chan<- prometheus.Metric) {
 		GROUP BY type, name, memory_node_id
 	`)
 	if err != nil {
-		slog.Error("failed to query dm_os_memory_clerks", slog.Any("error", err))
-		return
+		return fmt.Errorf("failed to query dm_os_memory_clerks: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
@@ -68,4 +72,6 @@ func (c *SQLServerMemoryClerks) Collect(ch chan<- prometheus.Metric) {
 			strconv.Itoa(memoryNodeID),
 		)
 	}
+
+	return rows.Err()
 }

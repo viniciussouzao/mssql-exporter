@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/spf13/pflag"
+	"github.com/viniciussouzao/mssql-exporter/internal/collector"
 	"gopkg.in/yaml.v3"
 )
 
@@ -36,6 +37,10 @@ type Config struct {
 	WebTelemetryPath   string
 	EnableOSCollectors bool
 	ConfigFile         string
+
+	// EnabledCollectors maps each SQL Server collector name (see
+	// collector.ScraperNames) to whether it should run. All default to true.
+	EnabledCollectors map[string]bool
 }
 
 type fileConfig struct {
@@ -44,9 +49,9 @@ type fileConfig struct {
 		ListenAddress string `yaml:"listen_address"`
 		TelemetryPath string `yaml:"telemetry_path"`
 	} `yaml:"web"`
-	Collectors struct {
-		OSCollectors bool `yaml:"os_collectors"`
-	} `yaml:"collectors"`
+	// Collectors toggles collectors by name; `os_collectors` toggles the
+	// OS-level collectors, every other key must match a SQL Server collector.
+	Collectors map[string]bool `yaml:"collectors"`
 }
 
 // Load parses CLI flags from args (typically os.Args[1:]) and merges them
@@ -61,6 +66,11 @@ func Load(args []string) (*Config, error) {
 	enableOSCollectors := fs.Bool("collector.os-collectors", false, "Enable OS-level collectors (CPU, memory, disk).")
 	configFile := fs.String("config.file", "", "Path to an optional YAML config file.")
 	showVersion := fs.Bool("version", false, "Print version information and exit.")
+
+	collectorFlags := make(map[string]*bool, len(collector.ScraperNames()))
+	for _, name := range collector.ScraperNames() {
+		collectorFlags[name] = fs.Bool("collector."+name, true, "Enable the "+name+" collector.")
+	}
 
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, pflag.ErrHelp) {
@@ -109,7 +119,7 @@ func Load(args []string) (*Config, error) {
 		return nil, fmt.Errorf("web.telemetry-path must start with '/'")
 	}
 
-	cfg.EnableOSCollectors = fc.Collectors.OSCollectors
+	cfg.EnableOSCollectors = fc.Collectors["os_collectors"]
 	if v := os.Getenv("ENABLE_OS_COLLECTORS"); v != "" {
 		enabled, err := strconv.ParseBool(v)
 		if err != nil {
@@ -120,6 +130,28 @@ func Load(args []string) (*Config, error) {
 	}
 	if fs.Changed("collector.os-collectors") {
 		cfg.EnableOSCollectors = *enableOSCollectors
+	}
+
+	scraperNames := collector.ScraperNames()
+	known := make(map[string]bool, len(scraperNames)+1)
+	known["os_collectors"] = true
+	cfg.EnabledCollectors = make(map[string]bool, len(scraperNames))
+	for _, name := range scraperNames {
+		known[name] = true
+
+		enabled := true
+		if v, ok := fc.Collectors[name]; ok {
+			enabled = v
+		}
+		if fs.Changed("collector." + name) {
+			enabled = *collectorFlags[name]
+		}
+		cfg.EnabledCollectors[name] = enabled
+	}
+	for name := range fc.Collectors {
+		if !known[name] {
+			slog.Warn("unknown collector in config file, ignoring", slog.String("collector", name))
+		}
 	}
 
 	cfg.DSN = fc.DSN

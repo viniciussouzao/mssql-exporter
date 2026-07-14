@@ -3,6 +3,8 @@ package collector
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"fmt"
 	"log/slog"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -49,6 +51,10 @@ func NewDatabasesCollector(db *sql.DB) *SQLServerDatabases {
 	}
 }
 
+func (c *SQLServerDatabases) Name() string {
+	return "databases"
+}
+
 func (c *SQLServerDatabases) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.state
 	ch <- c.recoveryModel
@@ -57,13 +63,15 @@ func (c *SQLServerDatabases) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.logUsedPercent
 }
 
-func (c *SQLServerDatabases) Collect(ch chan<- prometheus.Metric) {
-	c.collectStates(ch)
-	c.collectFileSizes(ch)
-	c.collectLogUsage(ch)
+func (c *SQLServerDatabases) Scrape(ch chan<- prometheus.Metric) error {
+	return errors.Join(
+		c.collectStates(ch),
+		c.collectFileSizes(ch),
+		c.collectLogUsage(ch),
+	)
 }
 
-func (c *SQLServerDatabases) collectStates(ch chan<- prometheus.Metric) {
+func (c *SQLServerDatabases) collectStates(ch chan<- prometheus.Metric) error {
 	ctx, cancel := context.WithTimeout(context.Background(), db.CurrentOptions().ConnTimeout)
 	defer cancel()
 
@@ -72,8 +80,7 @@ func (c *SQLServerDatabases) collectStates(ch chan<- prometheus.Metric) {
 		FROM sys.databases
 	`)
 	if err != nil {
-		slog.Error("failed to query sys.databases", slog.Any("error", err))
-		return
+		return fmt.Errorf("failed to query sys.databases: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
@@ -88,12 +95,10 @@ func (c *SQLServerDatabases) collectStates(ch chan<- prometheus.Metric) {
 		ch <- prometheus.MustNewConstMetric(c.recoveryModel, prometheus.GaugeValue, 1, name, recoveryModelDesc)
 	}
 
-	if err := rows.Err(); err != nil {
-		slog.Error("error iterating sys.databases rows", slog.Any("error", err))
-	}
+	return rows.Err()
 }
 
-func (c *SQLServerDatabases) collectFileSizes(ch chan<- prometheus.Metric) {
+func (c *SQLServerDatabases) collectFileSizes(ch chan<- prometheus.Metric) error {
 	ctx, cancel := context.WithTimeout(context.Background(), db.CurrentOptions().ConnTimeout)
 	defer cancel()
 
@@ -107,8 +112,7 @@ func (c *SQLServerDatabases) collectFileSizes(ch chan<- prometheus.Metric) {
 		GROUP BY database_id, type
 	`)
 	if err != nil {
-		slog.Error("failed to query sys.master_files for database sizes", slog.Any("error", err))
-		return
+		return fmt.Errorf("failed to query sys.master_files for database sizes: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
@@ -133,12 +137,10 @@ func (c *SQLServerDatabases) collectFileSizes(ch chan<- prometheus.Metric) {
 		}
 	}
 
-	if err := rows.Err(); err != nil {
-		slog.Error("error iterating database file size rows", slog.Any("error", err))
-	}
+	return rows.Err()
 }
 
-func (c *SQLServerDatabases) collectLogUsage(ch chan<- prometheus.Metric) {
+func (c *SQLServerDatabases) collectLogUsage(ch chan<- prometheus.Metric) error {
 	ctx, cancel := context.WithTimeout(context.Background(), db.CurrentOptions().ConnTimeout)
 	defer cancel()
 
@@ -150,8 +152,7 @@ func (c *SQLServerDatabases) collectLogUsage(ch chan<- prometheus.Metric) {
 			AND instance_name <> '_Total'
 	`)
 	if err != nil {
-		slog.Error("failed to query log usage performance counters", slog.Any("error", err))
-		return
+		return fmt.Errorf("failed to query log usage performance counters: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
@@ -166,7 +167,5 @@ func (c *SQLServerDatabases) collectLogUsage(ch chan<- prometheus.Metric) {
 		ch <- prometheus.MustNewConstMetric(c.logUsedPercent, prometheus.GaugeValue, value, dbName)
 	}
 
-	if err := rows.Err(); err != nil {
-		slog.Error("error iterating log usage rows", slog.Any("error", err))
-	}
+	return rows.Err()
 }

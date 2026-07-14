@@ -11,5 +11,16 @@ web:
   listen_address: ":9187"
   telemetry_path: "/metrics"
 
+# Toggle individual collectors (all SQL Server collectors default to enabled;
+# os_collectors defaults to disabled).
 collectors:
   os_collectors: false
+  # wait_stats: true
+  # io_file_stats: true
+  # sessions: true
+  # server_info: true
+  # memory_clerks: true
+  # backups: true
+  # tempdb: true
+  # perf_counters: true
+  # databases: true

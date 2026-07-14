@@ -3,6 +3,8 @@ package collector
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"fmt"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/viniciussouzao/mssql-exporter/internal/db"
@@ -89,6 +91,10 @@ func NewServerInfoCollector(db *sql.DB) *SQLServerProperties {
 	}
 }
 
+func (c *SQLServerProperties) Name() string {
+	return "server_info"
+}
+
 func (c *SQLServerProperties) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.hostname
 	ch <- c.servername
@@ -101,12 +107,14 @@ func (c *SQLServerProperties) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.availablePhysicalMemoryKB
 }
 
-func (c *SQLServerProperties) Collect(ch chan<- prometheus.Metric) {
+func (c *SQLServerProperties) Scrape(ch chan<- prometheus.Metric) error {
 	ctx, cancel := context.WithTimeout(context.Background(), db.CurrentOptions().ConnTimeout)
 	defer cancel()
 
+	var errs []error
+
 	row := c.db.QueryRowContext(ctx, `
-	SELECT 
+	SELECT
 		SERVERPROPERTY('MachineName') AS hostname,
 		SERVERPROPERTY('ServerName') AS servername,
 		SERVERPROPERTY('Edition') AS edition,
@@ -126,7 +134,9 @@ func (c *SQLServerProperties) Collect(ch chan<- prometheus.Metric) {
 		&productVersion,
 		&engineEdition,
 		&isHadrEnabled,
-	); err == nil {
+	); err != nil {
+		errs = append(errs, fmt.Errorf("failed to query server properties: %w", err))
+	} else {
 		ch <- prometheus.MustNewConstMetric(c.hostname, prometheus.GaugeValue, 1, hostname)
 		ch <- prometheus.MustNewConstMetric(c.servername, prometheus.GaugeValue, 1, servername)
 		ch <- prometheus.MustNewConstMetric(c.edition, prometheus.GaugeValue, 1, edition)
@@ -138,7 +148,9 @@ func (c *SQLServerProperties) Collect(ch chan<- prometheus.Metric) {
 	row = c.db.QueryRowContext(ctx, `SELECT cpu_count FROM sys.dm_os_sys_info`)
 
 	var visibleCPUs int
-	if err := row.Scan(&visibleCPUs); err == nil {
+	if err := row.Scan(&visibleCPUs); err != nil {
+		errs = append(errs, fmt.Errorf("failed to query dm_os_sys_info: %w", err))
+	} else {
 		ch <- prometheus.MustNewConstMetric(c.visibleCPUs, prometheus.GaugeValue, float64(visibleCPUs))
 	}
 
@@ -149,8 +161,12 @@ func (c *SQLServerProperties) Collect(ch chan<- prometheus.Metric) {
 	`)
 
 	var totalPhysicalMemoryKB, availablePhysicalMemoryKB int64
-	if err := row.Scan(&totalPhysicalMemoryKB, &availablePhysicalMemoryKB); err == nil {
+	if err := row.Scan(&totalPhysicalMemoryKB, &availablePhysicalMemoryKB); err != nil {
+		errs = append(errs, fmt.Errorf("failed to query dm_os_sys_memory: %w", err))
+	} else {
 		ch <- prometheus.MustNewConstMetric(c.totalPhysicalMemoryKB, prometheus.GaugeValue, float64(totalPhysicalMemoryKB))
 		ch <- prometheus.MustNewConstMetric(c.availablePhysicalMemoryKB, prometheus.GaugeValue, float64(availablePhysicalMemoryKB))
 	}
+
+	return errors.Join(errs...)
 }

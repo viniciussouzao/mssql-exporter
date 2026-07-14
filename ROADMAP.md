@@ -21,16 +21,15 @@ Progress legend: [ ] not started · [~] in progress · [x] done
 
 ## Phase 2 — Exporter robustness (before adding heavier collectors)
 
-- [ ] **`sqlserver_up` metric + connection resilience**
-  - Do not exit when SQL Server is unreachable at startup; keep serving
-    `/metrics` with `sqlserver_up 0` and let Prometheus alert
-    (same failure model as `mysqld_exporter`'s `mysql_up`)
-  - Avoids crash-loops during database maintenance windows
-- [ ] **Per-collector enable/disable flags** (`--collector.<name>`,
-  mysqld_exporter pattern), wired through `internal/config` (flag/env/YAML)
-- [ ] **Exporter self-metrics**: per-collector scrape duration and success
-  (`sqlserver_scrape_collector_duration_seconds`,
-  `sqlserver_scrape_collector_success{collector}`)
+- [x] **`sqlserver_up` metric + connection resilience** — the exporter starts
+  even if SQL Server is down, pings per scrape and exposes `sqlserver_up 0/1`;
+  scrapers are skipped while down (`internal/collector/exporter.go`)
+- [x] **Per-collector enable/disable flags** (`--collector.<name>`) and YAML
+  `collectors:` map, wired through `internal/config`
+- [x] **Exporter self-metrics**: `sqlserver_scrape_collector_duration_seconds`
+  and `sqlserver_scrape_collector_success{collector}`
+- Note: collectors now implement the `Scraper` interface (`Scrape() error`)
+  instead of raw `prometheus.Collector` — see CLAUDE.md "Adding a New Collector"
 
 ## Phase 3 — Operational collectors
 

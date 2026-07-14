@@ -60,6 +60,10 @@ Flags (mirroring the ergonomics of `mysqld_exporter`/`postgres_exporter`):
 ```
 --web.listen-address string    Address to listen on for the web interface and metrics. (default ":9187")
 --web.telemetry-path string    Path under which to expose metrics. (default "/metrics")
+--collector.<name>             Enable/disable a SQL Server collector (all default to true).
+                               Names: wait_stats, io_file_stats, sessions, server_info,
+                               memory_clerks, backups, tempdb, perf_counters, databases.
+                               Example: --collector.backups=false
 --collector.os-collectors      Enable OS-level collectors (CPU, memory, disk).
 --config.file string           Path to an optional YAML config file.
 --version                      Print version information and exit.
@@ -86,6 +90,7 @@ web:
   telemetry_path: "/metrics"
 collectors:
   os_collectors: false
+  backups: false        # any SQL Server collector can be toggled by name
 ```
 
 ```bash
@@ -111,6 +116,17 @@ The exporter reads from (among others):
 - `sys.dm_os_sys_info`
 - `sys.dm_os_sys_memory`
 - `SERVERPROPERTY(...)`
+
+## Availability & Self-Metrics
+
+The exporter starts even if SQL Server is unreachable and retries on every
+scrape — alert on `sqlserver_up` instead of watching the process:
+
+- `sqlserver_up 0|1` — whether the instance is reachable (checked per scrape).
+- `sqlserver_scrape_collector_duration_seconds{collector="wait_stats"}` — duration of each collector.
+- `sqlserver_scrape_collector_success{collector="wait_stats"} 0|1` — whether each collector succeeded.
+
+When `sqlserver_up` is 0, individual collectors are skipped for that scrape.
 
 ## Exposed Metrics
 

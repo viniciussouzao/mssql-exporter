@@ -39,18 +39,17 @@ func main() {
 	opts := db.DefaultOptions()
 
 	if err := db.Connect(cfg.DSN, opts); err != nil {
-		slog.Error("failed to connect to sql server", slog.Any("error", err))
+		slog.Error("invalid sql server DSN", slog.Any("error", err))
 		os.Exit(1)
 	}
 
 	db := db.DB()
 
 	if err := db.Ping(); err != nil {
-		slog.Error("failed to ping sql server", slog.Any("error", err))
-		os.Exit(1)
+		slog.Warn("sql server is unreachable at startup, retrying on every scrape (sqlserver_up will report 0)", slog.Any("error", err))
+	} else {
+		slog.Info("successfully connected and pinged sql server")
 	}
-
-	slog.Info("successfully connected and pinged sql server")
 
 	instanceName := queryServerName(db)
 	slog.Info("sql server instance", slog.String("instance", instanceName))
@@ -60,17 +59,7 @@ func main() {
 		prometheus.DefaultRegisterer,
 	)
 
-	reg.MustRegister(
-		collector.NewWaitStatsCollector(db),
-		collector.NewIOFileStatsCollector(db),
-		collector.NewSessionsCollector(db),
-		collector.NewServerInfoCollector(db),
-		collector.NewMemoryClerksCollector(db),
-		collector.NewBackupsCollector(db),
-		collector.NewTempDBCollector(db),
-		collector.NewPerfCountersCollector(db),
-		collector.NewDatabasesCollector(db),
-	)
+	reg.MustRegister(collector.NewExporter(db, cfg.EnabledCollectors))
 
 	if cfg.EnableOSCollectors {
 		oscollector.Register(reg)

@@ -3,6 +3,7 @@ package collector
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"log/slog"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -26,11 +27,15 @@ func NewSessionsCollector(db *sql.DB) *SQLServerSessions {
 	}
 }
 
+func (c *SQLServerSessions) Name() string {
+	return "sessions"
+}
+
 func (c *SQLServerSessions) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.sessionState
 }
 
-func (c *SQLServerSessions) Collect(ch chan<- prometheus.Metric) {
+func (c *SQLServerSessions) Scrape(ch chan<- prometheus.Metric) error {
 	ctx, cancel := context.WithTimeout(context.Background(), db.CurrentOptions().ConnTimeout)
 	defer cancel()
 
@@ -41,8 +46,7 @@ func (c *SQLServerSessions) Collect(ch chan<- prometheus.Metric) {
 	`)
 
 	if err != nil {
-		slog.Error("failed to query sql server for sessions stats:", slog.Any("error", err))
-		return
+		return fmt.Errorf("failed to query dm_exec_sessions: %w", err)
 	}
 
 	defer func() { _ = rows.Close() }()
@@ -52,7 +56,7 @@ func (c *SQLServerSessions) Collect(ch chan<- prometheus.Metric) {
 		var sessionCount int64
 
 		if err := rows.Scan(&sessionState, &sessionCount); err != nil {
-			slog.Error("failed to scan sql server sessions stats:", slog.Any("error", err))
+			slog.Error("failed to scan sessions row", slog.Any("error", err))
 			continue
 		}
 
@@ -64,4 +68,5 @@ func (c *SQLServerSessions) Collect(ch chan<- prometheus.Metric) {
 		)
 	}
 
+	return rows.Err()
 }

@@ -68,9 +68,23 @@ DB() *sql.DB                                     // Get DB instance
 CurrentOptions() *Options                        // Get current connection options
 ```
 
-### 2. Prometheus Collectors (`internal/collector/`)
+### 2. Collectors (`internal/collector/`)
 
-**Pattern**: Each collector implements `prometheus.Collector` interface.
+**Pattern**: Each collector implements the `Scraper` interface (defined in
+`internal/collector/exporter.go`). A single top-level `Exporter`
+(prometheus.Collector) pings SQL Server per scrape (`sqlserver_up`), runs
+every enabled scraper and emits per-scraper self-metrics
+(`sqlserver_scrape_collector_duration_seconds` / `_success`). When the ping
+fails, scrapers are skipped and only `sqlserver_up 0` is exposed — the
+process never exits because SQL Server is down.
+
+```go
+type Scraper interface {
+    Name() string                                  // snake_case, used in --collector.<name>
+    Describe(ch chan<- *prometheus.Desc)
+    Scrape(ch chan<- prometheus.Metric) error      // returns error instead of logging
+}
+```
 
 All collectors follow this structure:
 ```go
@@ -92,45 +106,54 @@ func NewCollectorName(db *sql.DB) *CollectorName {
     }
 }
 
+func (c *CollectorName) Name() string { return "collector_name" }
+
 func (c *CollectorName) Describe(ch chan<- *prometheus.Desc) {
     ch <- c.metricName
 }
 
-func (c *CollectorName) Collect(ch chan<- prometheus.Metric) {
+func (c *CollectorName) Scrape(ch chan<- prometheus.Metric) error {
     ctx, cancel := context.WithTimeout(context.Background(), db.CurrentOptions().ConnTimeout)
     defer cancel()
 
     // Query SQL Server DMVs
     rows, err := c.db.QueryContext(ctx, "SELECT ...")
     if err != nil {
-        slog.Error("...", slog.Any("error", err))
-        return
+        return fmt.Errorf("failed to query ...: %w", err)
     }
-    defer rows.Close()
+    defer func() { _ = rows.Close() }()
 
     // Scan and emit metrics
     for rows.Next() {
-        // ... scan values
+        // scan errors: log with slog.Error and `continue` (partial data is fine)
         ch <- prometheus.MustNewConstMetric(c.metricName, prometheus.GaugeValue, value, labels...)
     }
+
+    return rows.Err()
 }
 ```
 
 **Important Conventions**:
 - Always use `context.WithTimeout()` with `db.CurrentOptions().ConnTimeout`
-- Always `defer rows.Close()` after querying
-- Use `slog.Error()` for logging errors (never panic on query failures)
+- Always `defer func() { _ = rows.Close() }()` after querying
+- Query failures: return the error (the Exporter logs it and reports
+  `scrape_collector_success 0`); row-scan failures: log and `continue`
+- Multi-query scrapers combine errors with `errors.Join` (see tempdb, databases)
 - Metric names follow pattern: `sqlserver_<category>_<metric>`
-- All metrics use `prometheus.GaugeValue` (counters are tracked via SQL Server's cumulative DMVs)
+- Cumulative DMV counters use `prometheus.CounterValue` with `_total` suffix;
+  point-in-time values use `prometheus.GaugeValue`
 
 ### 3. Main Application Flow (`main.go`)
 
 1. Load `.env` file (using `godotenv.Load()`)
 2. Resolve configuration with `config.Load(os.Args[1:])` (flags/env/YAML, see below)
-3. Initialize database connection with `db.Connect(cfg.DSN, opts)`
-4. Ping database to verify connectivity
-5. Register all collectors with `prometheus.MustRegister()`
+3. Initialize connection pool with `db.Connect(cfg.DSN, opts)` (validates the DSN only — does not dial)
+4. Ping database (best effort: logs a warning and continues if unreachable; `sqlserver_up` reports 0 until it recovers)
+5. Register `collector.NewExporter(db, cfg.EnabledCollectors)` (runs all enabled scrapers)
 6. Start HTTP server on `cfg.WebListenAddress` with `cfg.WebTelemetryPath` endpoint
+
+Note: the `sqlserver_instance` label is resolved once at startup; if SQL
+Server was down at that moment the label stays empty until the process restarts.
 
 ## Configuration Sources
 
@@ -140,6 +163,9 @@ Resolved in `internal/config.Load()`. Precedence per field, highest first:
 ```bash
 --web.listen-address string    Address to listen on for the web interface and metrics. (default ":9187")
 --web.telemetry-path string    Path under which to expose metrics. (default "/metrics")
+--collector.<name>             Enable/disable a SQL Server collector (default true for all).
+                               Names come from collector.ScraperNames(); YAML equivalent is
+                               the `collectors:` map keyed by the same names.
 --collector.os-collectors      Enable OS-level collectors (CPU, memory, disk).
 --config.file string           Path to an optional YAML config file.
 --version                      Print version information and exit.
@@ -202,6 +228,7 @@ package collector
 import (
     "context"
     "database/sql"
+    "fmt"
     "log/slog"
 
     "github.com/prometheus/client_golang/prometheus"
@@ -225,11 +252,13 @@ func NewYourCollector(db *sql.DB) *YourCollector {
     }
 }
 
+func (c *YourCollector) Name() string { return "your_collector" }
+
 func (c *YourCollector) Describe(ch chan<- *prometheus.Desc) {
     ch <- c.metricDesc
 }
 
-func (c *YourCollector) Collect(ch chan<- prometheus.Metric) {
+func (c *YourCollector) Scrape(ch chan<- prometheus.Metric) error {
     ctx, cancel := context.WithTimeout(context.Background(), db.CurrentOptions().ConnTimeout)
     defer cancel()
 
@@ -239,48 +268,58 @@ func (c *YourCollector) Collect(ch chan<- prometheus.Metric) {
     `)
 
     if err != nil {
-        slog.Error("failed to query your_dmv", slog.Any("error", err))
-        return
+        return fmt.Errorf("failed to query your_dmv: %w", err)
     }
-    defer rows.Close()
+    defer func() { _ = rows.Close() }()
 
     for rows.Next() {
-        var label, value string
+        var label string
+        var value float64
         if err := rows.Scan(&label, &value); err != nil {
-            slog.Error("failed to scan row", slog.Any("error", err))
+            slog.Error("failed to scan your_dmv row", slog.Any("error", err))
             continue
         }
 
         ch <- prometheus.MustNewConstMetric(
             c.metricDesc,
             prometheus.GaugeValue,
-            parseFloat(value),
+            value,
             label,
         )
     }
+
+    return rows.Err()
 }
 ```
 
 ### 2. Register Collector
 
-Edit `main.go` and add to `prometheus.MustRegister()`:
+Edit `internal/collector/exporter.go` and add the collector to `scraperNames`
+(this defines the registration order AND the `--collector.<name>` flag /
+`collectors:` YAML key) and to `scraperFactories`:
 
 ```go
-prometheus.MustRegister(
-    collector.NewWaitStatsCollector(db),
-    collector.NewIOFileStatsCollector(db),
-    collector.NewSessionsCollector(db),
-    collector.NewServerInfoCollector(db),
-    collector.NewYourCollector(db),  // Add here
-)
+var scraperNames = []string{
+    // ...
+    "your_collector",
+}
+
+var scraperFactories = map[string]func(*sql.DB) Scraper{
+    // ...
+    "your_collector": func(db *sql.DB) Scraper { return NewYourCollector(db) },
+}
 ```
+
+No change in `main.go` is needed — the Exporter picks it up automatically,
+including the enable/disable toggle.
 
 ### 3. Test
 
 1. Verify SQL query works against your SQL Server instance
 2. Run `make build && make run`
 3. Check metrics: `curl http://localhost:9187/metrics | grep sqlserver_your_metric`
-4. Run `make check` to ensure code quality
+4. Check self-metrics: `curl http://localhost:9187/metrics | grep 'scrape_collector.*your_collector'`
+5. Run `make check` to ensure code quality
 
 ## SQL Server DMV Reference
 

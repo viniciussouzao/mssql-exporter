@@ -3,6 +3,7 @@ package collector
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"log/slog"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -42,27 +43,30 @@ func NewWaitStatsCollector(db *sql.DB) *SQLServerWaitStats {
 	}
 }
 
+func (c *SQLServerWaitStats) Name() string {
+	return "wait_stats"
+}
+
 func (c *SQLServerWaitStats) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.waitTimeMs
 	ch <- c.waitingTasks
 	ch <- c.maxWaitTimeMs
 }
 
-func (c *SQLServerWaitStats) Collect(ch chan<- prometheus.Metric) {
+func (c *SQLServerWaitStats) Scrape(ch chan<- prometheus.Metric) error {
 	ctx, cancel := context.WithTimeout(context.Background(), db.CurrentOptions().ConnTimeout)
 	defer cancel()
 
 	rows, err := c.db.QueryContext(ctx, `
 	SELECT wait_type, wait_time_ms, waiting_tasks_count, max_wait_time_ms
 	FROM sys.dm_os_wait_stats
-	WHERE wait_type NOT LIKE 'SLEEP%' 
- 	AND wait_type NOT LIKE 'XE%' 
+	WHERE wait_type NOT LIKE 'SLEEP%'
+ 	AND wait_type NOT LIKE 'XE%'
   	AND wait_type NOT LIKE 'BROKER_%'
 	`)
 
 	if err != nil {
-		slog.Error("failed to query sql server:", slog.Any("error", err))
-		return
+		return fmt.Errorf("failed to query dm_os_wait_stats: %w", err)
 	}
 
 	defer func() { _ = rows.Close() }()
@@ -75,7 +79,7 @@ func (c *SQLServerWaitStats) Collect(ch chan<- prometheus.Metric) {
 
 		err := rows.Scan(&waitType, &waitTimeMs, &waitingTasks, &maxWaitTimeMs)
 		if err != nil {
-			slog.Error("failed to scan row:", slog.Any("error", err))
+			slog.Error("failed to scan wait stats row", slog.Any("error", err))
 			continue
 		}
 
@@ -100,4 +104,6 @@ func (c *SQLServerWaitStats) Collect(ch chan<- prometheus.Metric) {
 			waitType,
 		)
 	}
+
+	return rows.Err()
 }
