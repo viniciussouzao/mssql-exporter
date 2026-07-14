@@ -36,6 +36,8 @@ var scraperNames = []string{
 	"blocking",
 	"availability_groups",
 	"agent_jobs",
+	"volumes",
+	"schedulers",
 }
 
 var scraperFactories = map[string]func(*sql.DB) Scraper{
@@ -51,6 +53,8 @@ var scraperFactories = map[string]func(*sql.DB) Scraper{
 	"blocking":            func(db *sql.DB) Scraper { return NewBlockingCollector(db) },
 	"availability_groups": func(db *sql.DB) Scraper { return NewAvailabilityGroupsCollector(db) },
 	"agent_jobs":          func(db *sql.DB) Scraper { return NewAgentJobsCollector(db) },
+	"volumes":             func(db *sql.DB) Scraper { return NewVolumesCollector(db) },
+	"schedulers":          func(db *sql.DB) Scraper { return NewSchedulersCollector(db) },
 }
 
 // ScraperNames returns the names of all available collectors in

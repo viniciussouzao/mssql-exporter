@@ -47,14 +47,17 @@ Progress legend: [ ] not started · [~] in progress · [x] done
 
 ## Phase 4 — Environment & hardening
 
-- [ ] **Volume space collector** (`sys.dm_os_volume_stats`)
-  - Free/total space per volume hosting database files, via SQL —
-    covers remote-monitoring setups where OS collectors don't apply
-- [ ] **Scheduler/CPU pressure collector** (`sys.dm_os_schedulers`)
-  - Runnable tasks count (most direct CPU starvation signal), workers
-- [ ] **TLS and basic auth** for the HTTP endpoint
-  (consider `prometheus/exporter-toolkit/web` + `--web.config.file`)
-- [ ] **Health check endpoint** (`/healthz`)
+- [x] **Volume space collector** (`sys.dm_os_volume_stats`) —
+  `internal/collector/volumes.go`: total/available bytes per volume, via SQL
+  (works for remote monitoring); requires `VIEW ANY DEFINITION` in addition
+  to `VIEW SERVER STATE` (sys.master_files is silently empty without it)
+- [x] **Scheduler/CPU pressure collector** (`sys.dm_os_schedulers`) —
+  `internal/collector/schedulers.go`: runnable tasks, current tasks, active
+  workers, work queue, online schedulers
+- [x] **TLS and basic auth** via `prometheus/exporter-toolkit/web` and
+  `--web.config.file` (also `web.config_file` in the YAML config)
+- [x] **Health check endpoint** (`/healthz`) — liveness only; use
+  `sqlserver_up` for database reachability
 
 ## Later / ideas (unprioritized)
 

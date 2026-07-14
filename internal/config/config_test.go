@@ -153,6 +153,32 @@ func TestLoadOSCollectorsEnvVar(t *testing.T) {
 	}
 }
 
+func TestLoadWebConfigFilePrecedence(t *testing.T) {
+	t.Setenv("SQL_SERVER_DSN", "")
+
+	path := writeConfigFile(t, `
+dsn: "`+testDSN+`"
+web:
+  config_file: "/etc/from-yaml.yml"
+`)
+
+	cfg, err := Load([]string{"--config.file", path})
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.WebConfigFile != "/etc/from-yaml.yml" {
+		t.Errorf("WebConfigFile = %q, want yaml value", cfg.WebConfigFile)
+	}
+
+	cfg, err = Load([]string{"--config.file", path, "--web.config.file", "/etc/from-flag.yml"})
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.WebConfigFile != "/etc/from-flag.yml" {
+		t.Errorf("WebConfigFile = %q, want flag to override yaml", cfg.WebConfigFile)
+	}
+}
+
 func TestLoadCollectorsDefaultEnabled(t *testing.T) {
 	t.Setenv("SQL_SERVER_DSN", testDSN)
 

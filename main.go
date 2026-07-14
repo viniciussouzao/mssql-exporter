@@ -12,6 +12,7 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/prometheus/exporter-toolkit/web"
 	"github.com/viniciussouzao/mssql-exporter/internal/collector"
 	"github.com/viniciussouzao/mssql-exporter/internal/config"
 	"github.com/viniciussouzao/mssql-exporter/internal/db"
@@ -70,9 +71,22 @@ func main() {
 		slog.Info("os collectors enabled")
 	}
 
+	mux := http.NewServeMux()
+	mux.Handle(cfg.WebTelemetryPath, promhttp.Handler())
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	})
+
 	slog.Info("sql server exporter is running", slog.String("address", cfg.WebListenAddress), slog.String("telemetry_path", cfg.WebTelemetryPath))
-	http.Handle(cfg.WebTelemetryPath, promhttp.Handler())
-	if err := http.ListenAndServe(cfg.WebListenAddress, nil); err != nil {
+
+	server := &http.Server{Handler: mux}
+	flags := &web.FlagConfig{
+		WebListenAddresses: &[]string{cfg.WebListenAddress},
+		WebSystemdSocket:   new(bool),
+		WebConfigFile:      &cfg.WebConfigFile,
+	}
+	if err := web.ListenAndServe(server, flags, slog.Default()); err != nil {
 		slog.Error("failed to start http server", slog.Any("error", err))
 		os.Exit(1)
 	}

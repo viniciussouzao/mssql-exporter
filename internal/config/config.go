@@ -35,6 +35,7 @@ type Config struct {
 	DSN                string
 	WebListenAddress   string
 	WebTelemetryPath   string
+	WebConfigFile      string
 	EnableOSCollectors bool
 	ConfigFile         string
 
@@ -48,6 +49,7 @@ type fileConfig struct {
 	Web struct {
 		ListenAddress string `yaml:"listen_address"`
 		TelemetryPath string `yaml:"telemetry_path"`
+		ConfigFile    string `yaml:"config_file"`
 	} `yaml:"web"`
 	// Collectors toggles collectors by name; `os_collectors` toggles the
 	// OS-level collectors, every other key must match a SQL Server collector.
@@ -63,6 +65,7 @@ func Load(args []string) (*Config, error) {
 
 	webListenAddress := fs.String("web.listen-address", defaultWebListenAddress, "Address to listen on for the web interface and metrics.")
 	webTelemetryPath := fs.String("web.telemetry-path", defaultWebTelemetryPath, "Path under which to expose metrics.")
+	webConfigFile := fs.String("web.config.file", "", "Path to a exporter-toolkit web config file enabling TLS and/or basic auth (see https://github.com/prometheus/exporter-toolkit/blob/master/docs/web-configuration.md).")
 	enableOSCollectors := fs.Bool("collector.os-collectors", false, "Enable OS-level collectors (CPU, memory, disk).")
 	configFile := fs.String("config.file", "", "Path to an optional YAML config file.")
 	showVersion := fs.Bool("version", false, "Print version information and exit.")
@@ -117,6 +120,11 @@ func Load(args []string) (*Config, error) {
 	}
 	if !strings.HasPrefix(cfg.WebTelemetryPath, "/") {
 		return nil, fmt.Errorf("web.telemetry-path must start with '/'")
+	}
+
+	cfg.WebConfigFile = fc.Web.ConfigFile
+	if fs.Changed("web.config.file") {
+		cfg.WebConfigFile = *webConfigFile
 	}
 
 	cfg.EnableOSCollectors = fc.Collectors["os_collectors"]

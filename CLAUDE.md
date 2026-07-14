@@ -51,7 +51,9 @@ mssql-exporter/
         ├── databases.go             # Database state, recovery model, sizes and log usage
         ├── blocking.go              # Blocked sessions and requests by status
         ├── availability_groups.go   # Always On replica/database health and queues
-        └── agent_jobs.go            # SQL Agent job outcomes (needs msdb grants)
+        ├── agent_jobs.go            # SQL Agent job outcomes (needs msdb grants)
+        ├── volumes.go               # Disk space per volume hosting database files
+        └── schedulers.go            # Scheduler/CPU pressure signals
 ```
 
 ## Architecture & Design Patterns
@@ -346,6 +348,13 @@ The exporter queries these Dynamic Management Views (DMVs):
 | `sys.dm_hadr_availability_replica_states` | VIEW SERVER STATE | availability_groups | Replica role and sync health |
 | `sys.dm_hadr_database_replica_states` | VIEW SERVER STATE | availability_groups | Send/redo queues per database |
 | `msdb.dbo.sysjobs` + `sysjobhistory` | SELECT grants in msdb | agent_jobs | Agent job outcomes |
+| `sys.dm_os_volume_stats` | VIEW SERVER STATE + VIEW ANY DEFINITION | volumes | Disk space per volume |
+| `sys.dm_os_schedulers` | VIEW SERVER STATE | schedulers | CPU pressure signals |
+
+**Note**: `sys.master_files` silently returns zero rows without
+`VIEW ANY DEFINITION` — the io_file_stats, databases (sizes) and volumes
+collectors report success but emit nothing. Grant both `VIEW SERVER STATE`
+and `VIEW ANY DEFINITION` to the monitoring login.
 | `SERVERPROPERTY()` | - | server_info | Server properties |
 
 **Required Permission**: `GRANT VIEW SERVER STATE TO [your_login];`
@@ -433,10 +442,10 @@ The exporter queries these Dynamic Management Views (DMVs):
 ## Known Issues & Future Work
 
 ### Current Limitations
-- No TLS/authentication on HTTP endpoint
 - Connection pool settings not configurable at runtime
-- Limited test coverage
+- No unit tests for collectors yet (config and Exporter are covered)
 - No `--config.file` auto-discovery (must be passed explicitly)
+- `sqlserver_instance` label resolved once at startup (see note in README)
 
 ### Roadmap
 See `ROADMAP.md` for the authoritative phased plan (performance counters,
