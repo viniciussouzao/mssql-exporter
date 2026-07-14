@@ -13,6 +13,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/viniciussouzao/mssql-exporter/internal/collector"
+	"github.com/viniciussouzao/mssql-exporter/internal/config"
 	"github.com/viniciussouzao/mssql-exporter/internal/db"
 	"github.com/viniciussouzao/mssql-exporter/internal/oscollector"
 )
@@ -25,15 +26,15 @@ func init() {
 }
 
 func main() {
-	dsn := os.Getenv("SQL_SERVER_DSN")
-	if dsn == "" {
-		slog.Error("missing required environment variable SQL_SERVER_DSN")
-		return
+	cfg, err := config.Load(os.Args[1:])
+	if err != nil {
+		slog.Error("failed to load configuration", slog.Any("error", err))
+		os.Exit(1)
 	}
 
 	opts := db.DefaultOptions()
 
-	if err := db.Connect(dsn, opts); err != nil {
+	if err := db.Connect(cfg.DSN, opts); err != nil {
 		slog.Error("failed to connect to sql server:", slog.Any("error", err))
 		return
 	}
@@ -65,14 +66,14 @@ func main() {
 		collector.NewTempDBCollector(db),
 	)
 
-	if os.Getenv("ENABLE_OS_COLLECTORS") == "true" {
+	if cfg.EnableOSCollectors {
 		oscollector.Register(reg)
 		slog.Info("os collectors enabled")
 	}
 
-	slog.Info("sql server exporter is running in :9187 /metrics")
-	http.Handle("/metrics", promhttp.Handler())
-	if err := http.ListenAndServe(":9187", nil); err != nil {
+	slog.Info("sql server exporter is running", slog.String("address", cfg.WebListenAddress), slog.String("telemetry_path", cfg.WebTelemetryPath))
+	http.Handle(cfg.WebTelemetryPath, promhttp.Handler())
+	if err := http.ListenAndServe(cfg.WebListenAddress, nil); err != nil {
 		slog.Error("failed to start http server:", slog.Any("error", err))
 	}
 }

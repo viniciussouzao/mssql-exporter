@@ -10,7 +10,7 @@ This document provides a comprehensive guide for AI assistants working with the 
 - **Language**: Go 1.24.2
 - **Database Driver**: `denisenkom/go-mssqldb` v0.12.3
 - **Metrics Library**: `prometheus/client_golang` v1.23.2
-- **Configuration**: Environment variables via `.env` file (using `joho/godotenv`)
+- **Configuration**: CLI flags (`spf13/pflag`), environment variables (`.env` via `joho/godotenv`), and an optional YAML config file (`gopkg.in/yaml.v3`) — see `internal/config`
 - **Logging**: Standard library `log/slog`
 
 ### Purpose
@@ -29,8 +29,12 @@ mssql-exporter/
 ├── .env                             # Environment variables (not committed, create locally)
 ├── docker-compose.yml               # Prometheus + Grafana stack for local testing
 ├── prometheus.yml                   # Prometheus scrape configuration
+├── config.example.yml               # Example YAML config file (--config.file)
 │
 └── internal/
+    ├── config/
+    │   └── config.go                # Flag/env/YAML config loading and precedence
+    │
     ├── db/
     │   ├── connection.go            # Database connection management
     │   └── options.go               # Connection pool configuration
@@ -118,21 +122,28 @@ func (c *CollectorName) Collect(ch chan<- prometheus.Metric) {
 ### 3. Main Application Flow (`main.go`)
 
 1. Load `.env` file (using `godotenv.Load()`)
-2. Read `SQL_SERVER_DSN` environment variable (required)
-3. Initialize database connection with `db.Connect()`
+2. Resolve configuration with `config.Load(os.Args[1:])` (flags/env/YAML, see below)
+3. Initialize database connection with `db.Connect(cfg.DSN, opts)`
 4. Ping database to verify connectivity
 5. Register all collectors with `prometheus.MustRegister()`
-6. Start HTTP server on `:9187` with `/metrics` endpoint
+6. Start HTTP server on `cfg.WebListenAddress` with `cfg.WebTelemetryPath` endpoint
 
-## Environment Variables
+## Configuration Sources
 
-Configuration is done via environment variables (loaded from `.env` file):
+Resolved in `internal/config.Load()`. Precedence per field, highest first:
+**CLI flag > environment variable > YAML config file (`--config.file`) > default**.
 
 ```bash
-SQL_SERVER_DSN=sqlserver://sa:YourPassword123@localhost:1433?database=master&app+name=mssql-exporter
+--web.listen-address string    Address to listen on for the web interface and metrics. (default ":9187")
+--web.telemetry-path string    Path under which to expose metrics. (default "/metrics")
+--collector.os-collectors      Enable OS-level collectors (CPU, memory, disk).
+--config.file string           Path to an optional YAML config file.
+--version                      Print version information and exit.
 ```
 
-**Connection String Format**: the full DSN is passed through as-is to `db.Connect()`. Any format the `go-mssqldb` driver accepts works, e.g.:
+`SQL_SERVER_DSN` has **no CLI flag on purpose** (process args are visible via `ps`/task manager, which would leak credentials). Set it via the `SQL_SERVER_DSN` env var or the `dsn` key in the YAML config file — see `config.example.yml`. `ENABLE_OS_COLLECTORS=true` remains supported as the env-var equivalent of `--collector.os-collectors`.
+
+**DSN Format**: the full DSN is passed through as-is to `db.Connect()`. Any format the `go-mssqldb` driver accepts works, e.g.:
 - URL-style: `sqlserver://{user}:{password}@{host}:{port}?database={database}&app+name={appName}`
 - ODBC-style: `server={host};user id={user};password={password};port={port};database={database};app name={appName}`
 
@@ -362,21 +373,15 @@ The exporter queries these Dynamic Management Views (DMVs):
 3. Ensure `defer rows.Close()` is present
 4. Verify context timeouts are used
 
-### Task: Add CLI Flag for DSN
-1. Current approach: `SQL_SERVER_DSN` env var only, read directly in `main.go`
-2. Future approach: add a `--dsn` flag mirroring `SQL_SERVER_DSN`, flag takes precedence if both are set
-3. Update README.md configuration section
-
 ## Known Issues & Future Work
 
 ### Current Limitations
-- Configuration is environment-variable only (no CLI flags yet)
 - No TLS/authentication on HTTP endpoint
 - Connection pool settings not configurable at runtime
 - Limited test coverage
+- No `--config.file` auto-discovery (must be passed explicitly)
 
 ### Roadmap (from README)
-- CLI flags mirroring `SQL_SERVER_DSN` and other environment variables (listen address, timeouts, collector toggles)
 - Optional TLS and basic auth for HTTP endpoint
 - More collectors: locks, availability groups
 - Health check endpoint
