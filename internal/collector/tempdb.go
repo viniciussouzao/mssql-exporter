@@ -10,13 +10,13 @@ import (
 )
 
 type SQLServerTempDB struct {
-	db                 *sql.DB
-	freeSpaceKB        *prometheus.Desc
-	versionStoreKB     *prometheus.Desc
-	internalObjectsKB  *prometheus.Desc
-	userObjectsKB      *prometheus.Desc
-	activeTempTables   *prometheus.Desc
-	tempTablesCreated  *prometheus.Desc
+	db                *sql.DB
+	freeSpaceKB       *prometheus.Desc
+	versionStoreKB    *prometheus.Desc
+	internalObjectsKB *prometheus.Desc
+	userObjectsKB     *prometheus.Desc
+	activeTempTables  *prometheus.Desc
+	tempTablesCreated *prometheus.Desc
 }
 
 func NewTempDBCollector(db *sql.DB) *SQLServerTempDB {

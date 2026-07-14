@@ -18,6 +18,9 @@ The exporter currently includes these collectors:
 - TempDB: space usage and temp table activity.
 - Performance counters: batch requests, compilations, page life expectancy, buffer cache hit ratio, deadlocks, lock waits, user connections and more.
 - Databases: state, recovery model, data/log sizes and log usage per database.
+- Blocking: blocked sessions, longest current block and requests by status.
+- Availability Groups: replica role, synchronization health and send/redo queues (emits nothing when Always On is disabled).
+- SQL Agent jobs: enabled state, last run outcome, timestamp and duration.
 
 ## Quick Start
 
@@ -62,7 +65,8 @@ Flags (mirroring the ergonomics of `mysqld_exporter`/`postgres_exporter`):
 --web.telemetry-path string    Path under which to expose metrics. (default "/metrics")
 --collector.<name>             Enable/disable a SQL Server collector (all default to true).
                                Names: wait_stats, io_file_stats, sessions, server_info,
-                               memory_clerks, backups, tempdb, perf_counters, databases.
+                               memory_clerks, backups, tempdb, perf_counters, databases,
+                               blocking, availability_groups, agent_jobs.
                                Example: --collector.backups=false
 --collector.os-collectors      Enable OS-level collectors (CPU, memory, disk).
 --config.file string           Path to an optional YAML config file.
@@ -117,6 +121,18 @@ Notes:
 
 - The `backups` collector reads `msdb.dbo.backupset`, which is readable by
   `public` on default installations — no extra grant is usually needed.
+- The `agent_jobs` collector needs SELECT on two msdb tables:
+
+  ```sql
+  USE msdb;
+  CREATE USER [your_login] FOR LOGIN [your_login];
+  GRANT SELECT ON dbo.sysjobs TO [your_login];
+  GRANT SELECT ON dbo.sysjobhistory TO [your_login];
+  ```
+
+  Without these grants the collector reports
+  `sqlserver_scrape_collector_success{collector="agent_jobs"} 0`; disable it
+  with `--collector.agent_jobs=false` if you don't monitor Agent jobs.
 - On SQL Server 2022+ you can go even more restrictive and grant only
   `VIEW SERVER PERFORMANCE STATE` if you disable the collectors that need
   more (e.g. `server_info` reads security-related server properties).
@@ -202,6 +218,24 @@ Metric names are stable and follow Prometheus best practices. Selected examples:
   - `sqlserver_database_data_size_bytes{db_name="master"} 4915200`
   - `sqlserver_database_log_size_bytes{db_name="master"} 2097152`
   - `sqlserver_database_log_used_percent{db_name="master"} 71`
+
+- Blocking
+  - `sqlserver_blocked_sessions 0`
+  - `sqlserver_blocked_max_wait_ms 0`
+  - `sqlserver_active_requests{status="running"} 3`
+
+- Availability Groups (only when Always On is enabled)
+  - `sqlserver_hadr_replica_role{ag_name="ag1",replica_server="NODE1"} 1`
+  - `sqlserver_hadr_replica_synchronization_health{ag_name="ag1",replica_server="NODE1"} 2`
+  - `sqlserver_hadr_database_synchronization_state{ag_name="ag1",replica_server="NODE1",db_name="app"} 2`
+  - `sqlserver_hadr_database_log_send_queue_kb{...} 0`
+  - `sqlserver_hadr_database_redo_queue_kb{...} 0`
+
+- SQL Agent jobs
+  - `sqlserver_agent_job_enabled{job_name="nightly-backup"} 1`
+  - `sqlserver_agent_job_last_run_status{job_name="nightly-backup"} 1`
+  - `sqlserver_agent_job_last_run_timestamp_seconds{job_name="nightly-backup"} 1789344000`
+  - `sqlserver_agent_job_last_run_duration_seconds{job_name="nightly-backup"} 42`
 
 ## Running With Prometheus and Grafana
 

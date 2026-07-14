@@ -24,3 +24,6 @@ collectors:
   # tempdb: true
   # perf_counters: true
   # databases: true
+  # blocking: true
+  # availability_groups: true
+  # agent_jobs: true

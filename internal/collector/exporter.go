@@ -33,18 +33,24 @@ var scraperNames = []string{
 	"tempdb",
 	"perf_counters",
 	"databases",
+	"blocking",
+	"availability_groups",
+	"agent_jobs",
 }
 
 var scraperFactories = map[string]func(*sql.DB) Scraper{
-	"wait_stats":    func(db *sql.DB) Scraper { return NewWaitStatsCollector(db) },
-	"io_file_stats": func(db *sql.DB) Scraper { return NewIOFileStatsCollector(db) },
-	"sessions":      func(db *sql.DB) Scraper { return NewSessionsCollector(db) },
-	"server_info":   func(db *sql.DB) Scraper { return NewServerInfoCollector(db) },
-	"memory_clerks": func(db *sql.DB) Scraper { return NewMemoryClerksCollector(db) },
-	"backups":       func(db *sql.DB) Scraper { return NewBackupsCollector(db) },
-	"tempdb":        func(db *sql.DB) Scraper { return NewTempDBCollector(db) },
-	"perf_counters": func(db *sql.DB) Scraper { return NewPerfCountersCollector(db) },
-	"databases":     func(db *sql.DB) Scraper { return NewDatabasesCollector(db) },
+	"wait_stats":          func(db *sql.DB) Scraper { return NewWaitStatsCollector(db) },
+	"io_file_stats":       func(db *sql.DB) Scraper { return NewIOFileStatsCollector(db) },
+	"sessions":            func(db *sql.DB) Scraper { return NewSessionsCollector(db) },
+	"server_info":         func(db *sql.DB) Scraper { return NewServerInfoCollector(db) },
+	"memory_clerks":       func(db *sql.DB) Scraper { return NewMemoryClerksCollector(db) },
+	"backups":             func(db *sql.DB) Scraper { return NewBackupsCollector(db) },
+	"tempdb":              func(db *sql.DB) Scraper { return NewTempDBCollector(db) },
+	"perf_counters":       func(db *sql.DB) Scraper { return NewPerfCountersCollector(db) },
+	"databases":           func(db *sql.DB) Scraper { return NewDatabasesCollector(db) },
+	"blocking":            func(db *sql.DB) Scraper { return NewBlockingCollector(db) },
+	"availability_groups": func(db *sql.DB) Scraper { return NewAvailabilityGroupsCollector(db) },
+	"agent_jobs":          func(db *sql.DB) Scraper { return NewAgentJobsCollector(db) },
 }
 
 // ScraperNames returns the names of all available collectors in

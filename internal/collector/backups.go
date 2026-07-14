@@ -81,11 +81,11 @@ func (c *SQLServerBackups) Scrape(ctx context.Context, ch chan<- prometheus.Metr
 	var scanErrs []error
 	for rows.Next() {
 		var (
-			dbName      string
-			backupType  string
-			finishDate  time.Time
-			startDate   time.Time
-			sizeBytes   float64
+			dbName     string
+			backupType string
+			finishDate time.Time
+			startDate  time.Time
+			sizeBytes  float64
 		)
 
 		if err := rows.Scan(&dbName, &backupType, &finishDate, &startDate, &sizeBytes); err != nil {

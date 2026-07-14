@@ -48,7 +48,10 @@ mssql-exporter/
         ├── backups.go               # Last backup timestamp/duration/size per database
         ├── tempdb.go                # TempDB space usage and temp table activity
         ├── perf_counters.go         # Instance-level performance counters
-        └── databases.go             # Database state, recovery model, sizes and log usage
+        ├── databases.go             # Database state, recovery model, sizes and log usage
+        ├── blocking.go              # Blocked sessions and requests by status
+        ├── availability_groups.go   # Always On replica/database health and queues
+        └── agent_jobs.go            # SQL Agent job outcomes (needs msdb grants)
 ```
 
 ## Architecture & Design Patterns
@@ -339,6 +342,10 @@ The exporter queries these Dynamic Management Views (DMVs):
 | `tempdb.sys.dm_db_file_space_usage` | VIEW SERVER STATE | tempdb | TempDB space usage |
 | `sys.dm_os_performance_counters` | VIEW SERVER STATE | perf_counters, databases, tempdb | Instance/database counters |
 | `sys.databases` | - | databases | Database state and recovery model |
+| `sys.dm_exec_requests` | VIEW SERVER STATE | blocking | Blocked sessions and request status |
+| `sys.dm_hadr_availability_replica_states` | VIEW SERVER STATE | availability_groups | Replica role and sync health |
+| `sys.dm_hadr_database_replica_states` | VIEW SERVER STATE | availability_groups | Send/redo queues per database |
+| `msdb.dbo.sysjobs` + `sysjobhistory` | SELECT grants in msdb | agent_jobs | Agent job outcomes |
 | `SERVERPROPERTY()` | - | server_info | Server properties |
 
 **Required Permission**: `GRANT VIEW SERVER STATE TO [your_login];`

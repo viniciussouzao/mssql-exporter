@@ -33,16 +33,17 @@ Progress legend: [ ] not started · [~] in progress · [x] done
 
 ## Phase 3 — Operational collectors
 
-- [ ] **Blocking/locks collector** (`sys.dm_exec_requests`)
-  - Blocked sessions count, max blocking wait time, requests by status
-- [ ] **Availability Groups collector** (`sys.dm_hadr_availability_replica_states`,
-  `sys.dm_hadr_database_replica_states`)
-  - Replica role (primary/secondary), synchronization health,
-    redo queue size, send queue size
-  - Must degrade gracefully when HADR is disabled (emit nothing, no errors)
-- [ ] **SQL Agent jobs collector** (`msdb.dbo.sysjobs` + `sysjobhistory`)
-  - Last run status/outcome, last run duration, failed jobs count
-  - Requires read access to `msdb` — document the extra permission
+- [x] **Blocking collector** (`sys.dm_exec_requests`) —
+  `internal/collector/blocking.go`: blocked sessions, longest current block,
+  requests by status
+- [x] **Availability Groups collector** (`sys.dm_hadr_availability_replica_states`,
+  `sys.dm_hadr_database_replica_states`) —
+  `internal/collector/availability_groups.go`: replica role, synchronization
+  health, send/redo queues; emits nothing when HADR is disabled
+- [x] **SQL Agent jobs collector** (`msdb.dbo.sysjobs` + `sysjobhistory`) —
+  `internal/collector/agent_jobs.go`: enabled state, last run outcome,
+  timestamp and duration; requires SELECT grants on the two msdb tables
+  (documented in README)
 
 ## Phase 4 — Environment & hardening
 
