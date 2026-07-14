@@ -3,10 +3,10 @@ package collector
 import (
 	"context"
 	"database/sql"
-	"log/slog"
+	"errors"
+	"fmt"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/viniciussouzao/mssql-exporter/internal/db"
 )
 
 type SQLServerIOFileStats struct {
@@ -68,6 +68,10 @@ func NewIOFileStatsCollector(db *sql.DB) *SQLServerIOFileStats {
 	}
 }
 
+func (c *SQLServerIOFileStats) Name() string {
+	return "io_file_stats"
+}
+
 func (c *SQLServerIOFileStats) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.reads
 	ch <- c.writes
@@ -77,10 +81,7 @@ func (c *SQLServerIOFileStats) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.stallWriteMs
 }
 
-func (c *SQLServerIOFileStats) Collect(ch chan<- prometheus.Metric) {
-	ctx, cancel := context.WithTimeout(context.Background(), db.CurrentOptions().ConnTimeout)
-	defer cancel()
-
+func (c *SQLServerIOFileStats) Scrape(ctx context.Context, ch chan<- prometheus.Metric) error {
 	rows, err := c.db.QueryContext(ctx, `
 	SELECT
             DB_NAME(vfs.database_id) AS db_name,
@@ -101,11 +102,11 @@ func (c *SQLServerIOFileStats) Collect(ch chan<- prometheus.Metric) {
             AND vfs.file_id = mf.file_id`)
 
 	if err != nil {
-		slog.Error("failed to query io file stats:", slog.Any("error", err))
-		return
+		return fmt.Errorf("failed to query dm_io_virtual_file_stats: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
+	var scanErrs []error
 	for rows.Next() {
 		var (
 			dbName, fileName, fileType, physicalName string
@@ -126,7 +127,7 @@ func (c *SQLServerIOFileStats) Collect(ch chan<- prometheus.Metric) {
 			&stallRead,
 			&stallWrite,
 		); err != nil {
-			slog.Error("failed to scan io file stats row:", slog.Any("error", err))
+			scanErrs = append(scanErrs, fmt.Errorf("failed to scan io file stats row: %w", err))
 			continue
 		}
 
@@ -139,4 +140,6 @@ func (c *SQLServerIOFileStats) Collect(ch chan<- prometheus.Metric) {
 		ch <- prometheus.MustNewConstMetric(c.stallReadMs, prometheus.CounterValue, stallRead, labels...)
 		ch <- prometheus.MustNewConstMetric(c.stallWriteMs, prometheus.CounterValue, stallWrite, labels...)
 	}
+
+	return errors.Join(append(scanErrs, rows.Err())...)
 }

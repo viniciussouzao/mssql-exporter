@@ -153,6 +153,100 @@ func TestLoadOSCollectorsEnvVar(t *testing.T) {
 	}
 }
 
+func TestLoadWebConfigFilePrecedence(t *testing.T) {
+	t.Setenv("SQL_SERVER_DSN", "")
+
+	path := writeConfigFile(t, `
+dsn: "`+testDSN+`"
+web:
+  config_file: "/etc/from-yaml.yml"
+`)
+
+	cfg, err := Load([]string{"--config.file", path})
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.WebConfigFile != "/etc/from-yaml.yml" {
+		t.Errorf("WebConfigFile = %q, want yaml value", cfg.WebConfigFile)
+	}
+
+	cfg, err = Load([]string{"--config.file", path, "--web.config.file", "/etc/from-flag.yml"})
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.WebConfigFile != "/etc/from-flag.yml" {
+		t.Errorf("WebConfigFile = %q, want flag to override yaml", cfg.WebConfigFile)
+	}
+}
+
+func TestLoadCollectorsDefaultEnabled(t *testing.T) {
+	t.Setenv("SQL_SERVER_DSN", testDSN)
+
+	cfg, err := Load(nil)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if len(cfg.EnabledCollectors) == 0 {
+		t.Fatal("EnabledCollectors is empty, want all collectors enabled")
+	}
+	for name, enabled := range cfg.EnabledCollectors {
+		if !enabled {
+			t.Errorf("collector %q disabled by default, want enabled", name)
+		}
+	}
+}
+
+func TestLoadCollectorDisabledViaFlag(t *testing.T) {
+	t.Setenv("SQL_SERVER_DSN", testDSN)
+
+	cfg, err := Load([]string{"--collector.backups=false"})
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.EnabledCollectors["backups"] {
+		t.Error("backups = enabled, want disabled via flag")
+	}
+	if !cfg.EnabledCollectors["sessions"] {
+		t.Error("sessions = disabled, want untouched collectors to stay enabled")
+	}
+}
+
+func TestLoadCollectorDisabledViaConfigFile(t *testing.T) {
+	t.Setenv("SQL_SERVER_DSN", "")
+
+	path := writeConfigFile(t, `
+dsn: "`+testDSN+`"
+collectors:
+  wait_stats: false
+`)
+
+	cfg, err := Load([]string{"--config.file", path})
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.EnabledCollectors["wait_stats"] {
+		t.Error("wait_stats = enabled, want disabled via config file")
+	}
+}
+
+func TestLoadCollectorFlagOverridesConfigFile(t *testing.T) {
+	t.Setenv("SQL_SERVER_DSN", "")
+
+	path := writeConfigFile(t, `
+dsn: "`+testDSN+`"
+collectors:
+  wait_stats: false
+`)
+
+	cfg, err := Load([]string{"--config.file", path, "--collector.wait_stats=true"})
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if !cfg.EnabledCollectors["wait_stats"] {
+		t.Error("wait_stats = disabled, want flag to re-enable over config file")
+	}
+}
+
 func TestLoadOSCollectorsFlagOverridesEnv(t *testing.T) {
 	t.Setenv("SQL_SERVER_DSN", testDSN)
 	t.Setenv("ENABLE_OS_COLLECTORS", "false")

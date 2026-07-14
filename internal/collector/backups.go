@@ -3,11 +3,11 @@ package collector
 import (
 	"context"
 	"database/sql"
-	"log/slog"
+	"errors"
+	"fmt"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/viniciussouzao/mssql-exporter/internal/db"
 )
 
 type SQLServerBackups struct {
@@ -39,16 +39,17 @@ func NewBackupsCollector(db *sql.DB) *SQLServerBackups {
 	}
 }
 
+func (c *SQLServerBackups) Name() string {
+	return "backups"
+}
+
 func (c *SQLServerBackups) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.lastCompletedAt
 	ch <- c.lastDurationSecs
 	ch <- c.lastSizeBytes
 }
 
-func (c *SQLServerBackups) Collect(ch chan<- prometheus.Metric) {
-	ctx, cancel := context.WithTimeout(context.Background(), db.CurrentOptions().ConnTimeout)
-	defer cancel()
-
+func (c *SQLServerBackups) Scrape(ctx context.Context, ch chan<- prometheus.Metric) error {
 	rows, err := c.db.QueryContext(ctx, `
 		SELECT
 			bs.database_name,
@@ -73,22 +74,22 @@ func (c *SQLServerBackups) Collect(ch chan<- prometheus.Metric) {
 			AND bs.backup_finish_date = latest.max_finish
 	`)
 	if err != nil {
-		slog.Error("failed to query backupset", slog.Any("error", err))
-		return
+		return fmt.Errorf("failed to query backupset: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
+	var scanErrs []error
 	for rows.Next() {
 		var (
-			dbName      string
-			backupType  string
-			finishDate  time.Time
-			startDate   time.Time
-			sizeBytes   float64
+			dbName     string
+			backupType string
+			finishDate time.Time
+			startDate  time.Time
+			sizeBytes  float64
 		)
 
 		if err := rows.Scan(&dbName, &backupType, &finishDate, &startDate, &sizeBytes); err != nil {
-			slog.Error("failed to scan backupset row", slog.Any("error", err))
+			scanErrs = append(scanErrs, fmt.Errorf("failed to scan backupset row: %w", err))
 			continue
 		}
 
@@ -99,4 +100,6 @@ func (c *SQLServerBackups) Collect(ch chan<- prometheus.Metric) {
 		ch <- prometheus.MustNewConstMetric(c.lastDurationSecs, prometheus.GaugeValue, duration, labels...)
 		ch <- prometheus.MustNewConstMetric(c.lastSizeBytes, prometheus.GaugeValue, sizeBytes, labels...)
 	}
+
+	return errors.Join(append(scanErrs, rows.Err())...)
 }

@@ -3,20 +3,20 @@ package collector
 import (
 	"context"
 	"database/sql"
-	"log/slog"
+	"errors"
+	"fmt"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/viniciussouzao/mssql-exporter/internal/db"
 )
 
 type SQLServerTempDB struct {
-	db                 *sql.DB
-	freeSpaceKB        *prometheus.Desc
-	versionStoreKB     *prometheus.Desc
-	internalObjectsKB  *prometheus.Desc
-	userObjectsKB      *prometheus.Desc
-	activeTempTables   *prometheus.Desc
-	tempTablesCreated  *prometheus.Desc
+	db                *sql.DB
+	freeSpaceKB       *prometheus.Desc
+	versionStoreKB    *prometheus.Desc
+	internalObjectsKB *prometheus.Desc
+	userObjectsKB     *prometheus.Desc
+	activeTempTables  *prometheus.Desc
+	tempTablesCreated *prometheus.Desc
 }
 
 func NewTempDBCollector(db *sql.DB) *SQLServerTempDB {
@@ -55,6 +55,10 @@ func NewTempDBCollector(db *sql.DB) *SQLServerTempDB {
 	}
 }
 
+func (c *SQLServerTempDB) Name() string {
+	return "tempdb"
+}
+
 func (c *SQLServerTempDB) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.freeSpaceKB
 	ch <- c.versionStoreKB
@@ -64,15 +68,14 @@ func (c *SQLServerTempDB) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.tempTablesCreated
 }
 
-func (c *SQLServerTempDB) Collect(ch chan<- prometheus.Metric) {
-	c.collectFileSpaceUsage(ch)
-	c.collectPerfCounters(ch)
+func (c *SQLServerTempDB) Scrape(ctx context.Context, ch chan<- prometheus.Metric) error {
+	return errors.Join(
+		c.collectFileSpaceUsage(ctx, ch),
+		c.collectPerfCounters(ctx, ch),
+	)
 }
 
-func (c *SQLServerTempDB) collectFileSpaceUsage(ch chan<- prometheus.Metric) {
-	ctx, cancel := context.WithTimeout(context.Background(), db.CurrentOptions().ConnTimeout)
-	defer cancel()
-
+func (c *SQLServerTempDB) collectFileSpaceUsage(ctx context.Context, ch chan<- prometheus.Metric) error {
 	row := c.db.QueryRowContext(ctx, `
 		SELECT
 			SUM(unallocated_extent_page_count)       * 8,
@@ -84,20 +87,18 @@ func (c *SQLServerTempDB) collectFileSpaceUsage(ch chan<- prometheus.Metric) {
 
 	var freeKB, versionStoreKB, internalKB, userKB float64
 	if err := row.Scan(&freeKB, &versionStoreKB, &internalKB, &userKB); err != nil {
-		slog.Error("failed to scan tempdb file space usage", slog.Any("error", err))
-		return
+		return fmt.Errorf("failed to query tempdb file space usage: %w", err)
 	}
 
 	ch <- prometheus.MustNewConstMetric(c.freeSpaceKB, prometheus.GaugeValue, freeKB)
 	ch <- prometheus.MustNewConstMetric(c.versionStoreKB, prometheus.GaugeValue, versionStoreKB)
 	ch <- prometheus.MustNewConstMetric(c.internalObjectsKB, prometheus.GaugeValue, internalKB)
 	ch <- prometheus.MustNewConstMetric(c.userObjectsKB, prometheus.GaugeValue, userKB)
+
+	return nil
 }
 
-func (c *SQLServerTempDB) collectPerfCounters(ch chan<- prometheus.Metric) {
-	ctx, cancel := context.WithTimeout(context.Background(), db.CurrentOptions().ConnTimeout)
-	defer cancel()
-
+func (c *SQLServerTempDB) collectPerfCounters(ctx context.Context, ch chan<- prometheus.Metric) error {
 	rows, err := c.db.QueryContext(ctx, `
 		SELECT RTRIM(counter_name), cntr_value
 		FROM sys.dm_os_performance_counters
@@ -105,16 +106,16 @@ func (c *SQLServerTempDB) collectPerfCounters(ch chan<- prometheus.Metric) {
 		AND RTRIM(counter_name) IN ('Active Temp Tables', 'Temp Tables Creation Rate')
 	`)
 	if err != nil {
-		slog.Error("failed to query tempdb performance counters", slog.Any("error", err))
-		return
+		return fmt.Errorf("failed to query tempdb performance counters: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
+	var scanErrs []error
 	for rows.Next() {
 		var counterName string
 		var value float64
 		if err := rows.Scan(&counterName, &value); err != nil {
-			slog.Error("failed to scan tempdb perf counter row", slog.Any("error", err))
+			scanErrs = append(scanErrs, fmt.Errorf("failed to scan tempdb perf counter row: %w", err))
 			continue
 		}
 
@@ -125,4 +126,6 @@ func (c *SQLServerTempDB) collectPerfCounters(ch chan<- prometheus.Metric) {
 			ch <- prometheus.MustNewConstMetric(c.tempTablesCreated, prometheus.CounterValue, value)
 		}
 	}
+
+	return errors.Join(append(scanErrs, rows.Err())...)
 }

@@ -44,7 +44,16 @@ mssql-exporter/
         ├── sessions.go              # Session state metrics
         ├── wait_stats.go            # Wait statistics metrics
         ├── io_file_stats.go         # File I/O statistics metrics
-        └── memory_clerks.go         # Memory clerk metrics (collector exists but not registered)
+        ├── memory_clerks.go         # Memory clerk metrics
+        ├── backups.go               # Last backup timestamp/duration/size per database
+        ├── tempdb.go                # TempDB space usage and temp table activity
+        ├── perf_counters.go         # Instance-level performance counters
+        ├── databases.go             # Database state, recovery model, sizes and log usage
+        ├── blocking.go              # Blocked sessions and requests by status
+        ├── availability_groups.go   # Always On replica/database health and queues
+        ├── agent_jobs.go            # SQL Agent job outcomes (needs msdb grants)
+        ├── volumes.go               # Disk space per volume hosting database files
+        └── schedulers.go            # Scheduler/CPU pressure signals
 ```
 
 ## Architecture & Design Patterns
@@ -64,9 +73,24 @@ DB() *sql.DB                                     // Get DB instance
 CurrentOptions() *Options                        // Get current connection options
 ```
 
-### 2. Prometheus Collectors (`internal/collector/`)
+### 2. Collectors (`internal/collector/`)
 
-**Pattern**: Each collector implements `prometheus.Collector` interface.
+**Pattern**: Each collector implements the `Scraper` interface (defined in
+`internal/collector/exporter.go`). A single top-level `Exporter`
+(prometheus.Collector) pings SQL Server per scrape (`sqlserver_up`), runs
+every enabled scraper and emits per-scraper self-metrics
+(`sqlserver_scrape_collector_duration_seconds` / `_success`). When the ping
+fails, scrapers are skipped and only `sqlserver_up 0` is exposed — the
+process never exits because SQL Server is down.
+
+```go
+type Scraper interface {
+    Name() string                                  // snake_case, used in --collector.<name>
+    Describe(ch chan<- *prometheus.Desc)
+    // ctx carries the shared scrape deadline; scrapers run concurrently
+    Scrape(ctx context.Context, ch chan<- prometheus.Metric) error
+}
+```
 
 All collectors follow this structure:
 ```go
@@ -88,45 +112,57 @@ func NewCollectorName(db *sql.DB) *CollectorName {
     }
 }
 
+func (c *CollectorName) Name() string { return "collector_name" }
+
 func (c *CollectorName) Describe(ch chan<- *prometheus.Desc) {
     ch <- c.metricName
 }
 
-func (c *CollectorName) Collect(ch chan<- prometheus.Metric) {
-    ctx, cancel := context.WithTimeout(context.Background(), db.CurrentOptions().ConnTimeout)
-    defer cancel()
-
-    // Query SQL Server DMVs
+func (c *CollectorName) Scrape(ctx context.Context, ch chan<- prometheus.Metric) error {
+    // Query SQL Server DMVs (ctx carries the shared scrape deadline)
     rows, err := c.db.QueryContext(ctx, "SELECT ...")
     if err != nil {
-        slog.Error("...", slog.Any("error", err))
-        return
+        return fmt.Errorf("failed to query ...: %w", err)
     }
-    defer rows.Close()
+    defer func() { _ = rows.Close() }()
 
     // Scan and emit metrics
+    var scanErrs []error
     for rows.Next() {
-        // ... scan values
+        // scan errors: accumulate and `continue` — later rows still emit
+        // metrics, but the scrape is reported as failed (success 0)
         ch <- prometheus.MustNewConstMetric(c.metricName, prometheus.GaugeValue, value, labels...)
     }
+
+    return errors.Join(append(scanErrs, rows.Err())...)
 }
 ```
 
 **Important Conventions**:
-- Always use `context.WithTimeout()` with `db.CurrentOptions().ConnTimeout`
-- Always `defer rows.Close()` after querying
-- Use `slog.Error()` for logging errors (never panic on query failures)
+- Never create your own context: use the `ctx` passed to `Scrape` (it carries
+  the shared scrape deadline; scrapers run concurrently under one timeout)
+- Always `defer func() { _ = rows.Close() }()` after querying
+- Query failures: return the error (the Exporter logs it and reports
+  `scrape_collector_success 0`)
+- Row-scan failures: accumulate in a `scanErrs` slice and `continue`, then
+  `return errors.Join(append(scanErrs, rows.Err())...)` — partial metrics are
+  still emitted, but any failed row marks the scrape as unsuccessful
+- Multi-query scrapers combine errors with `errors.Join` (see tempdb, databases)
 - Metric names follow pattern: `sqlserver_<category>_<metric>`
-- All metrics use `prometheus.GaugeValue` (counters are tracked via SQL Server's cumulative DMVs)
+- Cumulative DMV counters use `prometheus.CounterValue` with `_total` suffix;
+  point-in-time values use `prometheus.GaugeValue`
 
 ### 3. Main Application Flow (`main.go`)
 
 1. Load `.env` file (using `godotenv.Load()`)
 2. Resolve configuration with `config.Load(os.Args[1:])` (flags/env/YAML, see below)
-3. Initialize database connection with `db.Connect(cfg.DSN, opts)`
-4. Ping database to verify connectivity
-5. Register all collectors with `prometheus.MustRegister()`
+3. Initialize connection pool with `db.Connect(cfg.DSN, opts)` (validates the DSN only — does not dial)
+4. Ping database (best effort: logs a warning and continues if unreachable; `sqlserver_up` reports 0 until it recovers)
+5. Register `collector.NewExporter(db, cfg.EnabledCollectors)` (runs all enabled scrapers)
 6. Start HTTP server on `cfg.WebListenAddress` with `cfg.WebTelemetryPath` endpoint
+
+Note: the `sqlserver_instance` label is resolved once at startup; if SQL
+Server was down at that moment the label stays empty until the process restarts.
 
 ## Configuration Sources
 
@@ -136,6 +172,9 @@ Resolved in `internal/config.Load()`. Precedence per field, highest first:
 ```bash
 --web.listen-address string    Address to listen on for the web interface and metrics. (default ":9187")
 --web.telemetry-path string    Path under which to expose metrics. (default "/metrics")
+--collector.<name>             Enable/disable a SQL Server collector (default true for all).
+                               Names come from collector.ScraperNames(); YAML equivalent is
+                               the `collectors:` map keyed by the same names.
 --collector.os-collectors      Enable OS-level collectors (CPU, memory, disk).
 --config.file string           Path to an optional YAML config file.
 --version                      Print version information and exit.
@@ -198,10 +237,10 @@ package collector
 import (
     "context"
     "database/sql"
-    "log/slog"
+    "errors"
+    "fmt"
 
     "github.com/prometheus/client_golang/prometheus"
-    "github.com/viniciussouzao/mssql-exporter/internal/db"
 )
 
 type YourCollector struct {
@@ -221,62 +260,72 @@ func NewYourCollector(db *sql.DB) *YourCollector {
     }
 }
 
+func (c *YourCollector) Name() string { return "your_collector" }
+
 func (c *YourCollector) Describe(ch chan<- *prometheus.Desc) {
     ch <- c.metricDesc
 }
 
-func (c *YourCollector) Collect(ch chan<- prometheus.Metric) {
-    ctx, cancel := context.WithTimeout(context.Background(), db.CurrentOptions().ConnTimeout)
-    defer cancel()
-
+func (c *YourCollector) Scrape(ctx context.Context, ch chan<- prometheus.Metric) error {
     rows, err := c.db.QueryContext(ctx, `
         SELECT column1, column2
         FROM sys.dm_your_dmv
     `)
 
     if err != nil {
-        slog.Error("failed to query your_dmv", slog.Any("error", err))
-        return
+        return fmt.Errorf("failed to query your_dmv: %w", err)
     }
-    defer rows.Close()
+    defer func() { _ = rows.Close() }()
 
+    var scanErrs []error
     for rows.Next() {
-        var label, value string
+        var label string
+        var value float64
         if err := rows.Scan(&label, &value); err != nil {
-            slog.Error("failed to scan row", slog.Any("error", err))
+            scanErrs = append(scanErrs, fmt.Errorf("failed to scan your_dmv row: %w", err))
             continue
         }
 
         ch <- prometheus.MustNewConstMetric(
             c.metricDesc,
             prometheus.GaugeValue,
-            parseFloat(value),
+            value,
             label,
         )
     }
+
+    return errors.Join(append(scanErrs, rows.Err())...)
 }
 ```
 
 ### 2. Register Collector
 
-Edit `main.go` and add to `prometheus.MustRegister()`:
+Edit `internal/collector/exporter.go` and add the collector to `scraperNames`
+(this defines the registration order AND the `--collector.<name>` flag /
+`collectors:` YAML key) and to `scraperFactories`:
 
 ```go
-prometheus.MustRegister(
-    collector.NewWaitStatsCollector(db),
-    collector.NewIOFileStatsCollector(db),
-    collector.NewSessionsCollector(db),
-    collector.NewServerInfoCollector(db),
-    collector.NewYourCollector(db),  // Add here
-)
+var scraperNames = []string{
+    // ...
+    "your_collector",
+}
+
+var scraperFactories = map[string]func(*sql.DB) Scraper{
+    // ...
+    "your_collector": func(db *sql.DB) Scraper { return NewYourCollector(db) },
+}
 ```
+
+No change in `main.go` is needed — the Exporter picks it up automatically,
+including the enable/disable toggle.
 
 ### 3. Test
 
 1. Verify SQL query works against your SQL Server instance
 2. Run `make build && make run`
 3. Check metrics: `curl http://localhost:9187/metrics | grep sqlserver_your_metric`
-4. Run `make check` to ensure code quality
+4. Check self-metrics: `curl http://localhost:9187/metrics | grep 'scrape_collector.*your_collector'`
+5. Run `make check` to ensure code quality
 
 ## SQL Server DMV Reference
 
@@ -290,6 +339,22 @@ The exporter queries these Dynamic Management Views (DMVs):
 | `sys.master_files` | VIEW SERVER STATE | io_file_stats | File metadata |
 | `sys.dm_os_sys_info` | VIEW SERVER STATE | server_info | CPU count |
 | `sys.dm_os_sys_memory` | VIEW SERVER STATE | server_info | Memory info |
+| `sys.dm_os_memory_clerks` | VIEW SERVER STATE | memory_clerks | Memory usage by clerk |
+| `msdb.dbo.backupset` | msdb read access | backups | Backup history |
+| `tempdb.sys.dm_db_file_space_usage` | VIEW SERVER STATE | tempdb | TempDB space usage |
+| `sys.dm_os_performance_counters` | VIEW SERVER STATE | perf_counters, databases, tempdb | Instance/database counters |
+| `sys.databases` | - | databases | Database state and recovery model |
+| `sys.dm_exec_requests` | VIEW SERVER STATE | blocking | Blocked sessions and request status |
+| `sys.dm_hadr_availability_replica_states` | VIEW SERVER STATE | availability_groups | Replica role and sync health |
+| `sys.dm_hadr_database_replica_states` | VIEW SERVER STATE | availability_groups | Send/redo queues per database |
+| `msdb.dbo.sysjobs` + `sysjobhistory` | SELECT grants in msdb | agent_jobs | Agent job outcomes |
+| `sys.dm_os_volume_stats` | VIEW SERVER STATE + VIEW ANY DEFINITION | volumes | Disk space per volume |
+| `sys.dm_os_schedulers` | VIEW SERVER STATE | schedulers | CPU pressure signals |
+
+**Note**: `sys.master_files` silently returns zero rows without
+`VIEW ANY DEFINITION` — the io_file_stats, databases (sizes) and volumes
+collectors report success but emit nothing. Grant both `VIEW SERVER STATE`
+and `VIEW ANY DEFINITION` to the monitoring login.
 | `SERVERPROPERTY()` | - | server_info | Server properties |
 
 **Required Permission**: `GRANT VIEW SERVER STATE TO [your_login];`
@@ -359,7 +424,7 @@ The exporter queries these Dynamic Management Views (DMVs):
 1. Add new `*prometheus.Desc` field to collector struct
 2. Initialize descriptor in constructor with proper labels
 3. Add to `Describe()` method
-4. Query and emit metric in `Collect()` method
+4. Query and emit metric in `Scrape()` method
 5. Update README.md with new metric documentation
 
 ### Task: Update Dependencies
@@ -369,24 +434,24 @@ The exporter queries these Dynamic Management Views (DMVs):
 4. Verify metrics still work correctly
 
 ### Task: Improve Error Handling
-1. Look for error conditions that aren't logged
-2. Add `slog.Error()` calls with context
-3. Ensure `defer rows.Close()` is present
-4. Verify context timeouts are used
+1. Query failures must be returned from `Scrape()` (not just logged)
+2. Ensure `defer func() { _ = rows.Close() }()` is present
+3. Accumulate row-scan errors and join them with `rows.Err()` at the end
+4. Verify queries use the `ctx` passed to `Scrape()` (no local timeouts)
 
 ## Known Issues & Future Work
 
 ### Current Limitations
-- No TLS/authentication on HTTP endpoint
 - Connection pool settings not configurable at runtime
-- Limited test coverage
+- No unit tests for collectors yet (config and Exporter are covered)
 - No `--config.file` auto-discovery (must be passed explicitly)
+- `sqlserver_instance` label resolved once at startup (see note in README)
 
-### Roadmap (from README)
-- Optional TLS and basic auth for HTTP endpoint
-- More collectors: locks, availability groups
-- Health check endpoint
-- Metrics for query performance and execution plans
+### Roadmap
+See `ROADMAP.md` for the authoritative phased plan (performance counters,
+databases collector, `sqlserver_up` + per-collector toggles, blocking/AG/Agent
+jobs collectors, TLS/basic auth, health check endpoint). Update it as features
+land: move items to the "Done" section and keep phases current.
 
 ## Troubleshooting Guide
 

@@ -10,6 +10,24 @@ dsn: "sqlserver://sa:MyStrongP%40ss@localhost:1433?database=master&app+name=mssq
 web:
   listen_address: ":9187"
   telemetry_path: "/metrics"
+  # Optional exporter-toolkit web config file enabling TLS and/or basic auth:
+  # config_file: "web-config.yml"
 
+# Toggle individual collectors (all SQL Server collectors default to enabled;
+# os_collectors defaults to disabled).
 collectors:
   os_collectors: false
+  # wait_stats: true
+  # io_file_stats: true
+  # sessions: true
+  # server_info: true
+  # memory_clerks: true
+  # backups: true
+  # tempdb: true
+  # perf_counters: true
+  # databases: true
+  # blocking: true
+  # availability_groups: true
+  # agent_jobs: true
+  # volumes: true
+  # schedulers: true

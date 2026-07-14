@@ -3,10 +3,10 @@ package collector
 import (
 	"context"
 	"database/sql"
-	"log/slog"
+	"errors"
+	"fmt"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/viniciussouzao/mssql-exporter/internal/db"
 )
 
 type SQLServerWaitStats struct {
@@ -42,31 +42,32 @@ func NewWaitStatsCollector(db *sql.DB) *SQLServerWaitStats {
 	}
 }
 
+func (c *SQLServerWaitStats) Name() string {
+	return "wait_stats"
+}
+
 func (c *SQLServerWaitStats) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.waitTimeMs
 	ch <- c.waitingTasks
 	ch <- c.maxWaitTimeMs
 }
 
-func (c *SQLServerWaitStats) Collect(ch chan<- prometheus.Metric) {
-	ctx, cancel := context.WithTimeout(context.Background(), db.CurrentOptions().ConnTimeout)
-	defer cancel()
-
+func (c *SQLServerWaitStats) Scrape(ctx context.Context, ch chan<- prometheus.Metric) error {
 	rows, err := c.db.QueryContext(ctx, `
 	SELECT wait_type, wait_time_ms, waiting_tasks_count, max_wait_time_ms
 	FROM sys.dm_os_wait_stats
-	WHERE wait_type NOT LIKE 'SLEEP%' 
- 	AND wait_type NOT LIKE 'XE%' 
+	WHERE wait_type NOT LIKE 'SLEEP%'
+ 	AND wait_type NOT LIKE 'XE%'
   	AND wait_type NOT LIKE 'BROKER_%'
 	`)
 
 	if err != nil {
-		slog.Error("failed to query sql server:", slog.Any("error", err))
-		return
+		return fmt.Errorf("failed to query dm_os_wait_stats: %w", err)
 	}
 
 	defer func() { _ = rows.Close() }()
 
+	var scanErrs []error
 	for rows.Next() {
 		var waitType string
 		var waitTimeMs float64
@@ -75,7 +76,7 @@ func (c *SQLServerWaitStats) Collect(ch chan<- prometheus.Metric) {
 
 		err := rows.Scan(&waitType, &waitTimeMs, &waitingTasks, &maxWaitTimeMs)
 		if err != nil {
-			slog.Error("failed to scan row:", slog.Any("error", err))
+			scanErrs = append(scanErrs, fmt.Errorf("failed to scan wait stats row: %w", err))
 			continue
 		}
 
@@ -100,4 +101,6 @@ func (c *SQLServerWaitStats) Collect(ch chan<- prometheus.Metric) {
 			waitType,
 		)
 	}
+
+	return errors.Join(append(scanErrs, rows.Err())...)
 }

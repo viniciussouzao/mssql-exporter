@@ -1,13 +1,15 @@
 package db
 
 import (
-	"context"
 	"database/sql"
 )
 
 var db *sql.DB
 
-// Connect initializes the database connection with the given connection string and options.
+// Connect initializes the database connection pool with the given connection
+// string and options. It only validates the DSN (sql.Open does not dial);
+// reachability is checked by callers via Ping, so the exporter can start even
+// while SQL Server is down.
 func Connect(connString string, opts *Options) error {
 	var err error
 
@@ -27,13 +29,6 @@ func Connect(connString string, opts *Options) error {
 
 	if opts.ConnMaxIdleTime > 0 {
 		db.SetConnMaxIdleTime(opts.ConnMaxIdleTime)
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), opts.ConnTimeout)
-	defer cancel()
-
-	if err := db.PingContext(ctx); err != nil {
-		return err
 	}
 
 	return nil

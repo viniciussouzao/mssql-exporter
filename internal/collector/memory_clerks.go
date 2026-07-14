@@ -3,11 +3,11 @@ package collector
 import (
 	"context"
 	"database/sql"
-	"log/slog"
+	"errors"
+	"fmt"
 	"strconv"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/viniciussouzao/mssql-exporter/internal/db"
 )
 
 type SQLServerMemoryClerks struct {
@@ -27,25 +27,26 @@ func NewMemoryClerksCollector(db *sql.DB) *SQLServerMemoryClerks {
 	}
 }
 
+func (c *SQLServerMemoryClerks) Name() string {
+	return "memory_clerks"
+}
+
 func (c *SQLServerMemoryClerks) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.memoryUsedKB
 }
 
-func (c *SQLServerMemoryClerks) Collect(ch chan<- prometheus.Metric) {
-	ctx, cancel := context.WithTimeout(context.Background(), db.CurrentOptions().ConnTimeout)
-	defer cancel()
-
+func (c *SQLServerMemoryClerks) Scrape(ctx context.Context, ch chan<- prometheus.Metric) error {
 	rows, err := c.db.QueryContext(ctx, `
 		SELECT type, name, memory_node_id, SUM(virtual_memory_committed_kb) AS memory_used_kb
 		FROM sys.dm_os_memory_clerks
 		GROUP BY type, name, memory_node_id
 	`)
 	if err != nil {
-		slog.Error("failed to query dm_os_memory_clerks", slog.Any("error", err))
-		return
+		return fmt.Errorf("failed to query dm_os_memory_clerks: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
+	var scanErrs []error
 	for rows.Next() {
 		var (
 			clerkType    string
@@ -55,7 +56,7 @@ func (c *SQLServerMemoryClerks) Collect(ch chan<- prometheus.Metric) {
 		)
 
 		if err := rows.Scan(&clerkType, &clerkName, &memoryNodeID, &memoryUsedKB); err != nil {
-			slog.Error("failed to scan memory_clerks row", slog.Any("error", err))
+			scanErrs = append(scanErrs, fmt.Errorf("failed to scan memory_clerks row: %w", err))
 			continue
 		}
 
@@ -68,4 +69,6 @@ func (c *SQLServerMemoryClerks) Collect(ch chan<- prometheus.Metric) {
 			strconv.Itoa(memoryNodeID),
 		)
 	}
+
+	return errors.Join(append(scanErrs, rows.Err())...)
 }
