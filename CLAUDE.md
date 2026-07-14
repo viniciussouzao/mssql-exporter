@@ -118,30 +118,23 @@ func (c *CollectorName) Collect(ch chan<- prometheus.Metric) {
 ### 3. Main Application Flow (`main.go`)
 
 1. Load `.env` file (using `godotenv.Load()`)
-2. Read environment variables for SQL Server connection
-3. Build ODBC-style connection string
-4. Initialize database connection with `db.Connect()`
-5. Ping database to verify connectivity
-6. Register all collectors with `prometheus.MustRegister()`
-7. Start HTTP server on `:9187` with `/metrics` endpoint
+2. Read `SQL_SERVER_DSN` environment variable (required)
+3. Initialize database connection with `db.Connect()`
+4. Ping database to verify connectivity
+5. Register all collectors with `prometheus.MustRegister()`
+6. Start HTTP server on `:9187` with `/metrics` endpoint
 
 ## Environment Variables
 
 Configuration is done via environment variables (loaded from `.env` file):
 
 ```bash
-SQL_SERVER_USER=sa
-SQL_SERVER_PASSWORD=YourPassword123
-SQL_SERVER_HOST=localhost
-SQL_SERVER_PORT=1433
-SQL_SERVER_DATABASE=master
-EXPORTER_APP_NAME=mssql-exporter
+SQL_SERVER_DSN=sqlserver://sa:YourPassword123@localhost:1433?database=master&app+name=mssql-exporter
 ```
 
-**Connection String Format**: ODBC-style
-```
-server={host};user id={user};password={password};port={port};database={database};app name={appName}
-```
+**Connection String Format**: the full DSN is passed through as-is to `db.Connect()`. Any format the `go-mssqldb` driver accepts works, e.g.:
+- URL-style: `sqlserver://{user}:{password}@{host}:{port}?database={database}&app+name={appName}`
+- ODBC-style: `server={host};user id={user};password={password};port={port};database={database};app name={appName}`
 
 ## Development Workflow
 
@@ -369,25 +362,23 @@ The exporter queries these Dynamic Management Views (DMVs):
 3. Ensure `defer rows.Close()` is present
 4. Verify context timeouts are used
 
-### Task: Refactor Connection String
-1. Current approach: Build string in `main.go` from env vars
-2. Future approach: Add flags/env var for full connection string
-3. Consider supporting both ODBC and URL formats
-4. Update README.md configuration section
+### Task: Add CLI Flag for DSN
+1. Current approach: `SQL_SERVER_DSN` env var only, read directly in `main.go`
+2. Future approach: add a `--dsn` flag mirroring `SQL_SERVER_DSN`, flag takes precedence if both are set
+3. Update README.md configuration section
 
 ## Known Issues & Future Work
 
 ### Current Limitations
-- Configuration is environment-variable only (no CLI flags)
+- Configuration is environment-variable only (no CLI flags yet)
 - No TLS/authentication on HTTP endpoint
 - Connection pool settings not configurable at runtime
 - Limited test coverage
-- `memory_clerks` collector exists but not registered
 
 ### Roadmap (from README)
-- CLI flags and environment variables (DSN, listen address, timeouts, collector toggles)
+- CLI flags mirroring `SQL_SERVER_DSN` and other environment variables (listen address, timeouts, collector toggles)
 - Optional TLS and basic auth for HTTP endpoint
-- More collectors: locks, memory clerks, tempdb, availability groups, backups
+- More collectors: locks, availability groups
 - Health check endpoint
 - Metrics for query performance and execution plans
 

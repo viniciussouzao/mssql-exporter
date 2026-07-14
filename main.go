@@ -25,23 +25,15 @@ func init() {
 }
 
 func main() {
-	user := os.Getenv("SQL_SERVER_USER")
-	password := os.Getenv("SQL_SERVER_PASSWORD")
-	host := os.Getenv("SQL_SERVER_HOST")
-	port := os.Getenv("SQL_SERVER_PORT")
-	database := os.Getenv("SQL_SERVER_DATABASE")
-	appName := os.Getenv("EXPORTER_APP_NAME")
-
-	connString := "server=" + host + ";" +
-		"user id=" + user + ";" +
-		"password=" + password + ";" +
-		"port=" + port + ";" +
-		"database=" + database + ";" +
-		"app name=" + appName
+	dsn := os.Getenv("SQL_SERVER_DSN")
+	if dsn == "" {
+		slog.Error("missing required environment variable SQL_SERVER_DSN")
+		return
+	}
 
 	opts := db.DefaultOptions()
 
-	if err := db.Connect(connString, opts); err != nil {
+	if err := db.Connect(dsn, opts); err != nil {
 		slog.Error("failed to connect to sql server:", slog.Any("error", err))
 		return
 	}

@@ -47,26 +47,21 @@ By default, that setup scrapes `host.docker.internal:9187`, assuming the exporte
 
 ## Configuration
 
-At the moment, configuration is done in code for simplicity while the project is bootstrapped.
-
-- Connection string: edit `main.go` and set `connString` to point to your SQL Server.
-- Connection pool/timeouts: adjust defaults in `internal/db/options.go` (`DefaultOptions()`).
-
-Example connection strings supported by the driver:
-
-- ODBC-style (used by default in `main.go`):
-
-```
-server=localhost;user id=sa;password=MyStrongP@ss;database=master;app name=mssql-exporter
-```
+Connection is configured via a single DSN, set with the `SQL_SERVER_DSN` environment variable (a `.env` file is loaded automatically). Any format supported by the `go-mssqldb` driver works:
 
 - URL-style:
 
 ```
-sqlserver://sa:MyStrongP%40ss@localhost:1433?database=master&app+name=mssql-exporter
+SQL_SERVER_DSN=sqlserver://sa:MyStrongP%40ss@localhost:1433?database=master&app+name=mssql-exporter
 ```
 
-Note: In a future iteration, flags and environment variables can be added to configure these without changing code (mirroring the ergonomics of `mysqld_exporter`).
+- ODBC-style:
+
+```
+SQL_SERVER_DSN=server=localhost;user id=sa;password=MyStrongP@ss;database=master;app name=mssql-exporter
+```
+
+Connection pool/timeouts: adjust defaults in `internal/db/options.go` (`DefaultOptions()`).
 
 ## Permissions
 
@@ -148,7 +143,7 @@ Add Prometheus (http://prometheus:9090 inside Compose network or http://localhos
 
 ## Roadmap
 
-- CLI flags and environment variables (DSN, listen address, timeouts, collector toggles) following the ergonomics of `mysqld_exporter`.
+- CLI flags mirroring `SQL_SERVER_DSN` and other environment variables (listen address, timeouts, collector toggles), following the ergonomics of `mysqld_exporter`.
 - Optional TLS and basic auth for the HTTP endpoint.
 - More collectors (locks, memory clerks, tempdb, AGs, backups, etc.).
 
