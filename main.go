@@ -80,7 +80,9 @@ func main() {
 
 	slog.Info("sql server exporter is running in :9187 /metrics")
 	http.Handle("/metrics", promhttp.Handler())
-	http.ListenAndServe(":9187", nil)
+	if err := http.ListenAndServe(":9187", nil); err != nil {
+		slog.Error("failed to start http server:", slog.Any("error", err))
+	}
 }
 
 func queryServerName(db *sql.DB) string {
