@@ -44,7 +44,11 @@ mssql-exporter/
         ├── sessions.go              # Session state metrics
         ├── wait_stats.go            # Wait statistics metrics
         ├── io_file_stats.go         # File I/O statistics metrics
-        └── memory_clerks.go         # Memory clerk metrics (collector exists but not registered)
+        ├── memory_clerks.go         # Memory clerk metrics
+        ├── backups.go               # Last backup timestamp/duration/size per database
+        ├── tempdb.go                # TempDB space usage and temp table activity
+        ├── perf_counters.go         # Instance-level performance counters
+        └── databases.go             # Database state, recovery model, sizes and log usage
 ```
 
 ## Architecture & Design Patterns
@@ -290,6 +294,11 @@ The exporter queries these Dynamic Management Views (DMVs):
 | `sys.master_files` | VIEW SERVER STATE | io_file_stats | File metadata |
 | `sys.dm_os_sys_info` | VIEW SERVER STATE | server_info | CPU count |
 | `sys.dm_os_sys_memory` | VIEW SERVER STATE | server_info | Memory info |
+| `sys.dm_os_memory_clerks` | VIEW SERVER STATE | memory_clerks | Memory usage by clerk |
+| `msdb.dbo.backupset` | msdb read access | backups | Backup history |
+| `tempdb.sys.dm_db_file_space_usage` | VIEW SERVER STATE | tempdb | TempDB space usage |
+| `sys.dm_os_performance_counters` | VIEW SERVER STATE | perf_counters, databases, tempdb | Instance/database counters |
+| `sys.databases` | - | databases | Database state and recovery model |
 | `SERVERPROPERTY()` | - | server_info | Server properties |
 
 **Required Permission**: `GRANT VIEW SERVER STATE TO [your_login];`

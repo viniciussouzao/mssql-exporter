@@ -13,6 +13,11 @@ The exporter currently includes these collectors:
 - Sessions: number of sessions grouped by state.
 - IO file stats: per-database file IO counters and stalls.
 - Wait stats: wait time and counts by wait type.
+- Memory clerks: memory usage by clerk type.
+- Backups: last backup timestamp, duration and size per database.
+- TempDB: space usage and temp table activity.
+- Performance counters: batch requests, compilations, page life expectancy, buffer cache hit ratio, deadlocks, lock waits, user connections and more.
+- Databases: state, recovery model, data/log sizes and log usage per database.
 
 ## Quick Start
 
@@ -138,6 +143,25 @@ Metric names are stable and follow Prometheus best practices. Selected examples:
   - `sqlserver_wait_time_ms{wait_type="PAGEIOLATCH_SH"} 123456`
   - `sqlserver_waiting_tasks{wait_type="PAGEIOLATCH_SH"} 789`
   - `sqlserver_max_wait_time_ms{wait_type="PAGEIOLATCH_SH"} 1024`
+
+- Performance counters
+  - `sqlserver_batch_requests_total 656`
+  - `sqlserver_sql_compilations_total 628`
+  - `sqlserver_sql_recompilations_total 5`
+  - `sqlserver_page_life_expectancy_seconds 10064`
+  - `sqlserver_buffer_cache_hit_ratio 1`
+  - `sqlserver_lazy_writes_total 0`
+  - `sqlserver_deadlocks_total 0`
+  - `sqlserver_lock_waits_total 5`
+  - `sqlserver_user_connections 6`
+  - `sqlserver_page_splits_total 60`
+
+- Databases
+  - `sqlserver_database_state{db_name="master",state="ONLINE"} 1`
+  - `sqlserver_database_recovery_model{db_name="master",recovery_model="SIMPLE"} 1`
+  - `sqlserver_database_data_size_bytes{db_name="master"} 4915200`
+  - `sqlserver_database_log_size_bytes{db_name="master"} 2097152`
+  - `sqlserver_database_log_used_percent{db_name="master"} 71`
 
 ## Running With Prometheus and Grafana
 

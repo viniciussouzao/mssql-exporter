@@ -68,6 +68,8 @@ func main() {
 		collector.NewMemoryClerksCollector(db),
 		collector.NewBackupsCollector(db),
 		collector.NewTempDBCollector(db),
+		collector.NewPerfCountersCollector(db),
+		collector.NewDatabasesCollector(db),
 	)
 
 	if cfg.EnableOSCollectors {

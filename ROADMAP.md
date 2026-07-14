@@ -9,18 +9,15 @@ Progress legend: [ ] not started · [~] in progress · [x] done
 
 ## Phase 1 — Core metrics gap (highest value per effort)
 
-- [ ] **Performance counters collector** (`sys.dm_os_performance_counters`)
-  - Batch Requests/sec, SQL Compilations/sec, SQL Re-Compilations/sec
-  - Page Life Expectancy, Buffer Cache Hit Ratio, Lazy Writes/sec
-  - Deadlocks/sec, Lock Waits/sec, User Connections, Page Splits/sec
-  - Note: the tempdb collector already queries this DMV filtered to tempdb —
-    generalize that pattern. Counters are cumulative; expose raw values with
-    `_total` suffix and let Prometheus `rate()` them.
-- [ ] **Databases collector** (`sys.databases` + `sys.dm_db_log_space_usage`)
-  - Database state (online/restoring/recovering/suspect/...) — essential for alerting
-  - Recovery model, data/log file sizes, log space used percent
-  - Metric sketch: `sqlserver_database_state{db_name,state}`,
-    `sqlserver_database_log_used_percent{db_name}`
+- [x] **Performance counters collector** (`sys.dm_os_performance_counters`) —
+  `internal/collector/perf_counters.go`
+  - Batch Requests, SQL Compilations/Re-Compilations, Page Life Expectancy,
+    Buffer Cache Hit Ratio (ratio/base pair divided in Go), Lazy Writes,
+    Deadlocks, Lock Waits, User Connections, Page Splits
+- [x] **Databases collector** (`sys.databases`, `sys.master_files`,
+  `Percent Log Used` perf counter) — `internal/collector/databases.go`
+  - State and recovery model (value 1, labeled), data/log sizes in bytes,
+    log used percent per database
 
 ## Phase 2 — Exporter robustness (before adding heavier collectors)
 
