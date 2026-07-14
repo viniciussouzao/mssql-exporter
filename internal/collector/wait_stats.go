@@ -65,7 +65,7 @@ func (c *SQLServerWaitStats) Collect(ch chan<- prometheus.Metric) {
 		return
 	}
 
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	for rows.Next() {
 		var waitType string

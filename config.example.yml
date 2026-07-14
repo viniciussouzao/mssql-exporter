@@ -1,0 +1,15 @@
+# Example config file for mssql-exporter. Pass it with --config.file config.yml
+#
+# Precedence (highest first) for every field below: CLI flag > environment
+# variable > this config file > default. DSN has no CLI flag on purpose,
+# since process arguments are visible via `ps`/task manager; use SQL_SERVER_DSN
+# or this file instead.
+
+dsn: "sqlserver://sa:MyStrongP%40ss@localhost:1433?database=master&app+name=mssql-exporter"
+
+web:
+  listen_address: ":9187"
+  telemetry_path: "/metrics"
+
+collectors:
+  os_collectors: false

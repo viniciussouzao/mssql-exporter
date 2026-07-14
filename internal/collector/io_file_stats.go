@@ -104,7 +104,7 @@ func (c *SQLServerIOFileStats) Collect(ch chan<- prometheus.Metric) {
 		slog.Error("failed to query io file stats:", slog.Any("error", err))
 		return
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	for rows.Next() {
 		var (

@@ -47,26 +47,47 @@ By default, that setup scrapes `host.docker.internal:9187`, assuming the exporte
 
 ## Configuration
 
-At the moment, configuration is done in code for simplicity while the project is bootstrapped.
+Configuration comes from three sources, merged with the following precedence
+(highest first): **CLI flag > environment variable > config file > default**.
 
-- Connection string: edit `main.go` and set `connString` to point to your SQL Server.
-- Connection pool/timeouts: adjust defaults in `internal/db/options.go` (`DefaultOptions()`).
-
-Example connection strings supported by the driver:
-
-- ODBC-style (used by default in `main.go`):
+Flags (mirroring the ergonomics of `mysqld_exporter`/`postgres_exporter`):
 
 ```
-server=localhost;user id=sa;password=MyStrongP@ss;database=master;app name=mssql-exporter
+--web.listen-address string    Address to listen on for the web interface and metrics. (default ":9187")
+--web.telemetry-path string    Path under which to expose metrics. (default "/metrics")
+--collector.os-collectors      Enable OS-level collectors (CPU, memory, disk).
+--config.file string           Path to an optional YAML config file.
+--version                      Print version information and exit.
 ```
 
-- URL-style:
+The database DSN has **no CLI flag on purpose**: process arguments are visible
+via `ps`/task manager, which would leak credentials. Set it via the
+`SQL_SERVER_DSN` environment variable (a `.env` file is loaded automatically)
+or via the config file. Any DSN format supported by the `go-mssqldb` driver
+works, e.g.:
 
 ```
-sqlserver://sa:MyStrongP%40ss@localhost:1433?database=master&app+name=mssql-exporter
+SQL_SERVER_DSN=sqlserver://sa:MyStrongP%40ss@localhost:1433?database=master&app+name=mssql-exporter
 ```
 
-Note: In a future iteration, flags and environment variables can be added to configure these without changing code (mirroring the ergonomics of `mysqld_exporter`).
+Alternatively, use a YAML config file (handy for Windows services, where
+editing environment variables is more cumbersome than pointing at a file next
+to the executable). See `config.example.yml`:
+
+```yaml
+dsn: "sqlserver://sa:MyStrongP%40ss@localhost:1433?database=master"
+web:
+  listen_address: ":9187"
+  telemetry_path: "/metrics"
+collectors:
+  os_collectors: false
+```
+
+```bash
+./mssql-exporter --config.file config.yml
+```
+
+Connection pool/timeouts: adjust defaults in `internal/db/options.go` (`DefaultOptions()`).
 
 ## Permissions
 
@@ -148,7 +169,6 @@ Add Prometheus (http://prometheus:9090 inside Compose network or http://localhos
 
 ## Roadmap
 
-- CLI flags and environment variables (DSN, listen address, timeouts, collector toggles) following the ergonomics of `mysqld_exporter`.
 - Optional TLS and basic auth for the HTTP endpoint.
 - More collectors (locks, memory clerks, tempdb, AGs, backups, etc.).
 

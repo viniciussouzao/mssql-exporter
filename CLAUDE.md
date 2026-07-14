@@ -10,7 +10,7 @@ This document provides a comprehensive guide for AI assistants working with the 
 - **Language**: Go 1.24.2
 - **Database Driver**: `denisenkom/go-mssqldb` v0.12.3
 - **Metrics Library**: `prometheus/client_golang` v1.23.2
-- **Configuration**: Environment variables via `.env` file (using `joho/godotenv`)
+- **Configuration**: CLI flags (`spf13/pflag`), environment variables (`.env` via `joho/godotenv`), and an optional YAML config file (`gopkg.in/yaml.v3`) — see `internal/config`
 - **Logging**: Standard library `log/slog`
 
 ### Purpose
@@ -29,8 +29,12 @@ mssql-exporter/
 ├── .env                             # Environment variables (not committed, create locally)
 ├── docker-compose.yml               # Prometheus + Grafana stack for local testing
 ├── prometheus.yml                   # Prometheus scrape configuration
+├── config.example.yml               # Example YAML config file (--config.file)
 │
 └── internal/
+    ├── config/
+    │   └── config.go                # Flag/env/YAML config loading and precedence
+    │
     ├── db/
     │   ├── connection.go            # Database connection management
     │   └── options.go               # Connection pool configuration
@@ -118,30 +122,30 @@ func (c *CollectorName) Collect(ch chan<- prometheus.Metric) {
 ### 3. Main Application Flow (`main.go`)
 
 1. Load `.env` file (using `godotenv.Load()`)
-2. Read environment variables for SQL Server connection
-3. Build ODBC-style connection string
-4. Initialize database connection with `db.Connect()`
-5. Ping database to verify connectivity
-6. Register all collectors with `prometheus.MustRegister()`
-7. Start HTTP server on `:9187` with `/metrics` endpoint
+2. Resolve configuration with `config.Load(os.Args[1:])` (flags/env/YAML, see below)
+3. Initialize database connection with `db.Connect(cfg.DSN, opts)`
+4. Ping database to verify connectivity
+5. Register all collectors with `prometheus.MustRegister()`
+6. Start HTTP server on `cfg.WebListenAddress` with `cfg.WebTelemetryPath` endpoint
 
-## Environment Variables
+## Configuration Sources
 
-Configuration is done via environment variables (loaded from `.env` file):
+Resolved in `internal/config.Load()`. Precedence per field, highest first:
+**CLI flag > environment variable > YAML config file (`--config.file`) > default**.
 
 ```bash
-SQL_SERVER_USER=sa
-SQL_SERVER_PASSWORD=YourPassword123
-SQL_SERVER_HOST=localhost
-SQL_SERVER_PORT=1433
-SQL_SERVER_DATABASE=master
-EXPORTER_APP_NAME=mssql-exporter
+--web.listen-address string    Address to listen on for the web interface and metrics. (default ":9187")
+--web.telemetry-path string    Path under which to expose metrics. (default "/metrics")
+--collector.os-collectors      Enable OS-level collectors (CPU, memory, disk).
+--config.file string           Path to an optional YAML config file.
+--version                      Print version information and exit.
 ```
 
-**Connection String Format**: ODBC-style
-```
-server={host};user id={user};password={password};port={port};database={database};app name={appName}
-```
+`SQL_SERVER_DSN` has **no CLI flag on purpose** (process args are visible via `ps`/task manager, which would leak credentials). Set it via the `SQL_SERVER_DSN` env var or the `dsn` key in the YAML config file — see `config.example.yml`. `ENABLE_OS_COLLECTORS=true` remains supported as the env-var equivalent of `--collector.os-collectors`.
+
+**DSN Format**: the full DSN is passed through as-is to `db.Connect()`. Any format the `go-mssqldb` driver accepts works, e.g.:
+- URL-style: `sqlserver://{user}:{password}@{host}:{port}?database={database}&app+name={appName}`
+- ODBC-style: `server={host};user id={user};password={password};port={port};database={database};app name={appName}`
 
 ## Development Workflow
 
@@ -324,7 +328,8 @@ The exporter queries these Dynamic Management Views (DMVs):
 ## Testing Strategy
 
 ### Current State
-- No unit tests yet (project is in early stage)
+- Unit tests for `internal/config` (flag/env/YAML precedence, validation) — run with `make test`
+- No unit tests for collectors yet
 - Manual testing via local SQL Server instance
 - Integration testing with Prometheus scraping
 
@@ -369,25 +374,17 @@ The exporter queries these Dynamic Management Views (DMVs):
 3. Ensure `defer rows.Close()` is present
 4. Verify context timeouts are used
 
-### Task: Refactor Connection String
-1. Current approach: Build string in `main.go` from env vars
-2. Future approach: Add flags/env var for full connection string
-3. Consider supporting both ODBC and URL formats
-4. Update README.md configuration section
-
 ## Known Issues & Future Work
 
 ### Current Limitations
-- Configuration is environment-variable only (no CLI flags)
 - No TLS/authentication on HTTP endpoint
 - Connection pool settings not configurable at runtime
 - Limited test coverage
-- `memory_clerks` collector exists but not registered
+- No `--config.file` auto-discovery (must be passed explicitly)
 
 ### Roadmap (from README)
-- CLI flags and environment variables (DSN, listen address, timeouts, collector toggles)
 - Optional TLS and basic auth for HTTP endpoint
-- More collectors: locks, memory clerks, tempdb, availability groups, backups
+- More collectors: locks, availability groups
 - Health check endpoint
 - Metrics for query performance and execution plans
 

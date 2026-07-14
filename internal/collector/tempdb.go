@@ -108,7 +108,7 @@ func (c *SQLServerTempDB) collectPerfCounters(ch chan<- prometheus.Metric) {
 		slog.Error("failed to query tempdb performance counters", slog.Any("error", err))
 		return
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	for rows.Next() {
 		var counterName string
