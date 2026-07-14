@@ -76,7 +76,7 @@ func (c *SQLServerBackups) Collect(ch chan<- prometheus.Metric) {
 		slog.Error("failed to query backupset", slog.Any("error", err))
 		return
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	for rows.Next() {
 		var (

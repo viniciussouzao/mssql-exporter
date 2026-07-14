@@ -44,7 +44,7 @@ func (c *SQLServerMemoryClerks) Collect(ch chan<- prometheus.Metric) {
 		slog.Error("failed to query dm_os_memory_clerks", slog.Any("error", err))
 		return
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	for rows.Next() {
 		var (

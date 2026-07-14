@@ -45,7 +45,7 @@ func (c *SQLServerSessions) Collect(ch chan<- prometheus.Metric) {
 		return
 	}
 
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	for rows.Next() {
 		var sessionState string
