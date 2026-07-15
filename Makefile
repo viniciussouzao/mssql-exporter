@@ -14,7 +14,7 @@ LDFLAGS := -s -w \
 	-X $(MODULE)/internal/version.Commit=$(COMMIT) \
 	-X $(MODULE)/internal/version.Date=$(DATE)
 
-.PHONY: help build run test tidy fmt vet check clean install compose-up compose-down docker-build
+.PHONY: help build run test tidy fmt vet check clean install compose-up compose-down docker-build release-dry-run
 
 help:
 	@echo "Targets:"
@@ -30,6 +30,7 @@ help:
 	@echo "  compose-up   Start Prometheus and Grafana via docker compose"
 	@echo "  compose-down Stop Prometheus and Grafana"
 	@echo "  docker-build Build the mssql-exporter Docker image"
+	@echo "  release-dry-run  Run GoReleaser in snapshot mode (no publish, no tag needed)"
 
 build:
 	@mkdir -p bin
@@ -71,4 +72,7 @@ docker-build:
 		--build-arg COMMIT=$(COMMIT) \
 		--build-arg DATE=$(DATE) \
 		-t mssql-exporter:$(VERSION) .
+
+release-dry-run:
+	goreleaser release --snapshot --clean
 

@@ -37,3 +37,6 @@ config.yaml
 
 # Bin directory
 bin/
+
+# GoReleaser output
+dist/
