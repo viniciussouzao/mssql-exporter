@@ -277,6 +277,9 @@ Steps:
 
 Add Prometheus (http://prometheus:9090 inside Compose network or http://localhost:9090 from your browser) as a Grafana data source and build dashboards from the metric names above.
 
+A ready-to-use dashboard is included in [`dashboards/`](dashboards/) — see
+[`dashboards/README.md`](dashboards/README.md) for import instructions.
+
 ## Security
 
 - TLS and basic authentication are supported via
@@ -308,6 +311,10 @@ See [ROADMAP.md](ROADMAP.md) for the full phased plan — phases 1-4 (core
 metrics, exporter robustness, operational collectors, TLS/healthz) are done.
 Next ideas include query performance metrics, index health and integration
 tests with SQL Server in Docker.
+
+## License
+
+Apache License 2.0 — see [LICENSE](LICENSE).
 
 ---
 

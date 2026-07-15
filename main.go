@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"runtime"
 
 	_ "github.com/denisenkom/go-mssqldb"
 	"github.com/joho/godotenv"
@@ -17,6 +18,7 @@ import (
 	"github.com/viniciussouzao/mssql-exporter/internal/config"
 	"github.com/viniciussouzao/mssql-exporter/internal/db"
 	"github.com/viniciussouzao/mssql-exporter/internal/oscollector"
+	"github.com/viniciussouzao/mssql-exporter/internal/version"
 )
 
 func init() {
@@ -35,6 +37,8 @@ func main() {
 		slog.Error("failed to load configuration", slog.Any("error", err))
 		os.Exit(1)
 	}
+
+	slog.Info("starting mssql-exporter", slog.String("version", version.String()))
 
 	opts := db.DefaultOptions()
 
@@ -65,6 +69,20 @@ func main() {
 	)
 
 	reg.MustRegister(collector.NewExporter(conn, cfg.EnabledCollectors))
+
+	prometheus.MustRegister(prometheus.NewGaugeFunc(
+		prometheus.GaugeOpts{
+			Name: "mssql_exporter_build_info",
+			Help: "A metric with a constant '1' value labeled by version, commit, build date and Go version from which mssql-exporter was built.",
+			ConstLabels: prometheus.Labels{
+				"version":   version.Version,
+				"commit":    version.Commit,
+				"date":      version.Date,
+				"goversion": runtime.Version(),
+			},
+		},
+		func() float64 { return 1 },
+	))
 
 	if cfg.EnableOSCollectors {
 		oscollector.Register(reg)
