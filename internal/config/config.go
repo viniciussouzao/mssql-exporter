@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"runtime/debug"
 	"strconv"
 	"strings"
 
 	"github.com/spf13/pflag"
 	"github.com/viniciussouzao/mssql-exporter/internal/collector"
+	"github.com/viniciussouzao/mssql-exporter/internal/version"
 	"gopkg.in/yaml.v3"
 )
 
@@ -83,7 +83,7 @@ func Load(args []string) (*Config, error) {
 	}
 
 	if *showVersion {
-		fmt.Println(versionString())
+		fmt.Println(version.String())
 		return nil, ErrExitRequested
 	}
 
@@ -171,12 +171,4 @@ func Load(args []string) (*Config, error) {
 	}
 
 	return cfg, nil
-}
-
-func versionString() string {
-	info, ok := debug.ReadBuildInfo()
-	if !ok {
-		return "mssql-exporter (unknown version)"
-	}
-	return fmt.Sprintf("mssql-exporter %s", info.Main.Version)
 }

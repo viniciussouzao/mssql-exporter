@@ -1,0 +1,12 @@
+.git
+.github
+bin/
+.env
+config.yml
+config.yaml
+*.md
+CODE_REVIEW_REPORT.md
+CODE_REVIEW_PHASE3_REPORT.md
+docker-compose.yml
+prometheus.yml
+.vscode/

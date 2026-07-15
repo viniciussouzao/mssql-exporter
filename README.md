@@ -309,6 +309,10 @@ metrics, exporter robustness, operational collectors, TLS/healthz) are done.
 Next ideas include query performance metrics, index health and integration
 tests with SQL Server in Docker.
 
+## License
+
+Apache License 2.0 — see [LICENSE](LICENSE).
+
 ---
 
 This project is a work-in-progress exporter tailored for SQL Server, aiming for parity in usability and quality with other database exporters in the Prometheus ecosystem.
