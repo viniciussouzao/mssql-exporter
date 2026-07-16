@@ -20,16 +20,7 @@ func Connect(connString string, opts *Options) error {
 		return err
 	}
 
-	db.SetMaxOpenConns(opts.MaxOpenConns)
-	db.SetMaxIdleConns(opts.MaxIdleConns)
-
-	if opts.ConnMaxLifetime > 0 {
-		db.SetConnMaxLifetime(opts.ConnMaxLifetime)
-	}
-
-	if opts.ConnMaxIdleTime > 0 {
-		db.SetConnMaxIdleTime(opts.ConnMaxIdleTime)
-	}
+	applyPoolOptions(db, opts)
 
 	return nil
 }
