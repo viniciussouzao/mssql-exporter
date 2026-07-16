@@ -43,3 +43,29 @@ func DefaultOptions() *Options {
 		ConnTimeout:     5 * time.Second,
 	}
 }
+
+// poolConfigurer is the subset of *sql.DB's pool-tuning methods Connect
+// needs; it exists so applyPoolOptions can be tested without a real
+// database connection.
+type poolConfigurer interface {
+	SetMaxOpenConns(int)
+	SetMaxIdleConns(int)
+	SetConnMaxLifetime(time.Duration)
+	SetConnMaxIdleTime(time.Duration)
+}
+
+// applyPoolOptions pushes opts onto configurer. Zero lifetime/idle-time
+// values are left at the driver default (a limit of 0 means "no limit" in
+// database/sql, not "apply immediately").
+func applyPoolOptions(configurer poolConfigurer, opts *Options) {
+	configurer.SetMaxOpenConns(opts.MaxOpenConns)
+	configurer.SetMaxIdleConns(opts.MaxIdleConns)
+
+	if opts.ConnMaxLifetime > 0 {
+		configurer.SetConnMaxLifetime(opts.ConnMaxLifetime)
+	}
+
+	if opts.ConnMaxIdleTime > 0 {
+		configurer.SetConnMaxIdleTime(opts.ConnMaxIdleTime)
+	}
+}
