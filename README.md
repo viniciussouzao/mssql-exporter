@@ -312,6 +312,20 @@ metrics, exporter robustness, operational collectors, TLS/healthz) are done.
 Next ideas include query performance metrics, index health and integration
 tests with SQL Server in Docker.
 
+## Releases
+
+Merging a PR into `main` with one of these labels tags and publishes a new
+release (binaries via GoReleaser):
+
+| Label | Bump | Example |
+|-------|------|---------|
+| `release:patch` (or `release`) | patch | `v0.1.0` → `v0.1.1` |
+| `release:minor` | minor | `v0.1.1` → `v0.2.0` |
+| `release:major` | major | `v0.2.0` → `v1.0.0` |
+
+With several labels the largest bump wins. When no `vX.Y.Z` tag exists yet,
+the first release is `v0.1.0` regardless of the label.
+
 ## License
 
 Apache License 2.0 — see [LICENSE](LICENSE).

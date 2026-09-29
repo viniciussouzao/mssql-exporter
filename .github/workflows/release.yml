@@ -1,9 +1,11 @@
 name: Release
 
-# Triggered when a PR targeting main is merged with the "release" label.
-# Bumps the patch version from the latest vX.Y.Z tag, pushes the new tag,
-# and runs GoReleaser to publish a GitHub Release with cross-platform
-# binaries.
+# Triggered when a PR targeting main is merged with a release label:
+#   release:major, release:minor, release:patch (or "release", an alias for
+#   patch). With several labels, the largest bump wins.
+# Bumps the version from the latest vX.Y.Z tag (v0.1.0 when there is none),
+# pushes the new tag, and runs GoReleaser to publish a GitHub Release with
+# cross-platform binaries.
 on:
   pull_request:
     types: [closed]
@@ -14,7 +16,12 @@ permissions:
 
 jobs:
   release:
-    if: github.event.pull_request.merged == true && contains(github.event.pull_request.labels.*.name, 'release')
+    if: >-
+      github.event.pull_request.merged == true && (
+        contains(github.event.pull_request.labels.*.name, 'release') ||
+        contains(github.event.pull_request.labels.*.name, 'release:patch') ||
+        contains(github.event.pull_request.labels.*.name, 'release:minor') ||
+        contains(github.event.pull_request.labels.*.name, 'release:major'))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -24,14 +31,27 @@ jobs:
 
       - name: Determine next version
         id: version
+        env:
+          LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
         run: |
+          bump=patch
+          case ",$LABELS," in
+            *,release:major,*) bump=major ;;
+            *,release:minor,*) bump=minor ;;
+          esac
+
           latest_tag=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n1)
           if [ -z "$latest_tag" ]; then
             next_tag="v0.1.0"
           else
             IFS='.' read -r major minor patch <<< "${latest_tag#v}"
-            next_tag="v${major}.${minor}.$((patch + 1))"
+            case "$bump" in
+              major) next_tag="v$((major + 1)).0.0" ;;
+              minor) next_tag="v${major}.$((minor + 1)).0" ;;
+              patch) next_tag="v${major}.${minor}.$((patch + 1))" ;;
+            esac
           fi
+          echo "Bump: $bump (latest: ${latest_tag:-none}) -> $next_tag"
           echo "tag=$next_tag" >> "$GITHUB_OUTPUT"
 
       - name: Create and push tag
