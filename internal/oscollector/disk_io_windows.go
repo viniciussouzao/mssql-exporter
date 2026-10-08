@@ -9,23 +9,30 @@ import (
 	"github.com/yusufpapurcu/wmi"
 )
 
+// physicalDiskWMIClass is passed explicitly to wmi.CreateQuery: without it the
+// library uses the Go type name as the WMI class, which does not exist.
+const physicalDiskWMIClass = "Win32_PerfRawData_PerfDisk_PhysicalDisk"
+
 // win32RawDiskPhysicalDisk mirrors the fields we need from
 // Win32_PerfRawData_PerfDisk_PhysicalDisk. Unlike the "Formatted" class,
 // these counters are raw, monotonically increasing values, matching the
 // cumulative counter semantics used by the Linux collector. The "_Total"
 // instance is skipped so only per-disk series are exported.
 type win32RawDiskPhysicalDisk struct {
-	Name                    string
-	DiskReadsPerSec         uint64
-	DiskWritesPerSec        uint64
-	DiskReadBytesPerSec     uint64
-	DiskWriteBytesPerSec    uint64
+	Name                 string
+	DiskReadsPerSec      uint64
+	DiskWritesPerSec     uint64
+	DiskReadBytesPerSec  uint64
+	DiskWriteBytesPerSec uint64
+	// PercentDiskTime is a PERF_PRECISION_100NS_TIMER: busy time in 100ns ticks.
 	PercentDiskTime         uint64
-	Frequency_PerfTime      uint64
 	CurrentDiskQueueLength  uint64
 	AvgDiskReadQueueLength  uint64
 	AvgDiskWriteQueueLength uint64
 }
+
+// ticks100nsPerMs converts 100ns ticks to milliseconds.
+const ticks100nsPerMs = 10_000
 
 type diskIOCollector struct {
 	reads            *prometheus.Desc
@@ -68,7 +75,7 @@ func (c *diskIOCollector) Describe(ch chan<- *prometheus.Desc) {
 
 func (c *diskIOCollector) Collect(ch chan<- prometheus.Metric) {
 	var disks []win32RawDiskPhysicalDisk
-	query := wmi.CreateQuery(&disks, "")
+	query := wmi.CreateQuery(&disks, "", physicalDiskWMIClass)
 	if err := wmi.Query(query, &disks); err != nil {
 		slog.Error("failed to query disk performance counters", slog.Any("error", err))
 		return
@@ -87,10 +94,8 @@ func (c *diskIOCollector) Collect(ch chan<- prometheus.Metric) {
 		counter(c.readBytes, d.DiskReadBytesPerSec)
 		counter(c.writeBytes, d.DiskWriteBytesPerSec)
 
-		if d.Frequency_PerfTime > 0 {
-			ioTimeMs := float64(d.PercentDiskTime) / float64(d.Frequency_PerfTime) * 1000
-			ch <- prometheus.MustNewConstMetric(c.ioTime, prometheus.CounterValue, ioTimeMs, d.Name)
-		}
+		ioTimeMs := float64(d.PercentDiskTime) / ticks100nsPerMs
+		ch <- prometheus.MustNewConstMetric(c.ioTime, prometheus.CounterValue, ioTimeMs, d.Name)
 
 		gauge := func(desc *prometheus.Desc, v uint64) {
 			ch <- prometheus.MustNewConstMetric(desc, prometheus.GaugeValue, float64(v), d.Name)
