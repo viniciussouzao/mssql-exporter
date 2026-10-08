@@ -91,8 +91,19 @@ func main() {
 		slog.Info("os collectors enabled")
 	}
 
+	// ContinueOnError: a single bad metric (e.g. a duplicate series) is logged
+	// and dropped instead of failing the whole response with HTTP 500, which
+	// would turn every series into a gap.
+	metricsHandler := promhttp.InstrumentMetricHandler(
+		prometheus.DefaultRegisterer,
+		promhttp.HandlerFor(prometheus.DefaultGatherer, promhttp.HandlerOpts{
+			ErrorLog:      slog.NewLogLogger(slog.Default().Handler(), slog.LevelError),
+			ErrorHandling: promhttp.ContinueOnError,
+		}),
+	)
+
 	mux := http.NewServeMux()
-	mux.Handle(cfg.WebTelemetryPath, promhttp.Handler())
+	mux.Handle(cfg.WebTelemetryPath, metricsHandler)
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))

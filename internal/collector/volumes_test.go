@@ -12,7 +12,7 @@ func TestVolumesScrapeHappyPath(t *testing.T) {
 
 	rows := sqlmock.NewRows([]string{"mount_point", "total_bytes", "available_bytes"}).
 		AddRow("C:\\", 1000.0, 400.0)
-	mock.ExpectQuery("SELECT DISTINCT").WillReturnRows(rows)
+	mock.ExpectQuery("GROUP BY mount_point").WillReturnRows(rows)
 
 	c := NewVolumesCollector(db)
 	families := gatherScraper(t, c)
@@ -30,7 +30,7 @@ func TestVolumesScrapeQueryError(t *testing.T) {
 	db, mock := newSQLMock(t)
 
 	queryErr := errors.New("boom")
-	mock.ExpectQuery("SELECT DISTINCT").WillReturnError(queryErr)
+	mock.ExpectQuery("GROUP BY mount_point").WillReturnError(queryErr)
 
 	c := NewVolumesCollector(db)
 	if err := scrapeErr(t, c); !errors.Is(err, queryErr) {
@@ -44,7 +44,7 @@ func TestVolumesScrapeScanError(t *testing.T) {
 	rows := sqlmock.NewRows([]string{"mount_point", "total_bytes", "available_bytes"}).
 		AddRow("C:\\", "not-a-number", 400.0).
 		AddRow("D:\\", 2000.0, 900.0)
-	mock.ExpectQuery("SELECT DISTINCT").WillReturnRows(rows)
+	mock.ExpectQuery("GROUP BY mount_point").WillReturnRows(rows)
 
 	c := NewVolumesCollector(db)
 	families, err := gatherScraperErr(t, c)
@@ -65,7 +65,7 @@ func TestVolumesScrapeRowIterationError(t *testing.T) {
 		AddRow("C:\\", 1000.0, 400.0).
 		AddRow("D:\\", 2000.0, 900.0).
 		RowError(1, rowErr)
-	mock.ExpectQuery("SELECT DISTINCT").WillReturnRows(rows)
+	mock.ExpectQuery("GROUP BY mount_point").WillReturnRows(rows)
 
 	c := NewVolumesCollector(db)
 	families, err := gatherScraperErr(t, c)
@@ -81,7 +81,7 @@ func TestVolumesScrapeRowIterationError(t *testing.T) {
 func TestVolumesScrapeEmpty(t *testing.T) {
 	db, mock := newSQLMock(t)
 
-	mock.ExpectQuery("SELECT DISTINCT").WillReturnRows(
+	mock.ExpectQuery("GROUP BY mount_point").WillReturnRows(
 		sqlmock.NewRows([]string{"mount_point", "total_bytes", "available_bytes"}))
 
 	c := NewVolumesCollector(db)

@@ -46,13 +46,22 @@ func (c *SQLServerVolumes) Describe(ch chan<- *prometheus.Desc) {
 func (c *SQLServerVolumes) Scrape(ctx context.Context, ch chan<- prometheus.Metric) error {
 	// volume_mount_point can be NULL on SQL Server on Linux; fall back to the
 	// logical volume name so the series still has a usable label.
+	// dm_os_volume_stats is evaluated once per database file, so under write
+	// load files on the same volume can report different available_bytes in a
+	// single execution. Group by mount point (DISTINCT is not enough) so each
+	// volume yields exactly one row; otherwise the duplicate series make the
+	// whole /metrics response fail.
 	rows, err := c.db.QueryContext(ctx, `
-		SELECT DISTINCT
-			COALESCE(NULLIF(vs.volume_mount_point, ''), vs.logical_volume_name, ''),
-			vs.total_bytes,
-			vs.available_bytes
-		FROM sys.master_files mf
-		CROSS APPLY sys.dm_os_volume_stats(mf.database_id, mf.file_id) vs
+		SELECT mount_point, MAX(total_bytes), MIN(available_bytes)
+		FROM (
+			SELECT
+				COALESCE(NULLIF(vs.volume_mount_point, ''), vs.logical_volume_name, '') AS mount_point,
+				vs.total_bytes,
+				vs.available_bytes
+			FROM sys.master_files mf
+			CROSS APPLY sys.dm_os_volume_stats(mf.database_id, mf.file_id) vs
+		) v
+		GROUP BY mount_point
 	`)
 	if err != nil {
 		return fmt.Errorf("failed to query dm_os_volume_stats: %w", err)
