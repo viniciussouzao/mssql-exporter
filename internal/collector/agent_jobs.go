@@ -55,9 +55,9 @@ func (c *SQLServerAgentJobs) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.lastRunDuration
 }
 
-// Scrape reads SQL Agent job outcomes from msdb. The login needs to see the
-// jobs (e.g. membership in msdb's SQLAgentReaderRole); without it the query
-// fails or returns no rows, depending on the SQL Server version.
+// Scrape reads SQL Agent job outcomes from msdb. The login needs SELECT on
+// msdb.dbo.sysjobs and msdb.dbo.sysjobhistory (see README); the SQL Agent
+// roles grant access through procedures and views, not these base tables.
 func (c *SQLServerAgentJobs) Scrape(ctx context.Context, ch chan<- prometheus.Metric) error {
 	rows, err := c.db.QueryContext(ctx, `
 		SELECT
