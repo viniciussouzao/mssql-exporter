@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"os"
@@ -22,9 +23,10 @@ import (
 )
 
 func init() {
-	err := godotenv.Load()
-	if err != nil {
-		slog.Error("Error loading .env file", slog.Any("error", err))
+	// .env is a local-development convenience; its absence is the normal case
+	// when running from --config.file or environment variables (e.g. as a service).
+	if err := godotenv.Load(); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		slog.Warn("failed to load .env file", slog.Any("error", err))
 	}
 }
 
