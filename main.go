@@ -4,11 +4,15 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"io/fs"
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
 	"runtime"
+	"syscall"
+	"time"
 
 	_ "github.com/denisenkom/go-mssqldb"
 	"github.com/joho/godotenv"
@@ -30,8 +34,22 @@ func init() {
 	}
 }
 
+// shutdownTimeout bounds how long in-flight scrapes may take to finish once a
+// stop is requested (Ctrl+C, SIGTERM or a Windows service stop).
+const shutdownTimeout = 10 * time.Second
+
 func main() {
-	cfg, err := config.Load(os.Args[1:])
+	args := os.Args[1:]
+
+	if len(args) > 0 && args[0] == "service" {
+		os.Exit(runServiceCommand(args[1:]))
+	}
+
+	if isWindowsService() {
+		os.Exit(runAsWindowsService(args))
+	}
+
+	cfg, err := config.Load(args)
 	if err != nil {
 		if errors.Is(err, config.ErrExitRequested) {
 			return
@@ -40,19 +58,31 @@ func main() {
 		os.Exit(1)
 	}
 
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	if err := run(ctx, cfg); err != nil {
+		slog.Error("exporter stopped with an error", slog.Any("error", err))
+		os.Exit(1)
+	}
+}
+
+// run starts the exporter and blocks until ctx is cancelled, then shuts the
+// HTTP server down gracefully. It returns an error if the exporter could not
+// start or the HTTP server failed.
+func run(ctx context.Context, cfg *config.Config) error {
 	slog.Info("starting mssql-exporter", slog.String("version", version.String()))
 
 	opts := db.DefaultOptions()
 
 	if err := db.Connect(cfg.DSN, opts); err != nil {
-		slog.Error("invalid sql server DSN", slog.Any("error", err))
-		os.Exit(1)
+		return fmt.Errorf("invalid sql server DSN: %w", err)
 	}
 
 	conn := db.DB()
 
-	pingCtx, cancelPing := context.WithTimeout(context.Background(), db.CurrentOptions().ConnTimeout)
-	err = conn.PingContext(pingCtx)
+	pingCtx, cancelPing := context.WithTimeout(ctx, db.CurrentOptions().ConnTimeout)
+	err := conn.PingContext(pingCtx)
 	cancelPing()
 
 	var instanceName string
@@ -117,10 +147,25 @@ func main() {
 		WebSystemdSocket:   new(bool),
 		WebConfigFile:      &cfg.WebConfigFile,
 	}
-	if err := web.ListenAndServe(server, flags, slog.Default()); err != nil {
-		slog.Error("failed to start http server", slog.Any("error", err))
-		os.Exit(1)
+	serveErr := make(chan error, 1)
+	go func() { serveErr <- web.ListenAndServe(server, flags, slog.Default()) }()
+
+	select {
+	case err := <-serveErr:
+		return fmt.Errorf("http server: %w", err)
+	case <-ctx.Done():
 	}
+
+	slog.Info("shutting down mssql-exporter")
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	defer cancel()
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		return fmt.Errorf("graceful shutdown: %w", err)
+	}
+	if err := <-serveErr; err != nil && !errors.Is(err, http.ErrServerClosed) {
+		return fmt.Errorf("http server: %w", err)
+	}
+	return nil
 }
 
 func queryServerName(conn *sql.DB) string {
