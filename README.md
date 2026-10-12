@@ -106,6 +106,32 @@ collectors:
 
 Connection pool/timeouts: adjust defaults in `internal/db/options.go` (`DefaultOptions()`).
 
+### Running as a Windows service
+
+The exporter runs natively under the Windows Service Control Manager; no
+wrapper (NSSM, WinSW) is needed. From an elevated PowerShell:
+
+```powershell
+.\mssql-exporter.exe service install --config.file C:\ProgramData\mssql-exporter\config.yml
+.\mssql-exporter.exe service start
+.\mssql-exporter.exe service status
+```
+
+- `install` validates the config file, then registers the service with
+  automatic (delayed) start and restart-on-failure recovery actions (5s, 30s,
+  60s). The executable and config paths are stored as absolute paths, so keep
+  the binary where it was installed from.
+- The service runs as `LocalSystem`. Restrict the config file, which holds the
+  DSN, to SYSTEM and Administrators:
+  `icacls config.yml /inheritance:r /grant:r "SYSTEM:R" "Administrators:F"`.
+- Logs go to the Windows Event Log (`Application`, source `mssql-exporter`).
+- Relative paths in the config file (e.g. `web.config_file`) are resolved from
+  the config file's directory.
+- `--name` (default `mssql-exporter`) lets several exporters run on one host,
+  e.g. one per SQL Server instance.
+- Other actions: `stop`, `uninstall`. Run `mssql-exporter service --help` for
+  details. Allow the listen port in Windows Firewall separately.
+
 ## Permissions
 
 For **all default collectors** to succeed, the monitoring login needs the

@@ -13,6 +13,7 @@ simulando produção (AWS EC2 Windows/Linux e RDS for SQL Server).
 | HML-003 | Coleta de disk I/O no Windows falha com `Invalid class` | EC2 Windows | média | em andamento |
 | HML-004 | Gaps intermitentes: `/metrics` retorna HTTP 500 por série duplicada em `volumes` | EC2 Windows | alta | em andamento (validado na EC2, aguardando merge) |
 | HML-005 | Disco C: da EC2 quase cheio durante carga no `StressDB` (ambiente) | EC2 Windows | alta | resolvido |
+| HML-006 | Exporter não roda como serviço Windows nativo (ponto de atenção) | EC2 Windows | média | em andamento |
 
 ---
 
@@ -288,3 +289,59 @@ Arquivos removidos da EC2 para liberar espaço.
   ou limitar o crescimento do `StressDB` (`MAXSIZE`).
 - Dashboard de exemplo: considerar uma regra de alerta de espaço livre
   (ex.: `sqlserver_volume_available_bytes / sqlserver_volume_total_bytes < 0.1`).
+
+---
+
+## HML-006 — Exporter não roda como serviço Windows nativo (ponto de atenção)
+
+- **Ambiente:** EC2 Windows (instâncias 01 e 02)
+- **Encontrado em:** 2026-10-08
+- **Severidade:** média
+- **Status:** em andamento
+
+**Observado**
+
+Na homologação o exporter roda em primeiro plano num console do PowerShell.
+As EC2 são paradas/iniciadas com frequência (economia de créditos), e a cada
+start o exporter precisa ser iniciado manualmente; se o console for fechado o
+processo morre e o target fica `down` sem nenhum aviso.
+
+**Causa**
+
+O binário não implementa o protocolo do Service Control Manager
+(`golang.org/x/sys/windows/svc`). Registrar o `.exe` direto com `sc.exe create`
+falha com erro 1053 após ~30 s; hoje a única opção é um wrapper (WinSW/NSSM),
+com configuração manual (XML, recovery, logs).
+
+**Correção** — branch `feat/windows-service` (sobre `fix/homolog-windows-findings`),
+build de teste `0.2.0-homolog`:
+
+- Subcomando `mssql-exporter service install|uninstall|start|stop|status`
+  (`--config.file`, `--name`).
+- `install` valida o config file, registra com início automático (atrasado)
+  e recovery (reinicia em 5 s, 30 s, 60 s; também em saída com erro) e
+  registra a origem no Event Log.
+- Em execução como serviço: logs no Event Log (Application), diretório de
+  trabalho = pasta do config file, parada limpa (`Stop`/`Shutdown`).
+- Fora do serviço: Ctrl+C/SIGTERM agora também fazem shutdown limpo.
+
+**Validação na EC2 (pendente)**
+
+```powershell
+.\mssql-exporter.exe service install --config.file C:\mssql-exporter\config.yml
+.\mssql-exporter.exe service start
+.\mssql-exporter.exe service status
+Get-EventLog -LogName Application -Source mssql-exporter -Newest 10
+```
+
+- Reiniciar a EC2 e confirmar que o target volta sozinho no Prometheus.
+- Matar o processo (`Stop-Process -Name mssql-exporter -Force`) e confirmar
+  que o SCM reinicia em ~5 s.
+- `service stop` / `service uninstall` sem deixar processo órfão.
+
+**Pontos a considerar**
+
+- Conta do serviço: `LocalSystem`. Avaliar conta virtual
+  (`NT SERVICE\mssql-exporter`) para menor privilégio — exige ACL no config
+  file e validar acesso aos contadores WMI dos OS collectors.
+- Regra de firewall continua manual.
