@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"os"
@@ -22,9 +23,10 @@ import (
 )
 
 func init() {
-	err := godotenv.Load()
-	if err != nil {
-		slog.Error("Error loading .env file", slog.Any("error", err))
+	// .env is a local-development convenience; its absence is the normal case
+	// when running from --config.file or environment variables (e.g. as a service).
+	if err := godotenv.Load(); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		slog.Warn("failed to load .env file", slog.Any("error", err))
 	}
 }
 
@@ -89,8 +91,19 @@ func main() {
 		slog.Info("os collectors enabled")
 	}
 
+	// ContinueOnError: a single bad metric (e.g. a duplicate series) is logged
+	// and dropped instead of failing the whole response with HTTP 500, which
+	// would turn every series into a gap.
+	metricsHandler := promhttp.InstrumentMetricHandler(
+		prometheus.DefaultRegisterer,
+		promhttp.HandlerFor(prometheus.DefaultGatherer, promhttp.HandlerOpts{
+			ErrorLog:      slog.NewLogLogger(slog.Default().Handler(), slog.LevelError),
+			ErrorHandling: promhttp.ContinueOnError,
+		}),
+	)
+
 	mux := http.NewServeMux()
-	mux.Handle(cfg.WebTelemetryPath, promhttp.Handler())
+	mux.Handle(cfg.WebTelemetryPath, metricsHandler)
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
