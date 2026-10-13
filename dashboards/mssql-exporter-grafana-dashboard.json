@@ -3707,12 +3707,1050 @@
       "type": "timeseries"
     },
     {
+      "id": 57,
+      "type": "row",
+      "title": "Availability Groups",
       "collapsed": false,
+      "panels": [],
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
         "y": 117
+      }
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Role and synchronization health per availability replica. Aggregated across every exporter in the AG (a secondary only sees its own replica), so the instance selector does not apply here.",
+      "id": 58,
+      "type": "table",
+      "title": "Replica State",
+      "gridPos": {
+        "h": 8,
+        "w": 10,
+        "x": 0,
+        "y": 118
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "noValue": "No availability group data"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Role"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "0": {
+                        "text": "RESOLVING",
+                        "color": "orange",
+                        "index": 0
+                      },
+                      "1": {
+                        "text": "PRIMARY",
+                        "color": "blue",
+                        "index": 1
+                      },
+                      "2": {
+                        "text": "SECONDARY",
+                        "color": "green",
+                        "index": 2
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "basic"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Health"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "0": {
+                        "text": "NOT HEALTHY",
+                        "color": "red",
+                        "index": 0
+                      },
+                      "1": {
+                        "text": "PARTIALLY HEALTHY",
+                        "color": "orange",
+                        "index": 1
+                      },
+                      "2": {
+                        "text": "HEALTHY",
+                        "color": "green",
+                        "index": 2
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "basic"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "cellHeight": "sm",
+        "showHeader": true,
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "min by (ag_name, replica_server) (sqlserver_hadr_replica_role{ag_name=~\"$ag\"})",
+          "legendFormat": "__auto",
+          "refId": "A",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "min by (ag_name, replica_server) (sqlserver_hadr_replica_synchronization_health{ag_name=~\"$ag\"})",
+          "legendFormat": "__auto",
+          "refId": "B",
+          "format": "table",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "includeByName": {
+              "ag_name": true,
+              "replica_server": true,
+              "Value #A": true,
+              "Value #B": true
+            },
+            "renameByName": {
+              "ag_name": "AG",
+              "replica_server": "Replica",
+              "Value #A": "Role",
+              "Value #B": "Health"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Per database replica: synchronization state, suspension, lag and queues. Queues are absent while data movement is suspended (SQL Server reports NULL). Aggregated across every exporter in the AG (a secondary only sees its own replica), so the instance selector does not apply here.",
+      "id": 59,
+      "type": "table",
+      "title": "Database Replica State",
+      "gridPos": {
+        "h": 8,
+        "w": 14,
+        "x": 10,
+        "y": 118
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "noValue": "No availability group data"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Sync State"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "0": {
+                        "text": "NOT SYNCHRONIZING",
+                        "color": "red",
+                        "index": 0
+                      },
+                      "1": {
+                        "text": "SYNCHRONIZING",
+                        "color": "yellow",
+                        "index": 1
+                      },
+                      "2": {
+                        "text": "SYNCHRONIZED",
+                        "color": "green",
+                        "index": 2
+                      },
+                      "3": {
+                        "text": "REVERTING",
+                        "color": "orange",
+                        "index": 3
+                      },
+                      "4": {
+                        "text": "INITIALIZING",
+                        "color": "orange",
+                        "index": 4
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "basic"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Data Movement"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "0": {
+                        "text": "RUNNING",
+                        "color": "green",
+                        "index": 0
+                      },
+                      "1": {
+                        "text": "SUSPENDED",
+                        "color": "red",
+                        "index": 1
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "basic"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Suspend Reason"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "0": {
+                        "text": "USER",
+                        "index": 0
+                      },
+                      "1": {
+                        "text": "PARTNER (forced failover)",
+                        "index": 1
+                      },
+                      "2": {
+                        "text": "REDO",
+                        "index": 2
+                      },
+                      "3": {
+                        "text": "CAPTURE",
+                        "index": 3
+                      },
+                      "4": {
+                        "text": "APPLY",
+                        "index": 4
+                      },
+                      "5": {
+                        "text": "RESTART",
+                        "index": 5
+                      },
+                      "6": {
+                        "text": "UNDO",
+                        "index": 6
+                      },
+                      "7": {
+                        "text": "REVALIDATION",
+                        "index": 7
+                      },
+                      "8": {
+                        "text": "SYNC POINT ERROR",
+                        "index": 8
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Lag"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Send Queue"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "deckbytes"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Redo Queue"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "deckbytes"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "cellHeight": "sm",
+        "showHeader": true,
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "min by (ag_name, replica_server, db_name) (sqlserver_hadr_database_synchronization_state{ag_name=~\"$ag\"})",
+          "legendFormat": "__auto",
+          "refId": "A",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "max by (ag_name, replica_server, db_name) (sqlserver_hadr_database_is_suspended{ag_name=~\"$ag\"})",
+          "legendFormat": "__auto",
+          "refId": "B",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "max by (ag_name, replica_server, db_name) (sqlserver_hadr_database_suspend_reason{ag_name=~\"$ag\"})",
+          "legendFormat": "__auto",
+          "refId": "C",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "max by (ag_name, replica_server, db_name) (sqlserver_hadr_database_secondary_lag_seconds{ag_name=~\"$ag\"})",
+          "legendFormat": "__auto",
+          "refId": "D",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "max by (ag_name, replica_server, db_name) (sqlserver_hadr_database_log_send_queue_kb{ag_name=~\"$ag\"})",
+          "legendFormat": "__auto",
+          "refId": "E",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "max by (ag_name, replica_server, db_name) (sqlserver_hadr_database_redo_queue_kb{ag_name=~\"$ag\"})",
+          "legendFormat": "__auto",
+          "refId": "F",
+          "format": "table",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "includeByName": {
+              "ag_name": true,
+              "replica_server": true,
+              "db_name": true,
+              "Value #A": true,
+              "Value #B": true,
+              "Value #C": true,
+              "Value #D": true,
+              "Value #E": true,
+              "Value #F": true
+            },
+            "renameByName": {
+              "ag_name": "AG",
+              "replica_server": "Replica",
+              "db_name": "Database",
+              "Value #A": "Sync State",
+              "Value #B": "Data Movement",
+              "Value #C": "Suspend Reason",
+              "Value #D": "Lag",
+              "Value #E": "Send Queue",
+              "Value #F": "Redo Queue"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "id": 60,
+      "type": "state-timeline",
+      "title": "Data Movement & Sync State",
+      "description": "Red = suspended / not synchronizing. A suspended secondary makes the log send queue disappear and the primary's log grow (see Log Used). Aggregated across every exporter in the AG (a secondary only sees its own replica), so the instance selector does not apply here.",
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 126
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "fillOpacity": 80,
+            "lineWidth": 0
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "A"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "0": {
+                        "text": "RUNNING",
+                        "color": "green",
+                        "index": 0
+                      },
+                      "1": {
+                        "text": "SUSPENDED",
+                        "color": "red",
+                        "index": 1
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "0": {
+                        "text": "NOT SYNCHRONIZING",
+                        "color": "red",
+                        "index": 0
+                      },
+                      "1": {
+                        "text": "SYNCHRONIZING",
+                        "color": "yellow",
+                        "index": 1
+                      },
+                      "2": {
+                        "text": "SYNCHRONIZED",
+                        "color": "green",
+                        "index": 2
+                      },
+                      "3": {
+                        "text": "REVERTING",
+                        "color": "orange",
+                        "index": 3
+                      },
+                      "4": {
+                        "text": "INITIALIZING",
+                        "color": "orange",
+                        "index": 4
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showValue": "never",
+        "mergeValues": true,
+        "alignValue": "left",
+        "rowHeight": 0.85,
+        "legend": {
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "max by (replica_server, db_name) (sqlserver_hadr_database_is_suspended{ag_name=~\"$ag\"})",
+          "legendFormat": "movement {{replica_server}} / {{db_name}}",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "min by (replica_server, db_name) (sqlserver_hadr_database_synchronization_state{ag_name=~\"$ag\"})",
+          "legendFormat": "sync {{replica_server}} / {{db_name}}",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 70
+              },
+              {
+                "color": "red",
+                "value": 90
+              }
+            ]
+          },
+          "unit": "percent",
+          "noValue": "No data"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 126
+      },
+      "id": 61,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "max by (sqlserver_instance, db_name) (sqlserver_database_log_used_percent) and on (db_name) max by (db_name) (sqlserver_hadr_database_synchronization_state{ag_name=~\"$ag\"})",
+          "legendFormat": "{{sqlserver_instance}} / {{db_name}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Log Used (AG databases)",
+      "type": "timeseries",
+      "description": "Transaction log usage of databases in the selected AGs, per instance. The log cannot be truncated while a secondary is behind or suspended."
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "deckbytes",
+          "noValue": "No data"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 133
+      },
+      "id": 62,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "max by (ag_name, replica_server, db_name) (sqlserver_hadr_database_log_send_queue_kb{ag_name=~\"$ag\"})",
+          "legendFormat": "{{replica_server}} / {{db_name}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Log Send Queue",
+      "type": "timeseries",
+      "description": "Log not yet sent to the secondary. Absent while data movement is suspended. Aggregated across every exporter in the AG (a secondary only sees its own replica), so the instance selector does not apply here."
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "deckbytes",
+          "noValue": "No data"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 133
+      },
+      "id": 63,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "max by (ag_name, replica_server, db_name) (sqlserver_hadr_database_redo_queue_kb{ag_name=~\"$ag\"})",
+          "legendFormat": "{{replica_server}} / {{db_name}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Redo Queue",
+      "type": "timeseries",
+      "description": "Log received but not yet redone on the secondary. Aggregated across every exporter in the AG (a secondary only sees its own replica), so the instance selector does not apply here."
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "s",
+          "noValue": "No data"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 133
+      },
+      "id": 64,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "max by (ag_name, replica_server, db_name) (sqlserver_hadr_database_secondary_lag_seconds{ag_name=~\"$ag\"})",
+          "legendFormat": "{{replica_server}} / {{db_name}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Secondary Lag",
+      "type": "timeseries",
+      "description": "Seconds the secondary is behind the primary, as reported on the primary (SQL Server 2016+). Aggregated across every exporter in the AG (a secondary only sees its own replica), so the instance selector does not apply here."
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 141
       },
       "id": 54,
       "panels": [],
@@ -3757,7 +4795,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 118
+        "y": 142
       },
       "id": 55,
       "options": {
@@ -3833,7 +4871,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 118
+        "y": 142
       },
       "id": 56,
       "options": {
@@ -3920,6 +4958,28 @@
         "sort": 1,
         "type": "query",
         "allValue": ".*"
+      },
+      {
+        "current": {},
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "definition": "label_values(sqlserver_hadr_replica_role, ag_name)",
+        "includeAll": true,
+        "allValue": ".*",
+        "label": "Availability Group",
+        "multi": true,
+        "name": "ag",
+        "options": [],
+        "query": {
+          "query": "label_values(sqlserver_hadr_replica_role, ag_name)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 2,
+        "regex": "",
+        "sort": 1,
+        "type": "query"
       }
     ]
   },
@@ -3931,7 +4991,7 @@
   "timezone": "browser",
   "title": "SQL Server Exporter (Go) - Overview",
   "uid": "sqlserver-go-exporter",
-  "version": 1,
+  "version": 2,
   "__inputs": [
     {
       "name": "DS_PROMETHEUS",
