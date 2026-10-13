@@ -13,7 +13,9 @@ simulando produção (AWS EC2 Windows/Linux e RDS for SQL Server).
 | HML-003 | Coleta de disk I/O no Windows falha com `Invalid class` | EC2 Windows | média | em andamento |
 | HML-004 | Gaps intermitentes: `/metrics` retorna HTTP 500 por série duplicada em `volumes` | EC2 Windows | alta | em andamento (validado na EC2, aguardando merge) |
 | HML-005 | Disco C: da EC2 quase cheio durante carga no `StressDB` (ambiente) | EC2 Windows | alta | resolvido |
-| HML-006 | Exporter não roda como serviço Windows nativo (ponto de atenção) | EC2 Windows | média | em andamento |
+| HML-006 | Exporter não roda como serviço Windows nativo (ponto de atenção) | EC2 Windows | média | em andamento (v0.2.0 instalada; falta reboot/recovery) |
+| HML-007 | Validação do coletor `availability_groups` em AG real (validação) | EC2 Windows (AG 01+02) | — | em andamento |
+| HML-008 | Fila de envio some do gráfico com a réplica suspensa; faltam `is_suspended` e `secondary_lag_seconds` | EC2 Windows (AG 01+02) | média | em andamento |
 
 ---
 
@@ -325,7 +327,18 @@ build de teste `0.2.0-homolog`:
   trabalho = pasta do config file, parada limpa (`Stop`/`Shutdown`).
 - Fora do serviço: Ctrl+C/SIGTERM agora também fazem shutdown limpo.
 
-**Validação na EC2 (pendente)**
+**Validação na EC2 (2026-10-12, release v0.2.0)**
+
+- [x] `service install` / `start` / `status` nas instâncias 01 e 02: instalado
+  de primeira, `Automatic (Delayed Start)`, rodando como `LocalSystem`.
+- [x] Prometheus: os dois targets `up 1`, `sqlserver_up 1`, versão `0.2.0`,
+  nenhum coletor com falha.
+- [ ] Reboot da EC2 → target volta sozinho.
+- [ ] `Stop-Process -Force` → SCM reinicia em ~5 s.
+- [ ] `service stop` / `uninstall` sem processo órfão.
+- [ ] Event Log com as entradas do exporter.
+
+Roteiro:
 
 ```powershell
 .\mssql-exporter.exe service install --config.file C:\mssql-exporter\config.yml
@@ -345,3 +358,157 @@ Get-EventLog -LogName Application -Source mssql-exporter -Newest 10
   (`NT SERVICE\mssql-exporter`) para menor privilégio — exige ACL no config
   file e validar acesso aos contadores WMI dos OS collectors.
 - Regra de firewall continua manual.
+
+---
+
+## HML-007 — Validação do coletor `availability_groups` em AG real (validação)
+
+- **Ambiente:** AG `MSSQL_AG` entre `AWSDBSERVER01` e `AWSDBSERVER02`
+  (SQL Server 2019, EC2 Windows), banco `AlwaysOnDB`, exporter v0.2.0 como
+  serviço nas duas réplicas
+- **Iniciado em:** 2026-10-12
+- **Tipo:** validação (primeira execução contra um Always On real)
+- **Status:** em andamento
+
+**Resultado inicial (AG recém-criado, sem carga)**
+
+| Métrica | Visto pela 01 (primária) | Visto pela 02 (secundária) |
+|---|---|---|
+| `sqlserver_is_hadr_enabled` | 1 | 1 |
+| `sqlserver_hadr_replica_role` | 01 = 1 (primary), 02 = 2 | 02 = 2 |
+| `sqlserver_hadr_replica_synchronization_health` | 2 / 2 | 2 |
+| `sqlserver_hadr_database_synchronization_state` | 2 / 2 (synchronized) | 2 |
+| `sqlserver_hadr_database_log_send_queue_kb` | 0 (só série da 02) | 0 |
+| `sqlserver_hadr_database_redo_queue_kb` | 0 (só série da 02) | 0 |
+
+`sqlserver_scrape_collector_success{collector="availability_groups"} 1` nas duas.
+
+**Comportamentos esperados (não são defeitos)**
+
+- A secundária enxerga apenas a própria réplica nas DMVs `sys.dm_hadr_*`;
+  a primária enxerga todas. A mesma série (`replica_server="AWSDBSERVER02"`)
+  vem dos dois exporters, diferenciada por `sqlserver_instance`. Em painéis e
+  alertas: `max by (ag_name, replica_server, db_name)`.
+- Filas só existem para réplicas secundárias; os valores nulos da primária
+  são descartados pelo coletor.
+
+**Roteiro restante**
+
+- [x] Carga de escrita no `AlwaysOnDB` (SqlQueryStress, `INSERT dbo.EventLog`
+  com `REPLICATE('x', 200)`, 32 threads × 10k iterações, sem delay).
+  19:44–19:46, pico de ~13,3k batch requests/s na primária:
+  - `log_send_queue_kb` estável em ~60 KB; `redo_queue_kb` entre 296 e 432 KB.
+  - `synchronization_state` 2 e `synchronization_health` 2 o tempo todo.
+  - Coerente com commit síncrono: cada commit espera o hardening na
+    secundária, então a fila de envio não acumula.
+  - Pico anterior às 19:37, **sem carga** (~2 batch/s): `log_send_queue_kb`
+    até ~349 MB e `redo_queue_kb` até ~33 MB, zerando em ~1 min. Provável
+    sincronização inicial do AG logo após a configuração. Confirmar.
+  - Valores lidos direto da DMV (já em KB), sem conversão no coletor.
+- [x] Carga em `ASYNCHRONOUS_COMMIT` (mesmo script). Às 20:32:13
+  `synchronization_state` passou de 2 (synchronized) para **1
+  (synchronizing)**, como esperado em modo assíncrono; `health` seguiu 2.
+  Throughput subiu para ~31,7k batch/s (o dobro do síncrono: o commit não
+  espera mais a secundária). Filas continuaram pequenas (send ≤ 60 KB,
+  redo ≤ 548 KB): a rede e a secundária acompanharam a carga.
+- [x] Failover para a 02 (~21:04–21:05). Sequência vista no Prometheus
+  (amostras a cada 15 s, nenhum scrape perdido, `up`/`sqlserver_up` = 1 o
+  tempo todo):
+  - 21:04:00 — 02 volta para `SYNCHRONOUS_COMMIT`: health da 02 = 1
+    (partially healthy) por uma amostra; 21:04:15 `synchronization_state` = 2.
+  - 21:05:15 — **papéis invertidos nos dois exporters**: 02 = 1 (primary),
+    01 = 2 (secondary). Refletido em uma única amostra (≤ 15 s).
+  - 21:05:15 — réplica 01 (antiga primária) com `is_suspended` = 1,
+    **`suspend_reason` = 1 (SUSPEND_FROM_PARTNER)**, `synchronization_state`
+    = 0 e health 0, vista pela 01 e pela 02. Segundo a documentação, o motivo 1
+    é a suspensão da réplica após um failover forçado — confirmado: o failover
+    foi feito com o script do assistente do SSMS (modo SQLCMD), que roda
+    `SET (ROLE = SECONDARY)` na 01 e `FORCE_FAILOVER_ALLOW_DATA_LOSS` na 02.
+    O RESUME manual da 01 é o passo esperado depois de um failover forçado.
+  - 21:07:00 — RESUME manual na 01: `is_suspended` 0, sync 2, health 2.
+    Estado final: 02 primária, 01 secundária saudável.
+  - A série `role` da 01 vista pela 01 passou de 1 para 2 sem gap; as séries
+    que só existem na primária (ex.: filas da réplica remota) mudaram de
+    exporter (antes vinham da 01, agora da 02), como esperado.
+- [ ] Secundária indisponível (parar o SQL Server da 02): primária deve
+  reportar `synchronization_health` < 2 e `synchronization_state` != 2.
+
+---
+
+## HML-008 — Fila de envio some do gráfico com a réplica suspensa; faltam `is_suspended` e `secondary_lag_seconds`
+
+- **Ambiente:** AG `MSSQL_AG` (01 primária, 02 secundária em `ASYNCHRONOUS_COMMIT`), v0.2.0
+- **Encontrado em:** 2026-10-12, durante o HML-007
+- **Severidade:** média (o problema mais grave do AG aparece como "sem dados")
+- **Status:** em andamento
+
+**Observado**
+
+Com `ALTER DATABASE AlwaysOnDB SET HADR SUSPEND` na 02 e carga na primária
+(20:35–20:40), o painel `sqlserver_hadr_database_log_send_queue_kb` ficou
+vazio. Visto pela primária:
+
+| Horário | Carga | send queue | redo queue | state | health | log usado |
+|---|---|---|---|---|---|---|
+| 20:35–20:40 (suspenso) | até 33k batch/s | **sem série** | 0 | 0 | 0 | 27% → 98% |
+| 20:41 (RESUME) | — | 2,5 GB | 11 MB | 1 | 2 | 98% |
+| 20:42 | — | 1,8 GB | 72 MB | 1 | 2 | 98% |
+
+**Causa**
+
+Com o data movement suspenso o SQL Server retorna `NULL` em
+`log_send_queue_size`; o coletor omite `NULL` de propósito (zero faria a
+réplica parada parecer saudável). `synchronization_state`/`health` = 0 já
+sinalizavam o problema, mas não havia métrica que dissesse *suspenso* nem o
+atraso em tempo.
+
+**Correção** — branch `feat/ag-suspend-and-lag`:
+
+- `sqlserver_hadr_database_is_suspended` (0/1), presente mesmo com as filas `NULL`.
+- `sqlserver_hadr_database_suspend_reason` (só enquanto suspenso; 0 = usuário,
+  1 = parceiro, 2 = redo, ...).
+- `sqlserver_hadr_database_secondary_lag_seconds` (SQL Server 2016+).
+- Teste unitário reproduzindo o formato observado; README e dashboard de
+  cobertura atualizados (105 métricas).
+
+**Validação na EC2 (2026-10-12, build `0.2.1-homolog` nas duas réplicas)**
+
+SUSPEND executado na primária (01) às ~20:55, seguido de carga com transações
+grandes (50k linhas por transação, 4 threads):
+
+| Série (vista pela 01) | Valor |
+|---|---|
+| `is_suspended{replica_server="AWSDBSERVER01"}` | **1** |
+| `suspend_reason{replica_server="AWSDBSERVER01"}` | **0** (usuário) |
+| `is_suspended{replica_server="AWSDBSERVER02"}` | 0 |
+| `synchronization_state` (01 e 02) | 0 (not synchronizing) |
+| `log_send_queue_kb` | ausente (`NULL`), como antes |
+| `secondary_lag_seconds{replica_server="AWSDBSERVER02"}` | **0** |
+| log usado do `AlwaysOnDB` na 01 | 8% → 46% |
+
+- [x] `is_suspended` / `suspend_reason` funcionam. Com SUSPEND na primária, o
+  SQL Server marca como suspensa a réplica **da primária** (a secundária fica
+  `is_suspended` 0, mas `synchronization_state` 0). Alertas devem usar
+  `max by (ag_name, db_name) (sqlserver_hadr_database_is_suspended) == 1`,
+  sem filtrar por réplica.
+- [x] **`secondary_lag_seconds` não serve para detectar suspensão:** ficou em
+  0 durante toda a suspensão, mesmo com o log crescendo. Usar junto com
+  `is_suspended` e `synchronization_state`, nunca sozinho. Documentar no README.
+- [x] RESUME: `is_suspended` voltou a 0 nas três séries, `suspend_reason`
+  sumiu, `log_send_queue_kb` reapareceu (0) e o log usado voltou a 0%.
+- [x] `secondary_lag_seconds` > 0 com data movement ativo: 21:01:15–21:01:45,
+  02 em assíncrono alcançando a primária após a carga com transações grandes
+  — lag 71 → 86 → 101 s, `log_send_queue_kb` 1,7 GB → 0, `redo_queue_kb`
+  até ~255 MB; zerou às 21:02. A documentação confirma que o lag fica em 0
+  enquanto a réplica está suspensa.
+- [x] `suspend_reason` = 1 (partner) observado após o failover (ver HML-007).
+- Correção: a descrição da métrica `suspend_reason` tinha os códigos 3–8
+  deslocados; corrigida no coletor, README e dashboard conforme a
+  documentação de `sys.dm_hadr_database_replica_states`.
+
+**Observação do teste**
+
+Durante a suspensão o log do `AlwaysOnDB` foi de 27% para 98%: o log não
+trunca enquanto a secundária não recebe. Em produção, réplica suspensa =
+risco de log cheio (erro 9002) na primária. Bom candidato a alerta, junto
+com `is_suspended`.
