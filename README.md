@@ -14,7 +14,7 @@ The exporter currently includes these collectors:
 - IO file stats: per-database file IO counters and stalls.
 - Wait stats: wait time and counts by wait type.
 - Memory clerks: memory usage by clerk type.
-- Backups: last backup timestamp, duration and size per database.
+- Backups: last backup timestamp (UTC, correct for servers in any time zone), duration and size per database.
 - TempDB: space usage and temp table activity.
 - Performance counters: batch requests, compilations, page life expectancy, buffer cache hit ratio, deadlocks, lock waits, user connections and more.
 - Databases: state, recovery model, data/log sizes and log usage per database.
@@ -275,6 +275,7 @@ Metric names are stable and follow Prometheus best practices. Selected examples:
   - `sqlserver_agent_job_enabled{job_name="nightly-backup"} 1`
   - `sqlserver_agent_job_last_run_status{job_name="nightly-backup"} 1`
   - `sqlserver_agent_job_last_run_timestamp_seconds{job_name="nightly-backup"} 1789344000`
+    (UTC Unix time, converted from the server's local time with its current offset)
   - `sqlserver_agent_job_last_run_duration_seconds{job_name="nightly-backup"} 42`
 
   There is intentionally no aggregate "failed jobs" metric — derive it in

@@ -64,10 +64,12 @@ func (c *SQLServerAgentJobs) Scrape(ctx context.Context, ch chan<- prometheus.Me
 			j.name,
 			CAST(j.enabled AS INT),
 			h.run_status,
-			DATETIMEFROMPARTS(
+			-- run_date/run_time are the server's local time; convert to UTC
+			-- with the current offset (sysjobhistory keeps no offset).
+			DATEADD(MINUTE, -DATEPART(TZOFFSET, SYSDATETIMEOFFSET()), DATETIMEFROMPARTS(
 				h.run_date / 10000, (h.run_date / 100) % 100, h.run_date % 100,
 				h.run_time / 10000, (h.run_time / 100) % 100, h.run_time % 100, 0
-			) AS last_run,
+			)) AS last_run_utc,
 			(h.run_duration / 10000) * 3600
 				+ ((h.run_duration / 100) % 100) * 60
 				+ (h.run_duration % 100) AS duration_seconds
@@ -78,7 +80,10 @@ func (c *SQLServerAgentJobs) Scrape(ctx context.Context, ch chan<- prometheus.Me
 			WHERE h.job_id = j.job_id
 				AND h.step_id = 0
 				AND h.run_status IN (0, 1, 2, 3) -- completed outcomes only (4 = in progress, 5 = unknown)
-			ORDER BY h.run_date DESC, h.run_time DESC
+			-- instance_id is an identity: ordering by the local run_date/
+			-- run_time would pick an older run after a time zone change or
+			-- a DST fall-back.
+			ORDER BY h.instance_id DESC
 		) h
 	`)
 	if err != nil {
