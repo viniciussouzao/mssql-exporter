@@ -13,11 +13,13 @@ import (
 // outcomes, and the single most recent one. Losing any of these could
 // surface an in-progress run, an individual step, or a stale run.
 var agentJobsQueryRegex = sqlContainsInOrder(
+	// run_date/run_time are local time: the UTC conversion must stay.
+	"DATEADD(MINUTE, -DATEPART(TZOFFSET, SYSDATETIMEOFFSET()), DATETIMEFROMPARTS(",
 	"SELECT TOP 1 run_status, run_date, run_time, run_duration",
 	"FROM msdb.dbo.sysjobhistory h",
 	"h.step_id = 0",
 	"h.run_status IN (0, 1, 2, 3)",
-	"ORDER BY h.run_date DESC, h.run_time DESC",
+	"ORDER BY h.instance_id DESC",
 )
 
 func TestAgentJobsScrapeHappyPath(t *testing.T) {

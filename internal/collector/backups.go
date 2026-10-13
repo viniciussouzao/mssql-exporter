@@ -50,6 +50,15 @@ func (c *SQLServerBackups) Describe(ch chan<- *prometheus.Desc) {
 }
 
 func (c *SQLServerBackups) Scrape(ctx context.Context, ch chan<- prometheus.Metric) error {
+	// The latest backup per database/type is picked by backup_set_id (an
+	// identity), not by date: backupset dates are the server's local time,
+	// so after a time zone change or a DST fall-back an older backup can
+	// carry a later local date and hide newer ones.
+	//
+	// The dates are converted to UTC because the metric is a Unix timestamp.
+	// time_zone is the server's UTC offset (15-minute intervals) when the
+	// backup ran, so it stays correct across DST changes; 127 means unknown,
+	// in which case the current offset is used.
 	rows, err := c.db.QueryContext(ctx, `
 		SELECT
 			bs.database_name,
@@ -59,19 +68,27 @@ func (c *SQLServerBackups) Scrape(ctx context.Context, ch chan<- prometheus.Metr
 				WHEN 'L' THEN 'log'
 				ELSE bs.type
 			END AS backup_type,
-			bs.backup_finish_date,
-			bs.backup_start_date,
+			DATEADD(MINUTE, -tz.utc_offset_minutes, bs.backup_finish_date) AS backup_finish_utc,
+			DATEADD(MINUTE, -tz.utc_offset_minutes, bs.backup_start_date) AS backup_start_utc,
 			COALESCE(bs.compressed_backup_size, bs.backup_size) AS size_bytes
-		FROM msdb.dbo.backupset bs
-		INNER JOIN (
-			SELECT database_name, type, MAX(backup_finish_date) AS max_finish
+		FROM (
+			SELECT
+				database_name, type, backup_finish_date, backup_start_date,
+				compressed_backup_size, backup_size, time_zone,
+				ROW_NUMBER() OVER (
+					PARTITION BY database_name, type
+					ORDER BY backup_set_id DESC
+				) AS rn
 			FROM msdb.dbo.backupset
 			WHERE backup_finish_date IS NOT NULL
-			GROUP BY database_name, type
-		) latest
-			ON bs.database_name = latest.database_name
-			AND bs.type        = latest.type
-			AND bs.backup_finish_date = latest.max_finish
+		) bs
+		CROSS APPLY (
+			SELECT CASE
+				WHEN bs.time_zone BETWEEN -48 AND 48 THEN bs.time_zone * 15
+				ELSE DATEPART(TZOFFSET, SYSDATETIMEOFFSET())
+			END AS utc_offset_minutes
+		) tz
+		WHERE bs.rn = 1
 	`)
 	if err != nil {
 		return fmt.Errorf("failed to query backupset: %w", err)

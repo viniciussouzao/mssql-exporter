@@ -8,14 +8,21 @@ import (
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
 )
 
-// backupsQueryRegex pins down the subselect that picks the latest backup per
-// database/type: removing the MAX aggregation, the grouping or the join
-// back on backup_finish_date would let a stale backup row match too.
+// backupsQueryRegex pins down how the latest backup per database/type is
+// picked: by backup_set_id (an identity), never by the local-time
+// backup_finish_date, which goes backwards after a time zone change or a DST
+// fall-back. It also pins the local-to-UTC conversion: backupset dates carry
+// no offset, so emitting them as-is skews the timestamp by the UTC offset.
 var backupsQueryRegex = sqlContainsInOrder(
-	"FROM msdb.dbo.backupset bs",
-	"MAX(backup_finish_date) AS max_finish",
-	"GROUP BY database_name, type",
-	"bs.backup_finish_date = latest.max_finish",
+	"DATEADD(MINUTE, -tz.utc_offset_minutes, bs.backup_finish_date)",
+	"DATEADD(MINUTE, -tz.utc_offset_minutes, bs.backup_start_date)",
+	"PARTITION BY database_name, type",
+	"ORDER BY backup_set_id DESC",
+	"FROM msdb.dbo.backupset",
+	"WHERE backup_finish_date IS NOT NULL",
+	"WHEN bs.time_zone BETWEEN -48 AND 48 THEN bs.time_zone * 15",
+	"ELSE DATEPART(TZOFFSET, SYSDATETIMEOFFSET())",
+	"WHERE bs.rn = 1",
 )
 
 func TestBackupsScrapeHappyPath(t *testing.T) {

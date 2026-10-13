@@ -13,9 +13,11 @@ simulando produção (AWS EC2 Windows/Linux e RDS for SQL Server).
 | HML-003 | Coleta de disk I/O no Windows falha com `Invalid class` | EC2 Windows | média | em andamento |
 | HML-004 | Gaps intermitentes: `/metrics` retorna HTTP 500 por série duplicada em `volumes` | EC2 Windows | alta | em andamento (validado na EC2, aguardando merge) |
 | HML-005 | Disco C: da EC2 quase cheio durante carga no `StressDB` (ambiente) | EC2 Windows | alta | resolvido |
-| HML-006 | Exporter não roda como serviço Windows nativo (ponto de atenção) | EC2 Windows | média | em andamento (v0.2.0 instalada; falta reboot/recovery) |
+| HML-006 | Exporter não roda como serviço Windows nativo (ponto de atenção) | EC2 Windows | média | resolvido (v0.2.0; `uninstall` no fim da homologação) |
 | HML-007 | Validação do coletor `availability_groups` em AG real (validação) | EC2 Windows (AG 01+02) | — | em andamento |
 | HML-008 | Fila de envio some do gráfico com a réplica suspensa; faltam `is_suspended` e `secondary_lag_seconds` | EC2 Windows (AG 01+02) | média | em andamento |
+| HML-009 | Cenários de falha: banco offline, SQL parado, reboot, kill, backup diferencial (validação) | EC2 Windows (AG 01+02) | — | resolvido |
+| HML-010 | Timestamps de backup e Agent jobs tratam o horário local do SQL Server como UTC | EC2 Windows (UTC-3) | média | em andamento (validado, aguardando merge) |
 
 ---
 
@@ -126,6 +128,14 @@ concluiu uma execução no ambiente.
 
 A opção 2 (`SQLAgentReaderRole`) não foi testada. **Recomendação: opção 1**,
 que é a de menor privilégio e é a que o README já documenta.
+
+**Privilégio mínimo (2026-10-13)**
+
+O login da homologação (`usr_exporter`) tem exatamente os grants do README:
+`VIEW SERVER STATE` e `VIEW ANY DEFINITION` no servidor, e no msdb um usuário
+com `SELECT` em `dbo.sysjobs` e `dbo.sysjobhistory`. Com ele, todos os 14
+coletores SQL ficaram com `success 1` nas duas réplicas, inclusive com AG,
+failover e suspensão. Privilégio mínimo validado; não é preciso outro login.
 
 **Pontos a resolver**
 
@@ -333,10 +343,12 @@ build de teste `0.2.0-homolog`:
   de primeira, `Automatic (Delayed Start)`, rodando como `LocalSystem`.
 - [x] Prometheus: os dois targets `up 1`, `sqlserver_up 1`, versão `0.2.0`,
   nenhum coletor com falha.
-- [ ] Reboot da EC2 → target volta sozinho.
-- [ ] `Stop-Process -Force` → SCM reinicia em ~5 s.
-- [ ] `service stop` / `uninstall` sem processo órfão.
-- [ ] Event Log com as entradas do exporter.
+- [x] Reboot da EC2 → target volta sozinho (02, 2026-10-12; detalhes no HML-009).
+- [x] `Stop-Process -Force` → SCM reinicia (5 s na 1ª falha, 30 s na 2ª; detalhes no HML-009).
+- [x] `service stop` / `start`: usados nas atualizações para 0.2.1-homolog e
+  0.3.0 nas duas réplicas, sem processo órfão. `uninstall` fica para o fim
+  da homologação.
+- [x] Event Log com as entradas do exporter (detalhes no HML-009, item 4).
 
 Roteiro:
 
@@ -512,3 +524,201 @@ Durante a suspensão o log do `AlwaysOnDB` foi de 27% para 98%: o log não
 trunca enquanto a secundária não recebe. Em produção, réplica suspensa =
 risco de log cheio (erro 9002) na primária. Bom candidato a alerta, junto
 com `is_suspended`.
+
+---
+
+## HML-009 — Cenários de falha: banco offline, SQL parado, reboot, kill, backup diferencial (validação)
+
+- **Ambiente:** AG `MSSQL_AG` (01 primária, 02 secundária), exporter v0.3.0
+  como serviço nas duas réplicas, login `usr_exporter` com privilégio mínimo
+- **Iniciado em:** 2026-10-13
+- **Tipo:** validação
+- **Status:** resolvido (todos os 5 cenários validados)
+
+### 1. Banco `dbAdmin` OFFLINE na 02 — validado
+
+- 21:30:47: `sqlserver_database_state{db_name="dbAdmin"}` passou de
+  `state="ONLINE"` para `state="OFFLINE"` em um scrape (a série ONLINE para
+  de ser emitida e nasce a OFFLINE; alertas: `sqlserver_database_state{state!="ONLINE"}`).
+- Nenhum coletor falhou; `up` 1, sem séries duplicadas.
+- Continuam emitidos: `data_size_bytes`/`log_size_bytes` (vêm de
+  `sys.master_files`) e `recovery_model`.
+- Deixam de ser emitidos (esperado): `log_used_percent` e as séries
+  `sqlserver_io_file_*` do `dbAdmin` — as DMVs não retornam bancos offline.
+
+### 2. SQL Server parado na secundária (02) — validado
+
+Serviço do SQL Server da 02 parado às ~21:37:45:
+
+| Série | Antes | Depois |
+|---|---|---|
+| `up{instance=<02>}` | 1 | **1** (exporter vivo) |
+| `sqlserver_up{sqlserver_instance="AWSDBSERVER02"}` | 1 | **0** a partir de 21:37:51 |
+| `scrape_samples_scraped` (02) | ~3.667 | ~108 (só OS collectors + self-metrics) |
+| `scrape_duration_seconds` (02) | ~0,2 s | 0,16–2,15 s |
+| Primária: `replica_synchronization_health{replica_server="AWSDBSERVER02"}` | 2 | **0** a partir de 21:38:06 |
+| Primária: `database_synchronization_state` (02) | 2 | **0** |
+| Primária: `database_is_suspended` (02) | 0 | **0** |
+| Primária: `log_send_queue_kb` (02) | 0 | ausente (`NULL`) |
+
+- O exporter não cai quando o SQL Server cai: `up` 1 + `sqlserver_up` 0
+  separa "SQL fora" de "exporter fora". Scrapers são pulados; nenhum erro.
+- A primária detectou a réplica fora em ≤ 15 s.
+- `is_suspended` 0 com `synchronization_state` 0 distingue **réplica
+  desconectada** de **réplica suspensa** (`is_suspended` 1). Útil para alertas.
+- Retorno (SQL Server iniciado, exporter **não** reiniciado): às 21:41:13,
+  em um único scrape, `sqlserver_up` voltou a 1, ~3.600 amostras por scrape,
+  nenhum coletor falhando, e a primária voltou a reportar a 02 com
+  health/sync 2 e filas 0. Reconexão automática pelo pool, label
+  `sqlserver_instance="AWSDBSERVER02"` preservado (foi resolvido no start do
+  exporter, quando o SQL estava no ar).
+
+### 3. Reboot da EC2 02 — validado (também fecha item do HML-006)
+
+| Evento | Horário |
+|---|---|
+| Último scrape OK antes do reboot | 21:45:49 |
+| `os_boot_time_seconds` (Windows de volta) | 21:45:57 |
+| Primária vê a 02 com health/sync 0 | 21:46:21 (uma amostra) |
+| Primária vê a 02 saudável de novo (SQL Server já no ar) | 21:46:36 |
+| `process_start_time_seconds` do exporter | **21:48:07** (boot + ~2 min 10 s) |
+| Primeiro scrape OK, `sqlserver_up` 1, nenhum coletor falhando | 21:48:19 |
+
+- O serviço subiu sozinho, sem console.
+- **`sqlserver_instance="AWSDBSERVER02"` preenchido:** o início atrasado
+  (`Automatic (Delayed Start)`, ~2 min após o boot) fez o exporter subir
+  depois do SQL Server, então o label foi resolvido corretamente.
+- Custo: ~2 min 30 s sem métricas da máquina a cada boot, quase todo por
+  causa do atraso. Melhoria possível: resolver `sqlserver_instance` no
+  primeiro ping bem-sucedido (e não só no start), o que permitiria início
+  automático sem atraso e eliminaria a limitação conhecida do label vazio.
+
+### 4. Kill do processo — validado (também fecha item do HML-006)
+
+`Stop-Process -Name mssql-exporter -Force` na 02. `process_start_time_seconds`
+registrou dois reinícios automáticos pelo SCM, sem intervenção:
+
+| Novo processo | Coerente com |
+|---|---|
+| 21:50:20 | 1º kill → recovery action "restart após 5 s" |
+| 21:51:09 | 2º kill (feito de propósito em seguida) → "restart após 30 s" (scrape das 21:50:56 com `up` 0) |
+
+- Logo após o kill, `service status` mostra `stopped` / PID 0: esperado,
+  é a janela de espera da recovery action.
+- A escalada 5 s → 30 s (→ 60 s na 3ª) segue o `install`; o contador de
+  falhas zera após 24 h sem falhas.
+- Depois do reinício: `sqlserver_up` 1, label preenchido, sem intervenção.
+- Event Log (`Application`, origem `mssql-exporter`): sequência completa de
+  inicialização às 00:50:20 e 00:51:09 UTC (`starting mssql-exporter` com a
+  versão 0.3.0, `successfully connected and pinged sql server`,
+  `sql server instance instance=AWSDBSERVER02`, `os collectors enabled`,
+  `Listening on`), todas como *Information*. Não há entrada do kill em si
+  (esperado: `Stop-Process -Force` encerra sem chance de logar).
+
+### 5. Backup diferencial — validado
+
+Banco `diff_test` (recovery SIMPLE) na 02, backup full e diferencial com
+`COMPRESSION` em `D:\BACKUP`:
+
+| Métrica | full | differential |
+|---|---|---|
+| `sqlserver_backup_last_completed_timestamp_seconds` | 21:58:07 | 21:58:11 |
+| `sqlserver_backup_last_size_bytes` | 433.994 (~424 KB) | 59.482 (~58 KB) |
+| `sqlserver_backup_last_duration_seconds` | 0 | 0 |
+
+- `backup_type="differential"` aparece corretamente.
+- Tamanho é o comprimido (`compressed_backup_size`), coerente com `COMPRESSION`.
+- Duração 0: `backupset` grava as datas com precisão de segundos e o banco
+  vazio faz backup em menos de 1 s. Esperado.
+- Horários corretos **porque o Windows das EC2 está em UTC** — ver HML-010.
+
+---
+
+## HML-010 — Timestamps de backup e Agent jobs tratam o horário local do SQL Server como UTC
+
+- **Ambiente:** qualquer SQL Server cujo fuso horário não seja UTC (não
+  reproduz nas EC2 da homologação, que estão em UTC)
+- **Encontrado em:** 2026-10-12, revisando o código durante o HML-009 (item 5)
+- **Severidade:** média (alertas de "backup atrasado" e "job não rodou" erram
+  pelo tamanho do fuso)
+- **Status:** em andamento (correção na branch `fix/timezone-utc-timestamps`,
+  build `0.3.2-homolog`; validado com as EC2 em UTC-3, aguardando merge)
+
+**Causa**
+
+- `backups`: `msdb.dbo.backupset.backup_finish_date` é `datetime` no horário
+  **local** do servidor, sem offset. O driver devolve um `time.Time` sem fuso
+  (tratado como UTC) e o coletor emite `finishDate.Unix()`.
+- `agent_jobs`: `run_date`/`run_time` de `sysjobhistory` também são horário
+  local; `DATETIMEFROMPARTS` + `.Unix()` tem o mesmo problema.
+
+**Impacto (exemplo)**
+
+Servidor em `UTC-03:00`: backup às 21:00 local (00:00 UTC) vira 21:00 UTC no
+timestamp, ou seja, 3 h no passado. `time() - sqlserver_backup_last_completed_timestamp_seconds`
+mostra o backup 3 h mais velho do que é. Em fusos positivos (`UTC+X`) o
+timestamp fica no futuro. Durações não são afetadas (diferença entre duas
+datas locais).
+
+**Correção proposta**
+
+- `backups`: converter na query com a coluna `backupset.time_zone` (offset do
+  servidor em intervalos de 15 min **no momento do backup**, correto mesmo com
+  horário de verão): `DATEADD(MINUTE, -15 * bs.time_zone, bs.backup_finish_date)`;
+  `time_zone = 127` significa desconhecido → cair no offset atual.
+- `agent_jobs`: converter com o offset atual do servidor
+  (`DATEDIFF(MINUTE, GETDATE(), GETUTCDATE())`).
+- Testes unitários com fuso não-UTC.
+
+**Correção aplicada**
+
+- `backups`: `CROSS APPLY` calcula o offset por linha
+  (`bs.time_zone * 15` quando entre -48 e 48; senão
+  `DATEPART(TZOFFSET, SYSDATETIMEOFFSET())`) e as datas de início/fim são
+  convertidas com `DATEADD(MINUTE, -offset, ...)`. Duração inalterada.
+- `agent_jobs`: `DATEADD(MINUTE, -DATEPART(TZOFFSET, SYSDATETIMEOFFSET()), ...)`.
+- As regex dos testes fixam a conversão; teste de mutação: removendo-a,
+  10 testes falham.
+
+**Validação 1 (2026-10-12, `0.3.1-homolog`, EC2 01 e 02 em UTC-3 via `tzutil`)**
+
+- [x] Conversão correta para backups gravados antes da mudança
+  (`time_zone` = 0): `diff_test` full/diff de 21:58 −03 → `00:58Z`.
+- [ ] **Novo problema:** os backups feitos *depois* da mudança não apareceram,
+  e o `JB_BACKUP_FULL` da 01 foi para `04:00Z` (3 h no futuro). Causa: o
+  "último" registro era escolhido pelo horário **local**
+  (`MAX(backup_finish_date)` / `ORDER BY run_date, run_time`). Depois de voltar
+  o fuso 3 h, os registros antigos (01:00 em UTC) parecem mais novos que os
+  novos (22:05 em −03) e o coletor fica preso neles por até 3 h. Afeta também
+  a virada do horário de verão (fall-back).
+
+**Correção 2 (`0.3.2-homolog`)**
+
+- `backups`: `ROW_NUMBER() OVER (PARTITION BY database_name, type ORDER BY backup_set_id DESC)`.
+- `agent_jobs`: `ORDER BY h.instance_id DESC`.
+- Ambas são identities do msdb: só crescem, independentemente do fuso.
+- Limitação que permanece: o histórico de jobs não guarda o offset, então
+  uma execução anterior a uma mudança de fuso é convertida com o offset
+  atual. Some assim que o job roda de novo.
+
+**Validação 2 (2026-10-12 22:12, `0.3.2-homolog`, EC2 em UTC-3, Agent rodando)**
+
+| Série | Horário (−03) | Idade | Real? |
+|---|---|---|---|
+| 02 `diff_test` full | 22:07:30 | 5,1 min | ✅ |
+| 02 `diff_test` differential | 22:08:00 | 4,6 min | ✅ |
+| 01 `AlwaysOnDB` full | 22:08:37 | 4,0 min | ✅ |
+| 01 `AlwaysOnDB` log | 22:08:35 | 4,0 min | ✅ |
+| 01 `JB_BACKUP_FULL` (status 1) | 22:07:44 | 4,8 min | ✅ |
+| 01 `JB_BACKUP_LOG` (status 1) | 22:08:32 | 4,0 min | ✅ |
+
+- [x] Backups e jobs feitos depois da mudança de fuso aparecem com o horário
+  real; nenhum timestamp no futuro; nenhum coletor falhando.
+- [x] Backup antigo (02 `AlwaysOnDB` full, 19:33 −03, gravado em UTC) segue
+  correto: a conversão por linha usa o `time_zone` de cada backup.
+
+**Como reproduzir na homologação**
+
+Mudar o fuso da 02 (`tzutil /s "E. South America Standard Time"`), reiniciar o
+SQL Server, fazer um backup e comparar
+`sqlserver_backup_last_completed_timestamp_seconds` com o horário real.
