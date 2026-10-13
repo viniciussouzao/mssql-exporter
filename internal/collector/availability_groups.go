@@ -16,6 +16,9 @@ type SQLServerAvailabilityGroups struct {
 	dbSyncState      *prometheus.Desc
 	dbLogSendQueueKB *prometheus.Desc
 	dbRedoQueueKB    *prometheus.Desc
+	dbIsSuspended    *prometheus.Desc
+	dbSuspendReason  *prometheus.Desc
+	dbSecondaryLag   *prometheus.Desc
 }
 
 func NewAvailabilityGroupsCollector(db *sql.DB) *SQLServerAvailabilityGroups {
@@ -48,6 +51,21 @@ func NewAvailabilityGroupsCollector(db *sql.DB) *SQLServerAvailabilityGroups {
 			"Amount of log records in kilobytes not yet redone on the secondary replica",
 			dbLabels, nil,
 		),
+		dbIsSuspended: prometheus.NewDesc(
+			"sqlserver_hadr_database_is_suspended",
+			"Whether data movement for the database replica is suspended (1 = suspended, 0 = running). While suspended SQL Server reports no log send queue, so that series is absent",
+			dbLabels, nil,
+		),
+		dbSuspendReason: prometheus.NewDesc(
+			"sqlserver_hadr_database_suspend_reason",
+			"Reason data movement is suspended, only present while suspended (0 = user, 1 = partner/forced failover, 2 = redo, 3 = capture, 4 = apply, 5 = restart, 6 = undo, 7 = revalidation, 8 = synchronization point calculation error)",
+			dbLabels, nil,
+		),
+		dbSecondaryLag: prometheus.NewDesc(
+			"sqlserver_hadr_database_secondary_lag_seconds",
+			"Seconds the secondary database replica is behind the primary, as reported on the primary; 0 while data movement is suspended (requires SQL Server 2016+)",
+			dbLabels, nil,
+		),
 	}
 }
 
@@ -61,6 +79,9 @@ func (c *SQLServerAvailabilityGroups) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.dbSyncState
 	ch <- c.dbLogSendQueueKB
 	ch <- c.dbRedoQueueKB
+	ch <- c.dbIsSuspended
+	ch <- c.dbSuspendReason
+	ch <- c.dbSecondaryLag
 }
 
 // Scrape emits nothing (and no error) when Always On availability groups is
@@ -125,7 +146,10 @@ func (c *SQLServerAvailabilityGroups) collectDatabaseStates(ctx context.Context,
 			adc.database_name,
 			drs.synchronization_state,
 			drs.log_send_queue_size,
-			drs.redo_queue_size
+			drs.redo_queue_size,
+			CAST(drs.is_suspended AS INT),
+			drs.suspend_reason,
+			drs.secondary_lag_seconds
 		FROM sys.dm_hadr_database_replica_states drs
 		INNER JOIN sys.availability_replicas ar
 			ON drs.replica_id = ar.replica_id
@@ -145,8 +169,9 @@ func (c *SQLServerAvailabilityGroups) collectDatabaseStates(ctx context.Context,
 		// NULL queue/state values mean SQL Server has no usable measurement
 		// (e.g. disconnected replica) — omitting the sample is correct;
 		// converting to zero would make an outage look healthy.
-		var syncState, logSendQueueKB, redoQueueKB sql.NullFloat64
-		if err := rows.Scan(&agName, &replicaServer, &dbName, &syncState, &logSendQueueKB, &redoQueueKB); err != nil {
+		var syncState, logSendQueueKB, redoQueueKB, isSuspended, suspendReason, secondaryLag sql.NullFloat64
+		if err := rows.Scan(&agName, &replicaServer, &dbName, &syncState, &logSendQueueKB, &redoQueueKB,
+			&isSuspended, &suspendReason, &secondaryLag); err != nil {
 			scanErrs = append(scanErrs, fmt.Errorf("failed to scan database replica state row: %w", err))
 			continue
 		}
@@ -160,6 +185,17 @@ func (c *SQLServerAvailabilityGroups) collectDatabaseStates(ctx context.Context,
 		}
 		if redoQueueKB.Valid {
 			ch <- prometheus.MustNewConstMetric(c.dbRedoQueueKB, prometheus.GaugeValue, redoQueueKB.Float64, labels...)
+		}
+		// is_suspended stays available while the queues go NULL, so a
+		// suspended replica is visible instead of just a gap in the queues.
+		if isSuspended.Valid {
+			ch <- prometheus.MustNewConstMetric(c.dbIsSuspended, prometheus.GaugeValue, isSuspended.Float64, labels...)
+			if isSuspended.Float64 == 1 && suspendReason.Valid {
+				ch <- prometheus.MustNewConstMetric(c.dbSuspendReason, prometheus.GaugeValue, suspendReason.Float64, labels...)
+			}
+		}
+		if secondaryLag.Valid {
+			ch <- prometheus.MustNewConstMetric(c.dbSecondaryLag, prometheus.GaugeValue, secondaryLag.Float64, labels...)
 		}
 	}
 

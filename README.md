@@ -261,6 +261,15 @@ Metric names are stable and follow Prometheus best practices. Selected examples:
   - `sqlserver_hadr_database_synchronization_state{ag_name="ag1",replica_server="NODE1",db_name="app"} 2`
   - `sqlserver_hadr_database_log_send_queue_kb{...} 0`
   - `sqlserver_hadr_database_redo_queue_kb{...} 0`
+  - `sqlserver_hadr_database_is_suspended{...} 0` (data movement suspended; the
+    log send queue is absent while suspended, so alert on this instead)
+  - `sqlserver_hadr_database_suspend_reason{...} 0` (only while suspended; 0 = user,
+    1 = partner/forced failover, 2 = redo, 3 = capture, 4 = apply, 5 = restart,
+    6 = undo, 7 = revalidation, 8 = synchronization point error)
+  - `sqlserver_hadr_database_secondary_lag_seconds{...} 0` (SQL Server 2016+;
+    stays 0 while data movement is suspended, so don't alert on it alone)
+  - Suspending on the primary marks the *primary's* database replica as
+    suspended: alert on `max by (ag_name, db_name) (sqlserver_hadr_database_is_suspended) == 1`.
 
 - SQL Agent jobs
   - `sqlserver_agent_job_enabled{job_name="nightly-backup"} 1`
