@@ -24,6 +24,8 @@ simulando produção (AWS EC2 Windows/Linux e RDS for SQL Server).
 | HML-014 | Atualização do SQL Server 2019 RTM → CU32 + KB5128494 (validação) | EC2 Windows (01+02) | — | resolvido |
 | HML-015 | `blocking` falha esporadicamente na réplica secundária do AG (erro 976) | EC2 Windows (02) | baixa | resolvido (v0.4.0) |
 | HML-016 | Driver `denisenkom/go-mssqldb` arquivado: migrar para `microsoft/go-mssqldb` | EC2 Windows (01+02) | média | em andamento |
+| HML-017 | Rolling upgrade SQL Server 2019 → 2022 (02) → 2025 (01, 02) com AG, mirroring e log shipping (validação) | EC2 Windows (01+02) | — | em andamento |
+| HML-018 | Estado do mirroring some (sem série) quando o banco espelhado não está acessível | EC2 Windows (01+02) | média | aberto |
 
 ---
 
@@ -1105,3 +1107,112 @@ o fork mantido e o driver oficial para Go. Antes de homologar o SQL Server
   `E:` (CDFS) apareceu nas `os_filesystem_*`). Duração média do scrape
   0,29 s → 0,31 s (dentro do ruído).
 - [ ] Mesma validação no SQL Server 2022 e 2025, incluindo `encrypt=strict`.
+
+---
+
+## HML-017 — Rolling upgrade SQL Server 2019 → 2022 (02) → 2025 (01, 02) com AG, mirroring e log shipping (validação)
+
+- **Ambiente:** EC2 01 + 02, exporter `0.5.0-homolog` (driver `microsoft/go-mssqldb`)
+- **Encontrado em:** 2026-10-14
+- **Severidade:** — (validação)
+- **Status:** em andamento
+
+**Plano**
+
+Rolling upgrade a partir do 2019 CU32 (`15.0.4500.2`): 02 (secundária do AG,
+espelho do mirroring, secundária do log shipping) para 2022; failover do AG e
+do mirroring para a 02; 01 direto para 2025 (decisão de ganhar tempo, sem
+equalizar as duas em 2022); depois 02 para 2025.
+
+**Etapa 1 — upgrade da 02 para 2022 RTM (`16.0.1000.6`), 2026-10-14**
+
+| Horário | Evento (visto no Prometheus) |
+|---------|------------------------------|
+| 18:03:37 | reboot do Windows (`os_boot_time_seconds`); 01 vê `mirroring_state` 1 (disconnected) |
+| 18:05:50 | serviço do exporter sobe sozinho após o boot (`process_start_time_seconds`) |
+| 18:08–18:10, 18:15, 18:19–18:22 | restarts do SQL durante o setup: 02 `sqlserver_up 0`, 01 mirroring disconnected |
+| 18:22:06 | `product_version` `16.0.1000.6`, `sqlserver_up 1` |
+| 18:22:13 | mirroring volta a 4 (synchronized) |
+
+- O processo do exporter **não precisou ser reiniciado**: reconectou sozinho a
+  cada restart do SQL; `sqlserver_instance` continuou correto.
+- Único erro: `volumes` com `success 0` às 18:22:02, primeiro scrape após o SQL
+  subir (bancos em recovery). Levou 4,98 s (timeout de query de 5 s); o scrape
+  inteiro levou 5,17 s, abaixo do `scrape_timeout: 10s` (HML-013), então o
+  Prometheus recebeu os dados parciais. Próximo scrape já `success 1`.
+- `AlwaysOnDB` na 02 passou de `ONLINE` para `RECOVERING`: secundária em versão
+  maior não é legível até o fim do upgrade. É o cenário do erro 976; `blocking`
+  não falhou nenhuma vez depois do upgrade (correção do HML-015 confirmada).
+- AG synchronized/healthy, filas zeradas; mirroring synchronized; log shipping
+  2019 (01) → 2022 (02) restaurando normalmente.
+- Diferenças nas métricas da 02 (3 802 → 4 532 séries), nenhuma métrica sumiu:
+  - wait types 1 027 → 1 266 (+239 novos no 2022) em `sqlserver_wait_time_ms`,
+    `sqlserver_max_wait_time_ms` e `sqlserver_waiting_tasks`;
+  - `sqlserver_database_log_used_percent` ganhou `model_msdb` e
+    `model_replicatedmaster` (bancos-modelo internos do 2022 para Contained AG,
+    só nos performance counters, como o `mssqlsystemresource`). Cardinalidade
+    baixa, sem ação;
+  - `sqlserver_memory_clerk_used_kb` +1 clerk.
+- Pré-existente, não relacionado ao upgrade: `LSAlert_AWSDBSERVER02` com
+  `last_run_status 0` desde antes (threshold de restore ainda em 2 min do teste
+  do HML-011).
+
+**Etapa 2 — failover do AG e do mirroring para a 02 (2022), 18:39:33**
+
+- AG: `replica_role` invertido (02 primária); a `AlwaysOnDB` foi atualizada na
+  02 (`ONLINE`) e ficou na 01 em `RECOVERING` (Not Synchronizing). As duas
+  instâncias reportam a réplica da 01 com `is_suspended 1`,
+  `suspend_reason 7` (revalidation), `synchronization_state 0` e
+  `synchronization_health 0`; o alerta do README
+  (`max by (ag_name, db_name) (sqlserver_hadr_database_is_suspended) == 1`)
+  dispararia.
+- Mirroring: `MirrorDB` ficou `RECOVERING` na 02 (nova principal) e
+  `RESTORING` na 01 — a principal no 2022 não sai do recovery com o espelho no
+  2019. As séries de estado sumiram: ver HML-018.
+- Nenhum coletor com `success 0`.
+
+**Pendente**
+
+- [ ] Upgrade da 01 para 2025 (esperado: AG e mirroring voltam a sincronizar —
+  versão maior no espelho/secundária é suportado; log shipping quebra, já que a
+  02 no 2022 não restaura backups do 2025, até a 02 subir para 2025).
+- [ ] Upgrade da 02 para 2025, failback, `encrypt=strict`.
+
+---
+
+## HML-018 — Estado do mirroring some (sem série) quando o banco espelhado não está acessível
+
+- **Ambiente:** EC2 01 + 02, durante o HML-017 (principal 2022, espelho 2019)
+- **Encontrado em:** 2026-10-14 18:39
+- **Severidade:** média (alerta em `sqlserver_mirroring_state` não dispara)
+- **Status:** aberto
+
+**Sintoma**
+
+Depois do failover do mirroring para a 02 (2022), `sqlserver_mirroring_info`,
+`_role` e `_state` deixaram de existir nas duas instâncias. Só os performance
+counters (`_log_send_queue_kb`, `_redo_queue_kb`, `*_total`) continuaram.
+
+**Causa**
+
+Com o `MirrorDB` em `RECOVERING` na 02, `sys.database_mirroring` devolve
+`mirroring_guid`, `mirroring_role_desc` e `mirroring_state_desc` NULL **inclusive
+para sysadmin** (validado na 02 como sysadmin e com
+`EXECUTE AS LOGIN = 'usr_exporter'`: mesmo resultado). O coletor filtra
+`mirroring_guid IS NOT NULL`, então a linha some. Na 01 (espelho) o login sem
+sysadmin já recebia NULL (limitação do HML-011). Limitação do SQL Server, não
+de permissão: não há outra fonte para o estado da sessão.
+
+**Impacto**
+
+Um alerta `sqlserver_mirroring_state != 4` não dispara: a série desaparece em
+vez de mudar de valor.
+
+**Proposta**
+
+Documentar no README um alerta por ausência, usando os performance counters
+(que continuam presentes para todo banco espelhado) como referência, por exemplo
+`max by (db_name) (sqlserver_mirroring_log_send_queue_kb) unless on (db_name) max by (db_name) (sqlserver_mirroring_state)`,
+e lembrar que `sqlserver_database_state{state="RECOVERING"}` também cobre o
+caso. Avaliar se vale emitir algo no coletor (ex.: estado "desconhecido" para
+bancos com counters e sem linha na view).
