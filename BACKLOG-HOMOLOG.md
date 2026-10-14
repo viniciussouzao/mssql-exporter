@@ -23,9 +23,11 @@ simulando produção (AWS EC2 Windows/Linux e RDS for SQL Server).
 | HML-013 | Scrape falha inteiro (`up 0`) quando o SQL demora: `scrape_timeout` do exemplo = timeout do exporter | EC2 Windows (01+02) | baixa | resolvido (v0.4.0) |
 | HML-014 | Atualização do SQL Server 2019 RTM → CU32 + KB5128494 (validação) | EC2 Windows (01+02) | — | resolvido |
 | HML-015 | `blocking` falha esporadicamente na réplica secundária do AG (erro 976) | EC2 Windows (02) | baixa | resolvido (v0.4.0) |
-| HML-016 | Driver `denisenkom/go-mssqldb` arquivado: migrar para `microsoft/go-mssqldb` | EC2 Windows (01+02) | média | em andamento |
-| HML-017 | Rolling upgrade SQL Server 2019 → 2022 (02) → 2025 (01, 02) com AG, mirroring e log shipping (validação) | EC2 Windows (01+02) | — | em andamento |
-| HML-018 | Estado do mirroring some (sem série) quando o banco espelhado não está acessível | EC2 Windows (01+02) | média | aberto |
+| HML-016 | Driver `denisenkom/go-mssqldb` arquivado: migrar para `microsoft/go-mssqldb` | EC2 Windows (01+02) | média | resolvido (v0.5.0) |
+| HML-017 | Rolling upgrade SQL Server 2019 → 2022 (02) → 2025 (01, 02) com AG, mirroring e log shipping (validação) | EC2 Windows (01+02) | — | resolvido |
+| HML-018 | Estado do mirroring some (sem série) quando o banco espelhado não está acessível | EC2 Windows (01+02) | média | resolvido (documentação, v0.5.0) |
+| HML-019 | `volumes` estoura o timeout de query quando um banco está trocando de estado | EC2 Windows (01+02) | baixa | aberto |
+| HML-020 | `blocking` falha com erro 983 logo após o SQL Server subir (réplica do AG em `RESOLVING`) | EC2 Windows (02) | baixa | em andamento |
 
 ---
 
@@ -1081,7 +1083,7 @@ ambiente de DR (relato do usuário). Um loop de 300 execuções da query como
 - **Ambiente:** EC2 01 + 02 (SQL Server 2019 CU32), antes do upgrade para 2022/2025
 - **Encontrado em:** 2026-10-14, planejamento do upgrade de versão
 - **Severidade:** média (driver sem manutenção; sem TDS 8.0 / `encrypt=strict`)
-- **Status:** em andamento (branch `chore/microsoft-go-mssqldb`, build `0.5.0-homolog`)
+- **Status:** resolvido (v0.5.0)
 
 **Contexto**
 
@@ -1098,7 +1100,7 @@ o fork mantido e o driver oficial para Go. Antes de homologar o SQL Server
 - Binário Windows +0,5 MB (15,06 → 15,58 MB); nada do SDK da Azure entra no
   binário.
 
-**Validação pendente**
+**Validação**
 
 - [x] `0.5.0-homolog` nas duas EC2 (2019 CU32, 2026-10-14 17:55):
   `sqlserver_up 1`, os 16 coletores com `success 1`, mesmos nomes de
@@ -1106,7 +1108,25 @@ o fork mantido e o driver oficial para Go. Antes de homologar o SQL Server
   (idêntico); 02 153 nomes / 3 802 séries (+5: o ISO do SQL 2022 montado em
   `E:` (CDFS) apareceu nas `os_filesystem_*`). Duração média do scrape
   0,29 s → 0,31 s (dentro do ruído).
-- [ ] Mesma validação no SQL Server 2022 e 2025, incluindo `encrypt=strict`.
+- [x] SQL Server 2022 RTM e 2025 RTM (HML-017): os 16 coletores com
+  `success 1` nas duas versões, nenhuma métrica sumiu.
+- [x] `encrypt=strict` (TDS 8.0) na 01 (2025), 2026-10-14 19:45:
+  - Sem certificado configurado no SQL Server o handshake TDS 8 é recusado:
+    `openssl s_client -alpn tds/8.0` recebe EOF com 0 bytes (TLS 1.2 e 1.3) e
+    o exporter fica com `sqlserver_up 0` (processo de pé, `/metrics` respondendo).
+  - O driver **ignora `trustservercertificate=true` em modo strict**
+    (`msdsn/conn_str.go`, `parseTLS`: `if encrypt == "strict" { trustServerCert = false }`,
+    mesmo comportamento do Microsoft.Data.SqlClient): continua
+    `x509: certificate signed by unknown authority`.
+  - Com certificado autoassinado `CN=AWSDBSERVER01` configurado na instância
+    e `certificate=C:/.../sql01.pem` no DSN: `sqlserver_up 1`, 16/16 coletores,
+    scrape 0,30 s. No SQL, as 5 conexões do pool com `encrypt_option TRUE` e
+    `protocol_version 134217728` (0x08000000 = TDS 8.0).
+  - Testado do Mac com login falso (`Login failed` = TLS ok):
+    `certificate=<pem>` falha conectando por IP (sem IP SAN) e funciona com
+    `hostnameincertificate=AWSDBSERVER01`; `servercertificate=<pem>`
+    (comparação de bytes) funciona por IP.
+  - Documentado no README ("Encrypted connections").
 
 ---
 
@@ -1171,12 +1191,63 @@ equalizar as duas em 2022); depois 02 para 2025.
   2019. As séries de estado sumiram: ver HML-018.
 - Nenhum coletor com `success 0`.
 
-**Pendente**
+**Etapa 3 — upgrade da 01 para 2025 RTM (`17.0.1000.7`), 18:52–18:56**
 
-- [ ] Upgrade da 01 para 2025 (esperado: AG e mirroring voltam a sincronizar —
-  versão maior no espelho/secundária é suportado; log shipping quebra, já que a
-  02 no 2022 não restaura backups do 2025, até a 02 subir para 2025).
-- [ ] Upgrade da 02 para 2025, failback, `encrypt=strict`.
+- 18:47:06 reboot do Windows; 18:49:18 serviço do exporter sobe sozinho;
+  restarts do SQL 18:52–18:53 e 18:54–18:55; 18:55:50 versão nova,
+  `sqlserver_up 1`, 16/16 coletores. Nenhum coletor falhou.
+- Métricas da 01 (3 777 → 5 143 séries): wait types 1 027 → 1 475 (+209 sobre
+  o 2022), +15 memory clerks, os mesmos `model_msdb`/`model_replicatedmaster`.
+- AG: a `AlwaysOnDB` da 01 seguiu suspensa até o `SET HADR RESUME` manual
+  (18:59:00), depois synchronized; continua `RECOVERING` na 01 (secundária em
+  versão maior que a primária não é legível).
+- Log shipping quebrou como esperado: 19:00:15 `LSRestore` da 02 (2022) com
+  `last_run_status 0` e o tempo desde o último restore, que oscilava 0–180 s
+  (ciclo de 3 min), passou a crescer sem parar, acima do threshold.
+- Mirroring: o `MirrorDB` da 02 ficou preso no recovery. ERRORLOG da 02:
+  18:39:56 troca MIRROR → PRINCIPAL, "Converting database 'MirrorDB' from
+  version 904 to the current version 957" e parada no primeiro passo
+  (904 → 905): o passo gera log que precisa ser confirmado pelo espelho em
+  modo síncrono, e o espelho no 2019 não aplicava log do 2022. Threads
+  `DB MIRROR` ociosas em `DBMIRROR_EVENTS_QUEUE`; a 01 (sysadmin) via
+  `MIRROR` / `SUSPENDED`. `SET PARTNER RESUME` na 01 levou a sessão a
+  `SYNCHRONIZING`, mas a 02 só destravou no restart da etapa 4. Para um
+  rolling upgrade real: não fazer failover do mirroring para o parceiro
+  atualizado enquanto o outro estiver numa versão menor, ou suspender/
+  remover a sessão antes.
+
+**Etapa 4 — upgrade da 02 para 2025, failovers e failbacks**
+
+| Horário | Evento |
+|---------|--------|
+| 19:08:21 | failover do AG para a 01 (2025 como primária); `AlwaysOnDB` da 02 (2022) suspensa |
+| 19:17:51–19:21:51 | restarts do SQL na 02 durante o setup (sem reboot, sem restart do exporter) |
+| 19:18:41 | `blocking` com erro 983 na 02 (HML-020) |
+| 19:18:51 | `MirrorDB` da 02 em `RECOVERY_PENDING` |
+| 19:21:51 | 02 em `17.0.1000.7`; `MirrorDB` `ONLINE` como principal na 02, séries de estado de volta (`role 1`, `state 4`) |
+| 19:23:06 | failover do AG para a 02; `volumes` da 01 com timeout (HML-019) |
+| 19:24:21 | `LSRestore` volta a `last_run_status 1` (secundária do log shipping no 2025) |
+| 19:24:36 | `AlwaysOnDB` da 01 suspensa com `suspend_reason 1` (vinda do parceiro, típico de failover forçado) |
+| 19:24:51 | failback do mirroring para a 01: principal 2025, synchronized |
+| 19:28:10 | `SET HADR RESUME` na 01, `is_suspended 0` nas duas |
+
+- As duas em 2025: 01 5 129 / 02 5 136 séries, 1 475 wait types cada, scrape
+  0,29 s.
+
+**Cobertura final**
+
+| Papel | 2019 CU32 | 2022 RTM | 2025 RTM |
+|-------|-----------|----------|----------|
+| AG primária | ✓ | ✓ | ✓ |
+| AG secundária | ✓ | ✓ | ✓ |
+| Mirroring principal (`ONLINE`) | ✓ | — (preso no recovery) | ✓ |
+| Mirroring espelho | ✓ | ✓ | ✓ |
+| Log shipping primária | ✓ | — | ✓ |
+| Log shipping secundária | ✓ | ✓ | ✓ |
+
+O exporter nunca precisou ser reiniciado por causa de um upgrade e reconectou
+sozinho a cada restart do SQL; o serviço sobe sozinho após reboot. Falhas de
+coletor vistas: só as de HML-019 e HML-020, uma coleta cada.
 
 ---
 
@@ -1185,7 +1256,7 @@ equalizar as duas em 2022); depois 02 para 2025.
 - **Ambiente:** EC2 01 + 02, durante o HML-017 (principal 2022, espelho 2019)
 - **Encontrado em:** 2026-10-14 18:39
 - **Severidade:** média (alerta em `sqlserver_mirroring_state` não dispara)
-- **Status:** aberto
+- **Status:** resolvido (documentação, v0.5.0)
 
 **Sintoma**
 
@@ -1211,8 +1282,83 @@ vez de mudar de valor.
 **Proposta**
 
 Documentar no README um alerta por ausência, usando os performance counters
-(que continuam presentes para todo banco espelhado) como referência, por exemplo
-`max by (db_name) (sqlserver_mirroring_log_send_queue_kb) unless on (db_name) max by (db_name) (sqlserver_mirroring_state)`,
-e lembrar que `sqlserver_database_state{state="RECOVERING"}` também cobre o
-caso. Avaliar se vale emitir algo no coletor (ex.: estado "desconhecido" para
-bancos com counters e sem linha na view).
+(que continuam presentes para todo banco espelhado) como referência, e lembrar
+que `sqlserver_database_state{state="RECOVERING"}` também cobre o caso.
+
+**Evidência adicional (etapa 3 do HML-017)**
+
+Com a sessão `SUSPENDED`, só um sysadmin no espelho (01) via o estado; para o
+`usr_exporter` a 02 não retornava linha (banco em recovery) e a 01 retornava
+NULL (espelho sem sysadmin). Na falha mais séria, o estado sumiu nas duas
+pontas. Quando o `MirrorDB` voltou a `ONLINE` na 02 (19:21:51), as séries
+voltaram sozinhas.
+
+**Resolução**
+
+Documentado no README (seção Database mirroring), com a expressão testada no
+Prometheus (retornou o `MirrorDB` durante todo o período sem estado):
+`count by (db_name) (sqlserver_mirroring_log_send_queue_kb) unless on (db_name) count by (db_name) (sqlserver_mirroring_state)`.
+Não emitir um estado "desconhecido" no coletor: a expressão cobre o caso sem
+inventar um valor que o SQL Server não informa.
+
+---
+
+## HML-019 — `volumes` estoura o timeout de query quando um banco está trocando de estado
+
+- **Ambiente:** EC2 01 + 02, durante o HML-017
+- **Encontrado em:** 2026-10-14
+- **Severidade:** baixa (uma coleta parcial por evento)
+- **Status:** aberto
+
+**Observado**
+
+`volumes` com `success 0` duas vezes, sempre com ≈5 s de duração (timeout de
+query de 5 s):
+
+- 18:22:02 na 02, primeira coleta após o SQL subir no 2022 (bancos em recovery);
+- 19:23:06 na 01, no failover do AG (a `AlwaysOnDB` da 01 em transição).
+
+`sys.dm_os_volume_stats(database_id, file_id)` é aplicado a todos os arquivos
+de `sys.master_files` e espera enquanto algum banco está mudando de estado. O
+`scrape_timeout: 10s` (HML-013) absorveu os dois casos: o scrape levou ≈5,2 s,
+o Prometheus recebeu os dados parciais e a coleta seguinte já teve `success 1`.
+Bancos estáveis em `RECOVERING` (secundária ilegível) ou `RESTORING` não causaram
+falha.
+
+**Opções**
+
+Filtrar a query por `sys.databases.state IN (0, 1)` (ONLINE/RESTORING), o que
+reduz a janela mas não elimina a corrida se a transição começar durante a
+query. Ganho pequeno; decidir depois.
+
+---
+
+## HML-020 — `blocking` falha com erro 983 logo após o SQL Server subir (réplica do AG em `RESOLVING`)
+
+- **Ambiente:** EC2 02, durante o HML-017 (restart do setup do 2025)
+- **Encontrado em:** 2026-10-14 19:18:41
+- **Severidade:** baixa (uma coleta)
+- **Status:** em andamento (branch `chore/microsoft-go-mssqldb`)
+
+**Observado**
+
+```
+collector=blocking error="mssql: Unable to access availability database 'AlwaysOnDB'
+because the database replica is not in the PRIMARY or SECONDARY role. ... (983)"
+```
+
+Mesma query do HML-015 (`sys.dm_exec_requests`), com a réplica ainda
+resolvendo o papel logo após o SQL subir. O retry do HML-015 só reconhecia o 976.
+
+**Correção**
+
+`isAGDatabaseNotAccessible` reconhece 976 e 983; o teste de retry roda para os
+dois códigos. Mutação (remover o 983 do `case`) quebra
+`TestBlockingScrapeRequestsRetriesOnceOnAGNotAccessible/983`. O `RESOLVING`
+dura alguns segundos, então o retry imediato nem sempre o supera; reduz o
+ruído sem mudar o comportamento essencial.
+
+**Validação pendente**
+
+- [ ] `0.5.1-homolog` nas EC2: restart do SQL na secundária do AG sem
+  `success 0` no `blocking` (ou, se falhar, com o 983 já após o retry).
