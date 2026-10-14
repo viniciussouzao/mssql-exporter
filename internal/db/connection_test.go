@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	_ "github.com/denisenkom/go-mssqldb"
+	_ "github.com/microsoft/go-mssqldb"
 )
 
 // withActualOpts snapshots the package-level actualOpts before a test

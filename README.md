@@ -3,7 +3,7 @@
 Prometheus exporter for Microsoft SQL Server. It collects a handful of instance-level metrics and exposes them on an HTTP endpoint for Prometheus to scrape, following a similar structure and naming style to other official database exporters (e.g. `mysqld_exporter`).
 
 - Endpoint: `:9187/metrics`
-- Driver: [`denisenkom/go-mssqldb`](https://github.com/denisenkom/go-mssqldb)
+- Driver: [`microsoft/go-mssqldb`](https://github.com/microsoft/go-mssqldb)
 
 ## Features
 
