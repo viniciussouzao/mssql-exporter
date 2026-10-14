@@ -14,7 +14,7 @@ The exporter currently includes these collectors:
 - IO file stats: per-database file IO counters and stalls.
 - Wait stats: wait time and counts by wait type.
 - Memory clerks: memory usage by clerk type.
-- Backups: last backup timestamp (UTC, correct for servers in any time zone), duration and size per database.
+- Backups: last backup timestamp (UTC, correct for servers in any time zone), duration and size per database, counting only backups taken by the instance itself (restores recorded in `backupset`, e.g. on a log shipping secondary, are ignored).
 - TempDB: space usage and temp table activity.
 - Performance counters: batch requests, compilations, page life expectancy, buffer cache hit ratio, deadlocks, lock waits, user connections and more.
 - Databases: state, recovery model, data/log sizes and log usage per database.
@@ -23,6 +23,8 @@ The exporter currently includes these collectors:
 - SQL Agent jobs: enabled state, last run outcome, timestamp and duration.
 - Volumes: total/available disk space per volume hosting database files, as seen by SQL Server (works for remote monitoring).
 - Schedulers: runnable tasks (CPU pressure signal), active workers and work queue.
+- Database mirroring: role, state, safety level, witness state and send/redo queues per mirrored database (emits nothing when no database is mirrored).
+- Log shipping (opt-in): last backup/copy/restore timestamps, restore latency and alert thresholds from the log shipping monitor tables.
 
 ## Quick Start
 
@@ -65,11 +67,13 @@ Flags (mirroring the ergonomics of `mysqld_exporter`/`postgres_exporter`):
 ```
 --web.listen-address string    Address to listen on for the web interface and metrics. (default ":9187")
 --web.telemetry-path string    Path under which to expose metrics. (default "/metrics")
---collector.<name>             Enable/disable a SQL Server collector (all default to true).
+--collector.<name>             Enable/disable a SQL Server collector (all default to true
+                               except log_shipping).
                                Names: wait_stats, io_file_stats, sessions, server_info,
                                memory_clerks, backups, tempdb, perf_counters, databases,
-                               blocking, availability_groups, agent_jobs, volumes, schedulers.
-                               Example: --collector.backups=false
+                               blocking, availability_groups, agent_jobs, volumes, schedulers,
+                               database_mirroring, log_shipping.
+                               Example: --collector.backups=false, --collector.log_shipping
 --collector.os-collectors      Enable OS-level collectors (CPU, memory, disk).
 --config.file string           Path to an optional YAML config file.
 --web.config.file string       Path to an exporter-toolkit web config file enabling TLS and/or basic auth.
@@ -157,6 +161,16 @@ scrape (the other collectors are unaffected); either apply the grants above
 or disable it with `--collector.agent_jobs=false` if you don't monitor Agent
 jobs (e.g. environments where SQL Agent is disabled).
 
+The `log_shipping` collector is **disabled by default**. To enable it
+(`--collector.log_shipping` or `collectors: {log_shipping: true}`), also grant
+read access to the monitor tables on the primary and secondary instances:
+
+```sql
+USE msdb;
+GRANT SELECT ON dbo.log_shipping_monitor_primary TO [your_login];
+GRANT SELECT ON dbo.log_shipping_monitor_secondary TO [your_login];
+```
+
 Notes:
 
 - The `backups` collector reads `msdb.dbo.backupset`, which is readable by
@@ -178,8 +192,11 @@ The exporter reads from (among others):
 - `sys.dm_os_sys_memory`
 - `sys.dm_os_memory_clerks`
 - `sys.dm_os_performance_counters`
+- `sys.dm_os_waiting_tasks`
 - `sys.databases`
 - `msdb.dbo.backupset`
+- `sys.database_mirroring`
+- `msdb.dbo.log_shipping_monitor_primary` / `log_shipping_monitor_secondary` (log_shipping only)
 - `SERVERPROPERTY(...)`
 
 ## Availability & Self-Metrics
@@ -251,9 +268,13 @@ Metric names are stable and follow Prometheus best practices. Selected examples:
   - `sqlserver_database_log_used_percent{db_name="master"} 71`
 
 - Blocking
-  - `sqlserver_blocked_sessions 0`
+  - `sqlserver_blocked_sessions 0` (from `sys.dm_os_waiting_tasks`; a parallel
+    request waiting on its own session is not counted)
   - `sqlserver_blocked_max_wait_ms 0`
-  - `sqlserver_active_requests{status="running"} 3`
+  - `sqlserver_active_requests{status="running"} 3` (on an AG secondary,
+    `sys.dm_exec_requests` intermittently fails with error 976 while an
+    availability database is momentarily not readable; the collector retries
+    once before reporting the scrape as failed)
 
 - Availability Groups (only when Always On is enabled)
   - `sqlserver_hadr_replica_role{ag_name="ag1",replica_server="NODE1"} 1`
@@ -286,6 +307,52 @@ Metric names are stable and follow Prometheus best practices. Selected examples:
   sqlserver_agent_job_last_run_status == 0          # which jobs failed last run
   ```
 
+- Database mirroring (only for mirrored databases)
+  - `sqlserver_mirroring_info{db_name="app",partner_instance="NODE2"} 1`
+  - `sqlserver_mirroring_role{db_name="app"} 1` (1 = principal, 2 = mirror)
+  - `sqlserver_mirroring_state{db_name="app"} 4` (0 = suspended, 1 = disconnected,
+    2 = synchronizing, 3 = pending failover, 4 = synchronized,
+    5 = not synchronized, 6 = synchronized/failover possible)
+  - `sqlserver_mirroring_safety_level{db_name="app"} 2` (1 = off/async, 2 = full/sync)
+  - `sqlserver_mirroring_witness_state{db_name="app"} 1` (only with a witness;
+    1 = connected, 2 = disconnected)
+  - `sqlserver_mirroring_log_send_queue_kb{db_name="app"} 0`
+  - `sqlserver_mirroring_redo_queue_kb{db_name="app"} 0`
+    (both partners report both queues, each from its own view; the values
+    can differ slightly between them)
+  - `sqlserver_mirroring_log_sent_bytes_total`, `_log_received_bytes_total`,
+    `_redo_bytes_total`, `_transaction_delay_ms_total`, `_write_transactions_total`
+  - Role, state, safety level, witness state and `_info` come from the
+    **principal** only: on the mirror, `sys.database_mirroring` returns NULL
+    unless the login is sysadmin (a `GRANT SELECT` on the view doesn't
+    change that). The state is a property of the session, so the principal's
+    view is enough to alert on; after a failover the new principal reports
+    it. The mirror still exposes the queues and throughput counters.
+    Alert with `sqlserver_mirroring_state != 4` and on the principal's
+    `sqlserver_up`/`up` for a principal that is down.
+  - Average commit delay in high-safety mode:
+    `rate(sqlserver_mirroring_transaction_delay_ms_total[5m]) / rate(sqlserver_mirroring_write_transactions_total[5m])`
+
+- Log shipping (opt-in, `--collector.log_shipping`; timestamps are UTC)
+  - `sqlserver_log_shipping_primary_last_backup_timestamp_seconds{primary_server="NODE1",primary_database="app"} 1791892800`
+  - `sqlserver_log_shipping_primary_backup_threshold_seconds{...} 3600`
+  - `sqlserver_log_shipping_secondary_last_copied_timestamp_seconds{secondary_server="NODE2",secondary_database="app",primary_server="NODE1",primary_database="app"} 1791892860`
+  - `sqlserver_log_shipping_secondary_last_restored_timestamp_seconds{...} 1791892920`
+  - `sqlserver_log_shipping_secondary_last_restored_latency_seconds{...} 120` (minute precision)
+  - `sqlserver_log_shipping_secondary_restore_threshold_seconds{...} 2700`
+  - Restore falling behind, using the threshold configured in SQL Server:
+
+    ```promql
+    time() - sqlserver_log_shipping_secondary_last_restored_timestamp_seconds
+      > sqlserver_log_shipping_secondary_restore_threshold_seconds
+    ```
+
+  - On SQL Server 2019 RTM and CU1 the log shipping jobs run but never
+    update the monitor tables ([KB4537869](https://support.microsoft.com/help/4537869),
+    job history shows "Failed to convert parameter value from a SqlGuid to a
+    String"), so these timestamps stay frozen — the same values
+    `sp_help_log_shipping_monitor` reports. Fixed in CU2.
+
 - Volumes
   - `sqlserver_volume_total_bytes{volume_mount_point="C:\\"} 1962694664192`
   - `sqlserver_volume_available_bytes{volume_mount_point="C:\\"} 1846100799488`
@@ -312,6 +379,12 @@ Steps:
 4) Grafana UI: http://localhost:3000 (admin/admin by default; password set in `docker-compose.yml`).
 
 Add Prometheus (http://prometheus:9090 inside Compose network or http://localhost:9090 from your browser) as a Grafana data source and build dashboards from the metric names above.
+
+Set the job's `scrape_timeout` above the exporter's 5s query timeout (the
+example uses 10s). With a global `scrape_interval` below 10s, Prometheus
+defaults the timeout to that interval: a scrape that waits on SQL Server for
+the full 5s (e.g. while the instance is starting up) then fails as a whole
+(`up 0`, no samples) instead of returning the metrics that were collected.
 
 A ready-to-use dashboard is included in [`dashboards/`](dashboards/) — see
 [`dashboards/README.md`](dashboards/README.md) for import instructions.

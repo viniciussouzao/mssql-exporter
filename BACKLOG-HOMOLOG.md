@@ -8,16 +8,21 @@ simulando produção (AWS EC2 Windows/Linux e RDS for SQL Server).
 
 | ID | Título | Ambiente | Severidade | Status |
 |----|--------|----------|------------|--------|
-| HML-001 | Log `ERROR` quando `.env` não existe | EC2 Windows | baixa | em andamento |
-| HML-002 | `agent_jobs` falha sem permissão no msdb (ponto de atenção) | EC2 Windows | média | em andamento |
-| HML-003 | Coleta de disk I/O no Windows falha com `Invalid class` | EC2 Windows | média | em andamento |
-| HML-004 | Gaps intermitentes: `/metrics` retorna HTTP 500 por série duplicada em `volumes` | EC2 Windows | alta | em andamento (validado na EC2, aguardando merge) |
+| HML-001 | Log `ERROR` quando `.env` não existe | EC2 Windows | baixa | resolvido (v0.1.1) |
+| HML-002 | `agent_jobs` falha sem permissão no msdb (ponto de atenção) | EC2 Windows | média | resolvido na EC2 (repetir no RDS) |
+| HML-003 | Coleta de disk I/O no Windows falha com `Invalid class` | EC2 Windows | média | resolvido (v0.1.1) |
+| HML-004 | Gaps intermitentes: `/metrics` retorna HTTP 500 por série duplicada em `volumes` | EC2 Windows | alta | resolvido (v0.1.1) |
 | HML-005 | Disco C: da EC2 quase cheio durante carga no `StressDB` (ambiente) | EC2 Windows | alta | resolvido |
 | HML-006 | Exporter não roda como serviço Windows nativo (ponto de atenção) | EC2 Windows | média | resolvido (v0.2.0; `uninstall` no fim da homologação) |
-| HML-007 | Validação do coletor `availability_groups` em AG real (validação) | EC2 Windows (AG 01+02) | — | em andamento |
-| HML-008 | Fila de envio some do gráfico com a réplica suspensa; faltam `is_suspended` e `secondary_lag_seconds` | EC2 Windows (AG 01+02) | média | em andamento |
+| HML-007 | Validação do coletor `availability_groups` em AG real (validação) | EC2 Windows (AG 01+02) | — | resolvido (v0.3.0) |
+| HML-008 | Fila de envio some do gráfico com a réplica suspensa; faltam `is_suspended` e `secondary_lag_seconds` | EC2 Windows (AG 01+02) | média | resolvido (v0.3.0) |
 | HML-009 | Cenários de falha: banco offline, SQL parado, reboot, kill, backup diferencial (validação) | EC2 Windows (AG 01+02) | — | resolvido |
-| HML-010 | Timestamps de backup e Agent jobs tratam o horário local do SQL Server como UTC | EC2 Windows (UTC-3) | média | em andamento (validado, aguardando merge) |
+| HML-010 | Timestamps de backup e Agent jobs tratam o horário local do SQL Server como UTC | EC2 Windows (UTC-3) | média | resolvido (v0.3.1) |
+| HML-011 | Sem cobertura de database mirroring e log shipping | EC2 Windows (01+02) | média | em andamento |
+| HML-012 | `backups` reporta no secundário os backups restaurados do primário | EC2 Windows (01+02) | média | em andamento (validado, aguardando merge) |
+| HML-013 | Scrape falha inteiro (`up 0`) quando o SQL demora: `scrape_timeout` do exemplo = timeout do exporter | EC2 Windows (01+02) | baixa | em andamento |
+| HML-014 | Atualização do SQL Server 2019 RTM → CU32 + KB5128494 (validação) | EC2 Windows (01+02) | — | resolvido |
+| HML-015 | `blocking` falha esporadicamente na réplica secundária do AG (erro 976) | EC2 Windows (02) | baixa | em andamento |
 
 ---
 
@@ -26,7 +31,7 @@ simulando produção (AWS EC2 Windows/Linux e RDS for SQL Server).
 - **Ambiente:** EC2 Windows, release v0.1.0 (`mssql-exporter_0.1.0_windows_amd64.zip`)
 - **Encontrado em:** 2026-10-08
 - **Severidade:** baixa
-- **Status:** aberto
+- **Status:** resolvido (v0.1.1)
 
 **Reprodução**
 
@@ -78,7 +83,7 @@ malformado gera `WARN`. Falta validar na EC2.
 - **Ambiente:** EC2 Windows, release v0.1.0
 - **Encontrado em:** 2026-10-08
 - **Severidade:** média
-- **Status:** em andamento (resolvido no ambiente; pendências abaixo)
+- **Status:** resolvido na EC2 (v0.1.1; repetir a validação no RDS)
 
 **Observado**
 
@@ -156,7 +161,7 @@ failover e suspensão. Privilégio mínimo validado; não é preciso outro login
 - **Ambiente:** EC2 Windows, release v0.1.0, `collectors.os_collectors: true`
 - **Encontrado em:** 2026-10-08
 - **Severidade:** média
-- **Status:** aberto
+- **Status:** resolvido (v0.1.1)
 
 **Observado** (a cada scrape)
 
@@ -215,7 +220,7 @@ Validado na EC2 em 2026-10-08 com o build `0.1.1-homolog`: métricas `os_disk_*`
 - **Ambiente:** EC2 Windows, build `0.1.1-homolog`, com carga no `StressDB`
 - **Encontrado em:** 2026-10-08
 - **Severidade:** alta (o scrape inteiro é perdido)
-- **Status:** em andamento
+- **Status:** resolvido (v0.1.1)
 
 **Observado**
 
@@ -309,7 +314,7 @@ Arquivos removidos da EC2 para liberar espaço.
 - **Ambiente:** EC2 Windows (instâncias 01 e 02)
 - **Encontrado em:** 2026-10-08
 - **Severidade:** média
-- **Status:** em andamento
+- **Status:** resolvido (v0.2.0; `uninstall` no fim da homologação)
 
 **Observado**
 
@@ -380,7 +385,7 @@ Get-EventLog -LogName Application -Source mssql-exporter -Newest 10
   serviço nas duas réplicas
 - **Iniciado em:** 2026-10-12
 - **Tipo:** validação (primeira execução contra um Always On real)
-- **Status:** em andamento
+- **Status:** resolvido (v0.3.0)
 
 **Resultado inicial (AG recém-criado, sem carga)**
 
@@ -452,7 +457,7 @@ Get-EventLog -LogName Application -Source mssql-exporter -Newest 10
 - **Ambiente:** AG `MSSQL_AG` (01 primária, 02 secundária em `ASYNCHRONOUS_COMMIT`), v0.2.0
 - **Encontrado em:** 2026-10-12, durante o HML-007
 - **Severidade:** média (o problema mais grave do AG aparece como "sem dados")
-- **Status:** em andamento
+- **Status:** resolvido (v0.3.0)
 
 **Observado**
 
@@ -641,8 +646,7 @@ Banco `diff_test` (recovery SIMPLE) na 02, backup full e diferencial com
 - **Encontrado em:** 2026-10-12, revisando o código durante o HML-009 (item 5)
 - **Severidade:** média (alertas de "backup atrasado" e "job não rodou" erram
   pelo tamanho do fuso)
-- **Status:** em andamento (correção na branch `fix/timezone-utc-timestamps`,
-  build `0.3.2-homolog`; validado com as EC2 em UTC-3, aguardando merge)
+- **Status:** resolvido (v0.3.1)
 
 **Causa**
 
@@ -722,3 +726,345 @@ datas locais).
 Mudar o fuso da 02 (`tzutil /s "E. South America Standard Time"`), reiniciar o
 SQL Server, fazer um backup e comparar
 `sqlserver_backup_last_completed_timestamp_seconds` com o horário real.
+
+---
+
+## HML-011 — Sem cobertura de database mirroring e log shipping
+
+- **Ambiente:** EC2 01 + 02 (SQL Server 2019), fora do AG `MSSQL_AG`
+- **Encontrado em:** 2026-10-13, revisão de cobertura de HA/DR
+- **Severidade:** média (ambientes legados com essas features ficam sem monitoramento de HA/DR)
+- **Status:** em andamento (branch `feat/mirroring-log-shipping`)
+
+**Observado**
+
+O exporter só cobre Always On. Ambientes que ainda usam database mirroring
+(deprecated desde o 2012, mas presente nas versões atuais) ou log shipping
+não têm métrica de estado, fila ou atraso. Já aparecia indiretamente o
+último backup de log (`backups`) e o resultado dos jobs
+LSBackup/LSCopy/LSRestore (`agent_jobs`), mas não o atraso do secundário.
+
+**Correção proposta**
+
+- Novo coletor `database_mirroring` (ligado por padrão; sem grant novo):
+  - `sys.database_mirroring` (`mirroring_guid IS NOT NULL`): role, state,
+    safety level, witness state e o `partner_instance` numa métrica `_info`.
+  - Contadores `Database Mirroring` de `sys.dm_os_performance_counters`:
+    filas de envio/redo, bytes de log enviados/recebidos/refeitos,
+    Transaction Delay e Mirrored Write Transactions.
+- Novo coletor `log_shipping` (**desligado por padrão**,
+  `--collector.log_shipping`): `msdb.dbo.log_shipping_monitor_primary` e
+  `_secondary`. As colunas `*_date_utc` já são UTC (sem o problema do
+  HML-010). Precisa de `GRANT SELECT` nas duas tabelas.
+- Suporte a coletor desligado por padrão (`ScraperEnabledByDefault`), com o
+  default refletido na flag e no YAML.
+
+**Plano de validação — mirroring**
+
+1. Banco novo (ex.: `MirrorDB`, FULL recovery) espelhado entre 01 e 02 usando
+   o endpoint `DATABASE_MIRRORING` que o AG já usa.
+2. Conferir `role`, `state` = 4 e `safety_level` nas duas instâncias, e as
+   filas com carga no principal.
+3. Falhas: `SET PARTNER SUSPEND` / `RESUME`, `SAFETY OFF` (async), parar o SQL
+   do espelho (state 1), failover manual (`SET PARTNER FAILOVER`, troca de role).
+4. Confirmar que o `AlwaysOnDB` (do AG) **não** aparece no coletor.
+5. Conferir se `transaction_delay_ms_total` e `write_transactions_total` são
+   monotônicos (tipo cumulativo no DMV).
+
+**Validação 1 (2026-10-13, `0.4.0-homolog`, `MirrorDB` 01 → 02, SAFETY FULL, sem witness)**
+
+| Métrica | 01 (principal) | 02 (espelho) |
+|---|---|---|
+| role / state / safety | 1 / 4 / 2 | **sem série** |
+| `mirroring_info` | partner = AWSDBSERVER02 | **sem série** |
+| log sent / received (bytes) | 69632 / 0 | 0 / 69632 |
+| redo bytes | 0 | 81920 |
+| filas send / redo (KB) | 0 / 0 | 0 / 0 |
+
+- [x] `database_mirroring` com `success 1` nas duas; `AlwaysOnDB` (AG) fora
+  do coletor.
+- [x] Contadores coerentes com o papel de cada lado.
+- [ ] **Witness:** sem witness o principal reportou `witness_state 0`
+  (unknown) — a documentação diz NULL. Na prática vem 0 com
+  `mirroring_witness_name` vazio. **Correção (`0.4.1-homolog`):** só emitir
+  quando `mirroring_witness_name <> ''`. O caso com witness não é validado
+  no lab (precisaria de uma terceira instância).
+- [x] **Espelho sem estado (limitação, não será corrigida):** na 02 o
+  `usr_exporter` vê a linha de `MirrorDB` com todas as colunas `mirroring_*`
+  NULL. A documentação confirma: valores no espelho só para **sysadmin**.
+  Testado `GRANT SELECT ON sys.database_mirroring` com usuário no master:
+  continua NULL. Decisão: não exigir sysadmin; o estado é da sessão e o
+  principal o reporta (inclusive "disconnected"), e depois de um failover o
+  novo principal assume. Documentado no README.
+
+**Validação 2 — carga no `MirrorDB` (2026-10-13 11:50–11:54, `0.4.1-homolog`)**
+
+| Horário | send queue 01 / 02 | redo queue 01 / 02 | write tx (acum.) | delay ms (acum.) | log usado 01 | state |
+|---|---|---|---|---|---|---|
+| 11:49:47 | 0 / 0 | 0 / 0 | 1 | 1 | 11% | 4 |
+| 11:51:47 | 700 MB / 652 MB | 0 / 0 | 22 | 98 424 | 100% | 4 |
+| 11:52:17 | 96 MB / 352 MB | 286 MB / 159 MB | 23 | 129 851 | 96% | 4 |
+| 11:52:32 | 0 / 0 | 0 / 0 | 28 | 163 782 | 96% | 4 |
+| 11:53:32 | 0 / 0 | 0 / 0 | 160 029 | 440 625 | 99% | 4 |
+
+- [x] Filas, throughput (pico de ~23 MB/s enviado pela 01 e ~19 MB/s
+  recebido/refeito pela 02) e transações acompanharam a carga.
+- [x] `transaction_delay_ms_total` e `write_transactions_total` monotônicos
+  (`resets()` = 0): `CounterValue` correto.
+- [x] Delay médio coerente com o tipo de carga: ~37 s por transação na fase
+  de poucas transações grandes (11:50–11:52, 700 MB de log em ~7 commits) e
+  ~1,7 ms na fase de muitas transações pequenas (11:52:47 em diante).
+- [x] **Ajuste de documentação:** as duas réplicas reportam as duas filas
+  (cada uma pela sua visão), e não só o principal (send) / o espelho (redo)
+  como estava no help e no README. Corrigido no help, README e dashboard.
+- Observação de ambiente: o log do `MirrorDB` na 01 ficou em 96–100% (FULL
+  recovery sem backup de log).
+
+**Validação 3 — SUSPEND com carga (11:58) e RESUME (12:00)**
+
+| Horário | state (01) | send queue 01 / 02 | write tx (acum.) | log usado 01 |
+|---|---|---|---|---|
+| 11:58:08 | 4 | 0 / 0 | 480 035 | 2% |
+| 11:58:23 | **0** (suspended) | 0 / 0 | 480 035 | 2% |
+| 11:59:23 | 0 | 1,4 GB / 1,7 GB | 480 035 | 54% |
+| 12:00:38 | 0 | 3,3 GB / 3,2 GB | 480 035 | 99% |
+| 12:00:53 | **2** (synchronizing) | 3,1 GB / 2,9 GB | 480 035 | 99% |
+
+- [x] SUSPEND visível em 15 s (state 0) e a fila de envio crescendo nas duas
+  visões. Diferente do AG (HML-008), a fila **não** some enquanto suspenso.
+- [x] `write_transactions_total` e `transaction_delay_ms_total` param de
+  crescer enquanto suspenso (nenhuma transação espera o espelho), então o
+  painel de delay médio fica vazio nesse período — esperado.
+- [x] RESUME: state 2 e a fila drenando (~9 MB/s de redo na 02).
+- O log do `MirrorDB` na 01 cresceu para 3,3 GB durante o suspend (não
+  trunca até o espelho receber).
+
+- [x] Ressincronizado às 12:02:31 (state 4): ~3,3 GB drenados em ~2 min,
+  com pico de ~43 MB/s de redo na 02.
+
+**Validação 4 — SQL Server da 02 parado (12:03)**
+
+| Horário | state (01) | `up` 02 | `sqlserver_up` 02 | `database_mirroring` 01 |
+|---|---|---|---|---|
+| 12:03:01 | 4 | 1 | 1 | success 1 |
+| 12:03:16 | **1** (disconnected) | 1 | 1 | success 1 |
+| 12:03:31 | 1 | 1 | **0** | success 1 |
+
+- [x] O principal reporta a desconexão em até 15 s; o exporter da 02 segue
+  no ar com `sqlserver_up 0` e sem as séries de mirroring.
+
+**Validação 5 — SQL da 02 de volta (12:04) e failover manual (12:05)**
+
+| Horário | `sqlserver_up` 02 | role / state 01 | role / state 02 | `mirroring_info` |
+|---|---|---|---|---|
+| 12:04:24 | 0 | 1 / **4** | — | 01 → partner 02 |
+| 12:04:39 | **1** | 1 / 4 | — | 01 → partner 02 |
+| 12:05:24 | 1 | 1 / 4 (último scrape antes) | **1 / 4**, safety 2 | — |
+| 12:05:39 | 1 | — (vira espelho) | 1 / 4 | 02 → partner 01 |
+
+- [x] Reconexão: state volta a 4 sem passar visivelmente por 2 (pouco log
+  pendente).
+- [x] `SET PARTNER FAILOVER`: a 02 passa a reportar role, state, safety e
+  `_info` (partner AWSDBSERVER01); a 01 fica só com os contadores, e
+  `sqlserver_database_state` mostra 02 ONLINE / 01 RESTORING.
+- Por um scrape (12:05:24) as duas aparecem como principal: é só a defasagem
+  entre os scrapes das duas instâncias (a 01 foi lida antes do failover).
+  Em alertas de "dois principais", usar `for:` de pelo menos 1 min.
+
+**Resultado:** coletor `database_mirroring` validado (carga, suspend/resume,
+parceiro fora do ar e failover). Pendente só o caso com witness (sem
+terceira instância no lab).
+
+**Validação 6 — log shipping `LogShipDB` 01 → 02 (2026-10-14, `0.4.2-homolog`)**
+
+- [x] Grants nas tabelas `log_shipping_monitor_*` e `log_shipping: true`:
+  `success 1` nas duas.
+- [x] Thresholds corretos: backup 3600 s (01), restore 2700 s (02).
+- [ ] **Timestamps congelados no horário da configuração (15:43:16)** apesar
+  do `LSBackup` gerar `.trn` a cada 3 min e de `LSCopy`/`LSRestore` rodarem.
+  O próprio `sp_help_log_shipping_monitor` e até `log_shipping_primary_databases`
+  (`last_backup_file`/`date` NULL) concordam: o exporter reflete o SQL Server.
+- **Causa (ambiente):** bug do SQL Server 2019 RTM/CU1
+  ([KB4537869](https://support.microsoft.com/help/4537869)) — o
+  `sqllogship` não grava histórico/monitor: "Could not log history/error
+  message ... Failed to convert parameter value from a SqlGuid to a String".
+  As EC2 estão em 15.0.2000.5 (RTM). Corrigido no CU2. Documentado no README.
+
+**Validação 7 — log shipping depois do CU32 (2026-10-14 16:22–16:31, `0.4.2-homolog`)**
+
+- [x] Timestamps andando após o patch: `primary_last_backup` 16:22:00,
+  `secondary_last_copied` / `last_restored` 16:18:07, latência 240 s.
+- [x] **`LSRestore` desabilitado + threshold de restore em 2 min:** às 16:30,
+  `last_restored` parado em 16:27:01 enquanto `last_copied` seguiu (16:30:01);
+  `restore_threshold_seconds` = 120 refletiu a mudança; a expressão de alerta
+  `time() - last_restored > restore_threshold` disparou (239 s).
+- [x] **Grant removido em `log_shipping_monitor_primary` na 01:**
+  `success{collector="log_shipping"} 0` só nesse coletor; as séries do
+  primário somem e os demais coletores seguem com `success 1`.
+
+**Plano de validação — log shipping**
+
+1. Grants nas tabelas `log_shipping_monitor_*` para o `usr_exporter` nas duas
+   instâncias e `log_shipping: true` no `config.yml`.
+2. Log shipping de um terceiro banco (ex.: `LSDB`) da 01 para a 02.
+3. Conferir os timestamps (UTC) contra os jobs e a latência de restore.
+4. Falhas: desabilitar o job de restore e ver `time() - last_restored` passar
+   do threshold; remover o grant e ver `success 0` só no `log_shipping`.
+
+---
+
+## HML-012 — `backups` reporta no secundário os backups restaurados do primário
+
+- **Ambiente:** EC2 02 (secundário do log shipping `LogShipDB` e espelho do `MirrorDB`), `0.4.1-homolog`
+- **Encontrado em:** 2026-10-14, durante o HML-011
+- **Severidade:** média (o secundário parece ter backup recente sem nunca ter feito um)
+- **Status:** em andamento (branch `feat/mirroring-log-shipping`)
+
+**Observado**
+
+A 02 reportava `sqlserver_backup_last_completed_timestamp_seconds{backup_type="full"}`
+para `LogShipDB` (2026-10-14 15:43:15) e `MirrorDB` (2026-10-13 11:20:40),
+exatamente os mesmos segundos dos backups feitos na 01. Consulta no
+`msdb.dbo.backupset` da 02:
+
+| server_name | database_name | type | backup_finish_date |
+|---|---|---|---|
+| AWSDBSERVER01 | MirrorDB | D | 2026-10-13 11:20:40 |
+| AWSDBSERVER01 | LogShipDB | D | 2026-10-14 15:43:15 |
+
+**Causa**
+
+O `RESTORE` grava o backup restaurado no `backupset` local, com o
+`server_name` de origem. Com o log shipping rodando, cada restore de log
+apareceria na 02 como um backup de log recente, escondendo que o secundário
+não tem backup próprio (e mascarando um alerta de "sem backup" após um
+failover/role change).
+
+**Correção**
+
+- Filtro `AND server_name = @@SERVERNAME` na subquery do `backupset`: só
+  conta backup feito pela própria instância. Sem grant novo.
+- Regex do teste fixa o filtro; teste de mutação: removendo-o, 5 testes falham.
+- README atualizado.
+
+**Validação (2026-10-14 15:58, `0.4.2-homolog`)**
+
+- [x] Na 02, as séries de `backups` de `LogShipDB` e `MirrorDB` sumiram (não
+  há backup local).
+- [x] Na 01, nada mudou: `LogShipDB` full 15:43:15 / log 15:58:00 e
+  `MirrorDB` full / log continuam.
+
+---
+
+## HML-013 — Scrape falha inteiro (`up 0`) quando o SQL demora: `scrape_timeout` do exemplo = timeout do exporter
+
+- **Ambiente:** Prometheus local (`prometheus.yml` do repositório), EC2 02, durante o HML-014
+- **Encontrado em:** 2026-10-14
+- **Severidade:** baixa (só em instantes de lentidão do SQL; perde o scrape inteiro em vez de parte)
+- **Status:** em andamento
+
+**Observado**
+
+Na 02, dois scrapes falharam (16:12:30 e 16:15:15) com `up 0`, 0 amostras e
+duração de exatamente 5,0 s, enquanto o exporter seguia rodando (mesmo
+`process_start_time_seconds`). O primeiro coincide com o SQL voltando do CU.
+
+**Causa**
+
+O `prometheus.yml` de exemplo tem `global.scrape_interval: 5s`; sem
+`scrape_timeout` explícito, o Prometheus usa 5 s também para os jobs do
+exporter (confirmado em `/api/v1/status/config`). O exporter usa 5 s
+(`ConnTimeout`) como prazo do ping + coletores: se o SQL demora, a resposta
+chega depois de 5 s e o Prometheus descarta tudo.
+
+**Correção**
+
+- `prometheus.yml` de exemplo: `scrape_timeout: 10s` no job `sqlserver_exporter`
+  (aplicado também no job local de homologação).
+- README: orientação de manter o `scrape_timeout` acima de 5 s.
+- Possível melhoria futura: o exporter limitar o próprio prazo pelo header
+  `X-Prometheus-Scrape-Timeout-Seconds`, devolvendo dados parciais em vez de
+  estourar o timeout do Prometheus.
+
+---
+
+## HML-014 — Atualização do SQL Server 2019 RTM → CU32 + KB5128494 (validação)
+
+- **Ambiente:** EC2 01 + 02, `0.4.2-homolog`; patch em paralelo nas duas, sem failover
+- **Data:** 2026-10-14 16:06–16:22
+- **Status:** resolvido
+
+**Linha do tempo (Prometheus)**
+
+| Horário | 01 | 02 |
+|---|---|---|
+| 16:10 | `sqlserver_up 0` (CU32) | `sqlserver_up 0` (CU32) |
+| 16:12:45–16:13 | `sqlserver_up 1`, versão **15.0.4430.1** | `sqlserver_up 1`, versão **15.0.4430.1** |
+| 16:12:30 / 16:15:15 | — | scrape falhou por timeout (HML-013) |
+| 16:16:31 | reboot (`os_boot_time_seconds`), `up 0` | reboot, `up 0` |
+| 16:18:42 | exporter sobe (início atrasado) | exporter sobe |
+| 16:19:30–16:21:45 | `sqlserver_up 0` (KB5128494) | `sqlserver_up 0` (KB5128494) |
+| 16:21:45 | versão **15.0.4500.2** | versão **15.0.4500.2** |
+
+- [x] `sqlserver_product_version` registrou as duas trocas de versão nas duas
+  instâncias (uma série por versão, sem sobreposição).
+- [x] Exporter sobreviveu às paradas do SQL (sem reinício) e voltou sozinho
+  após o reboot; `sqlserver_instance` resolvido corretamente (o SQL estava no
+  ar na partida, às 16:18:42).
+- [x] Depois do patch: nenhum coletor com `success 0`; AG `MSSQL_AG`
+  saudável (sync 2, health 2); `MirrorDB` com 01 principal, state 4.
+- [x] Log shipping voltou a gravar monitor (KB4537869 corrigido):
+  `primary_last_backup` 16:22:00, `secondary_last_copied`/`last_restored`
+  16:18:07, latência 240 s.
+
+---
+
+## HML-015 — `blocking` falha esporadicamente na réplica secundária do AG (erro 976)
+
+- **Ambiente:** EC2 02 (secundária do `MSSQL_AG`, `ALLOW_CONNECTIONS = ALL`), `0.4.2-homolog`
+- **Encontrado em:** 2026-10-14, durante o HML-011
+- **Severidade:** baixa (≈1,4% dos scrapes da 02 com `success 0` no `blocking`; a 01 nunca falhou)
+- **Status:** em andamento (branch `feat/mirroring-log-shipping`)
+
+**Observado**
+
+`sqlserver_scrape_collector_success{collector="blocking"} 0` na 02 em scrapes
+isolados (15:22, 15:37, 15:39, 16:05, 16:38). Event Log:
+
+```
+collector=blocking error="mssql: The target database, 'AlwaysOnDB', is participating
+in an availability group and is currently not accessible for queries. ..."
+```
+
+A mensagem sem prefixo vem do `rows.Err()` de
+`SELECT status, COUNT(*) FROM sys.dm_exec_requests GROUP BY status`: a DMV é
+de servidor e a conexão está no `master` (`database=master` no DSN), mas o
+SQL Server aborta a leitura no meio. Hipótese: checagem de visibilidade por
+request que toca o `AlwaysOnDB` quando ele está momentaneamente ilegível na
+secundária. O mesmo erro é conhecido em jobs de snapshot de sessão em
+ambiente de DR (relato do usuário). Um loop de 300 execuções da query como
+`usr_exporter` (16:40–16:45) não reproduziu; a causa exata ficou em aberto.
+
+**Correção (decisão: waiting_tasks + retry)**
+
+- `sqlserver_blocked_sessions` / `_max_wait_ms` passam a vir de
+  `sys.dm_os_waiting_tasks` (sem contexto de banco):
+  `COUNT(DISTINCT session_id)`, `MAX(wait_duration_ms)`,
+  `blocking_session_id > 0 AND blocking_session_id <> session_id`.
+- `sqlserver_active_requests{status}` continua em `dm_exec_requests`, com
+  **uma** nova tentativa só para o erro 976 (detectado pelo
+  `SQLErrorNumber()` do driver). As contagens são acumuladas e emitidas só
+  no fim, para a tentativa que falhou não gerar séries duplicadas (HML-004).
+  Se falhar de novo, `success 0` como antes.
+- Testes: retry com sucesso, 976 duas vezes, outro erro sem retry. Teste de
+  mutação: sem o retry, 2 testes falham; com retry para qualquer erro, 3.
+
+**Validação (2026-10-14, `0.4.3-homolog`)**
+
+- [x] Bloqueio provocado na 01 (`##blk`, 16:56–17:01): `blocked_sessions`
+  0 → 1 → 0 e `blocked_max_wait_ms` subindo ~30 s a cada 30 s (7 964 →
+  277 967 ms) até o `ROLLBACK`.
+- [ ] 02 sem `success 0` no `blocking` por ~1 h (em observação desde 17:03).
+- Obs.: depois da atualização, o serviço da 02 ficou parado (16:55–17:02)
+  até ser iniciado manualmente — o `service start` não chegou a subir o
+  processo; sem indício de crash do exporter.

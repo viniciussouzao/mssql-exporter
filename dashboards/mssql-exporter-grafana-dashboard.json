@@ -4752,6 +4752,1759 @@
         "x": 0,
         "y": 141
       },
+      "id": 65,
+      "panels": [],
+      "title": "Database Mirroring",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "id": 66,
+      "type": "table",
+      "title": "Mirroring Session",
+      "description": "Role, state, transaction safety and witness per mirrored database, as reported by the principal. On the mirror, sys.database_mirroring is NULL unless the login is sysadmin, so the mirror usually has no row here. Aggregated across every exporter (a mirror without sysadmin reports no session state), so the instance selector does not apply here.",
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 142
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "noValue": "No mirrored databases"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Role"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "1": {
+                        "text": "PRINCIPAL",
+                        "color": "blue",
+                        "index": 0
+                      },
+                      "2": {
+                        "text": "MIRROR",
+                        "color": "purple",
+                        "index": 1
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "basic"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "State"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "0": {
+                        "text": "SUSPENDED",
+                        "color": "red",
+                        "index": 0
+                      },
+                      "1": {
+                        "text": "DISCONNECTED",
+                        "color": "red",
+                        "index": 1
+                      },
+                      "2": {
+                        "text": "SYNCHRONIZING",
+                        "color": "yellow",
+                        "index": 2
+                      },
+                      "3": {
+                        "text": "PENDING FAILOVER",
+                        "color": "orange",
+                        "index": 3
+                      },
+                      "4": {
+                        "text": "SYNCHRONIZED",
+                        "color": "green",
+                        "index": 4
+                      },
+                      "5": {
+                        "text": "NOT SYNCHRONIZED",
+                        "color": "red",
+                        "index": 5
+                      },
+                      "6": {
+                        "text": "SYNCHRONIZED",
+                        "color": "green",
+                        "index": 6
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "basic"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Safety"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "0": {
+                        "text": "UNKNOWN",
+                        "color": "orange",
+                        "index": 0
+                      },
+                      "1": {
+                        "text": "OFF (async)",
+                        "color": "yellow",
+                        "index": 1
+                      },
+                      "2": {
+                        "text": "FULL (sync)",
+                        "color": "green",
+                        "index": 2
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "basic"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Witness"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "0": {
+                        "text": "UNKNOWN",
+                        "color": "orange",
+                        "index": 0
+                      },
+                      "1": {
+                        "text": "CONNECTED",
+                        "color": "green",
+                        "index": 1
+                      },
+                      "2": {
+                        "text": "DISCONNECTED",
+                        "color": "red",
+                        "index": 2
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "basic"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "cellHeight": "sm",
+        "showHeader": true,
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "max by (sqlserver_instance, db_name, partner_instance) (sqlserver_mirroring_info)",
+          "legendFormat": "__auto",
+          "refId": "A",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "max by (sqlserver_instance, db_name) (sqlserver_mirroring_role)",
+          "legendFormat": "__auto",
+          "refId": "B",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "max by (sqlserver_instance, db_name) (sqlserver_mirroring_state)",
+          "legendFormat": "__auto",
+          "refId": "C",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "max by (sqlserver_instance, db_name) (sqlserver_mirroring_safety_level)",
+          "legendFormat": "__auto",
+          "refId": "D",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "max by (sqlserver_instance, db_name) (sqlserver_mirroring_witness_state)",
+          "legendFormat": "__auto",
+          "refId": "E",
+          "format": "table",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "includeByName": {
+              "sqlserver_instance": true,
+              "db_name": true,
+              "partner_instance": true,
+              "Value #B": true,
+              "Value #C": true,
+              "Value #D": true,
+              "Value #E": true
+            },
+            "indexByName": {
+              "sqlserver_instance": 0,
+              "db_name": 1,
+              "partner_instance": 2,
+              "Value #B": 3,
+              "Value #C": 4,
+              "Value #D": 5,
+              "Value #E": 6
+            },
+            "renameByName": {
+              "sqlserver_instance": "Instance",
+              "db_name": "Database",
+              "partner_instance": "Partner",
+              "Value #B": "Role",
+              "Value #C": "State",
+              "Value #D": "Safety",
+              "Value #E": "Witness"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "id": 67,
+      "type": "state-timeline",
+      "title": "Mirroring Role & State",
+      "description": "Role swaps show failovers; red = suspended / disconnected / not synchronized. Aggregated across every exporter (a mirror without sysadmin reports no session state), so the instance selector does not apply here.",
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 142
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "fillOpacity": 80,
+            "lineWidth": 0
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "A"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "1": {
+                        "text": "PRINCIPAL",
+                        "color": "blue",
+                        "index": 0
+                      },
+                      "2": {
+                        "text": "MIRROR",
+                        "color": "purple",
+                        "index": 1
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "0": {
+                        "text": "SUSPENDED",
+                        "color": "red",
+                        "index": 0
+                      },
+                      "1": {
+                        "text": "DISCONNECTED",
+                        "color": "red",
+                        "index": 1
+                      },
+                      "2": {
+                        "text": "SYNCHRONIZING",
+                        "color": "yellow",
+                        "index": 2
+                      },
+                      "3": {
+                        "text": "PENDING FAILOVER",
+                        "color": "orange",
+                        "index": 3
+                      },
+                      "4": {
+                        "text": "SYNCHRONIZED",
+                        "color": "green",
+                        "index": 4
+                      },
+                      "5": {
+                        "text": "NOT SYNCHRONIZED",
+                        "color": "red",
+                        "index": 5
+                      },
+                      "6": {
+                        "text": "SYNCHRONIZED",
+                        "color": "green",
+                        "index": 6
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showValue": "never",
+        "mergeValues": true,
+        "alignValue": "left",
+        "rowHeight": 0.85,
+        "legend": {
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "max by (sqlserver_instance, db_name) (sqlserver_mirroring_role)",
+          "legendFormat": "role {{sqlserver_instance}} / {{db_name}}",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "max by (sqlserver_instance, db_name) (sqlserver_mirroring_state)",
+          "legendFormat": "state {{sqlserver_instance}} / {{db_name}}",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "deckbytes",
+          "noValue": "No data"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 149
+      },
+      "id": 68,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "max by (sqlserver_instance, db_name) (sqlserver_mirroring_log_send_queue_kb)",
+          "legendFormat": "{{sqlserver_instance}} / {{db_name}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Mirroring Log Send Queue",
+      "type": "timeseries",
+      "description": "Log not yet sent to the mirror (grows while suspended, disconnected or during large transactions). Both partners report it, each from its own view. Aggregated across every exporter (a mirror without sysadmin reports no session state), so the instance selector does not apply here."
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "deckbytes",
+          "noValue": "No data"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 149
+      },
+      "id": 69,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "max by (sqlserver_instance, db_name) (sqlserver_mirroring_redo_queue_kb)",
+          "legendFormat": "{{sqlserver_instance}} / {{db_name}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Mirroring Redo Queue",
+      "type": "timeseries",
+      "description": "Log received but not yet redone on the mirror. Both partners report it, each from its own view. Aggregated across every exporter (a mirror without sysadmin reports no session state), so the instance selector does not apply here."
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "ms",
+          "noValue": "No data"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 149
+      },
+      "id": 70,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sum by (sqlserver_instance, db_name) (rate(sqlserver_mirroring_transaction_delay_ms_total[5m])) / (sum by (sqlserver_instance, db_name) (rate(sqlserver_mirroring_write_transactions_total[5m])) > 0)",
+          "legendFormat": "{{sqlserver_instance}} / {{db_name}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Mirroring Avg Commit Delay",
+      "type": "timeseries",
+      "description": "Average time each transaction waited for the mirror to acknowledge the commit (high-safety mode; ~0 when SAFETY OFF). Empty without write transactions. Aggregated across every exporter (a mirror without sysadmin reports no session state), so the instance selector does not apply here."
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "Bps",
+          "noValue": "No data"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 157
+      },
+      "id": 71,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sum by (sqlserver_instance, db_name) (rate(sqlserver_mirroring_log_sent_bytes_total[5m]))",
+          "legendFormat": "sent {{sqlserver_instance}} / {{db_name}}",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sum by (sqlserver_instance, db_name) (rate(sqlserver_mirroring_log_received_bytes_total[5m]))",
+          "legendFormat": "received {{sqlserver_instance}} / {{db_name}}",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sum by (sqlserver_instance, db_name) (rate(sqlserver_mirroring_redo_bytes_total[5m]))",
+          "legendFormat": "redone {{sqlserver_instance}} / {{db_name}}",
+          "refId": "C"
+        }
+      ],
+      "title": "Mirroring Log Throughput",
+      "type": "timeseries",
+      "description": "Log sent by the principal, received and redone by the mirror. Aggregated across every exporter (a mirror without sysadmin reports no session state), so the instance selector does not apply here."
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "ops",
+          "noValue": "No data"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 157
+      },
+      "id": 72,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sum by (sqlserver_instance, db_name) (rate(sqlserver_mirroring_write_transactions_total[5m]))",
+          "legendFormat": "{{sqlserver_instance}} / {{db_name}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Mirrored Write Transactions/sec",
+      "type": "timeseries",
+      "description": "Transactions that wrote to the mirrored database and waited for the log to be sent to the mirror. Aggregated across every exporter (a mirror without sysadmin reports no session state), so the instance selector does not apply here."
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 166
+      },
+      "id": 73,
+      "panels": [],
+      "title": "Log Shipping",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "id": 74,
+      "type": "table",
+      "title": "Log Shipping Primary",
+      "description": "Time since the last log backup taken by the log shipping backup job vs. the alert threshold configured in SQL Server. Requires the opt-in log_shipping collector (--collector.log_shipping). Values come from the log shipping monitor tables of the primary, secondary and monitor server; the freshest timestamp wins, so the instance selector does not apply here.",
+      "gridPos": {
+        "h": 7,
+        "w": 10,
+        "x": 0,
+        "y": 167
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "noValue": "No log shipping primary data"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Since last backup"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Threshold"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Status"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "0": {
+                        "text": "OK",
+                        "color": "green",
+                        "index": 0
+                      },
+                      "1": {
+                        "text": "BEHIND",
+                        "color": "red",
+                        "index": 1
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "basic"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "cellHeight": "sm",
+        "showHeader": true,
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "time() - max by (primary_server, primary_database) (sqlserver_log_shipping_primary_last_backup_timestamp_seconds)",
+          "legendFormat": "__auto",
+          "refId": "A",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "max by (primary_server, primary_database) (sqlserver_log_shipping_primary_backup_threshold_seconds)",
+          "legendFormat": "__auto",
+          "refId": "B",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "(time() - max by (primary_server, primary_database) (sqlserver_log_shipping_primary_last_backup_timestamp_seconds)) > bool max by (primary_server, primary_database) (sqlserver_log_shipping_primary_backup_threshold_seconds)",
+          "legendFormat": "__auto",
+          "refId": "C",
+          "format": "table",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "includeByName": {
+              "primary_server": true,
+              "primary_database": true,
+              "Value #A": true,
+              "Value #B": true,
+              "Value #C": true
+            },
+            "indexByName": {
+              "primary_server": 0,
+              "primary_database": 1,
+              "Value #A": 2,
+              "Value #B": 3,
+              "Value #C": 4
+            },
+            "renameByName": {
+              "primary_server": "Primary",
+              "primary_database": "Database",
+              "Value #A": "Since last backup",
+              "Value #B": "Threshold",
+              "Value #C": "Status"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "id": 75,
+      "type": "table",
+      "title": "Log Shipping Secondary",
+      "description": "Time since the last copy and restore on the secondary, latency of the last restored backup and the restore alert threshold configured in SQL Server. Requires the opt-in log_shipping collector (--collector.log_shipping). Values come from the log shipping monitor tables of the primary, secondary and monitor server; the freshest timestamp wins, so the instance selector does not apply here.",
+      "gridPos": {
+        "h": 7,
+        "w": 14,
+        "x": 10,
+        "y": 167
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "noValue": "No log shipping secondary data"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Since last copy"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Since last restore"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Restore latency"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Threshold"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Status"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "0": {
+                        "text": "OK",
+                        "color": "green",
+                        "index": 0
+                      },
+                      "1": {
+                        "text": "BEHIND",
+                        "color": "red",
+                        "index": 1
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "basic"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "cellHeight": "sm",
+        "showHeader": true,
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "time() - max by (secondary_server, secondary_database, primary_server, primary_database) (sqlserver_log_shipping_secondary_last_copied_timestamp_seconds)",
+          "legendFormat": "__auto",
+          "refId": "A",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "time() - max by (secondary_server, secondary_database, primary_server, primary_database) (sqlserver_log_shipping_secondary_last_restored_timestamp_seconds)",
+          "legendFormat": "__auto",
+          "refId": "B",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "min by (secondary_server, secondary_database, primary_server, primary_database) (sqlserver_log_shipping_secondary_last_restored_latency_seconds)",
+          "legendFormat": "__auto",
+          "refId": "C",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "max by (secondary_server, secondary_database, primary_server, primary_database) (sqlserver_log_shipping_secondary_restore_threshold_seconds)",
+          "legendFormat": "__auto",
+          "refId": "D",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "(time() - max by (secondary_server, secondary_database, primary_server, primary_database) (sqlserver_log_shipping_secondary_last_restored_timestamp_seconds)) > bool max by (secondary_server, secondary_database, primary_server, primary_database) (sqlserver_log_shipping_secondary_restore_threshold_seconds)",
+          "legendFormat": "__auto",
+          "refId": "E",
+          "format": "table",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "includeByName": {
+              "secondary_server": true,
+              "secondary_database": true,
+              "primary_server": true,
+              "Value #A": true,
+              "Value #B": true,
+              "Value #C": true,
+              "Value #D": true,
+              "Value #E": true
+            },
+            "indexByName": {
+              "secondary_server": 0,
+              "secondary_database": 1,
+              "primary_server": 2,
+              "Value #A": 3,
+              "Value #B": 4,
+              "Value #C": 5,
+              "Value #D": 6,
+              "Value #E": 7
+            },
+            "renameByName": {
+              "secondary_server": "Secondary",
+              "secondary_database": "Database",
+              "primary_server": "Primary",
+              "Value #A": "Since last copy",
+              "Value #B": "Since last restore",
+              "Value #C": "Restore latency",
+              "Value #D": "Threshold",
+              "Value #E": "Status"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "s",
+          "noValue": "No data"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    10,
+                    10
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 174
+      },
+      "id": 76,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "time() - max by (primary_server, primary_database) (sqlserver_log_shipping_primary_last_backup_timestamp_seconds)",
+          "legendFormat": "{{primary_server}} / {{primary_database}}",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "max by (primary_server, primary_database) (sqlserver_log_shipping_primary_backup_threshold_seconds)",
+          "legendFormat": "threshold {{primary_server}} / {{primary_database}}",
+          "refId": "B"
+        }
+      ],
+      "title": "Time Since Last Log Backup (primary)",
+      "type": "timeseries",
+      "description": "Grows until the next log shipping backup; crossing the threshold line means backups stopped. Requires the opt-in log_shipping collector (--collector.log_shipping). Values come from the log shipping monitor tables of the primary, secondary and monitor server; the freshest timestamp wins, so the instance selector does not apply here."
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "s",
+          "noValue": "No data"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    10,
+                    10
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 174
+      },
+      "id": 77,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "time() - max by (secondary_server, secondary_database, primary_server, primary_database) (sqlserver_log_shipping_secondary_last_restored_timestamp_seconds)",
+          "legendFormat": "{{secondary_server}} / {{secondary_database}}",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "max by (secondary_server, secondary_database, primary_server, primary_database) (sqlserver_log_shipping_secondary_restore_threshold_seconds)",
+          "legendFormat": "threshold {{secondary_server}} / {{secondary_database}}",
+          "refId": "B"
+        }
+      ],
+      "title": "Time Since Last Restore (secondary)",
+      "type": "timeseries",
+      "description": "Grows until the next restore; crossing the threshold line means the secondary is falling behind (restore job stopped or failing). Requires the opt-in log_shipping collector (--collector.log_shipping). Values come from the log shipping monitor tables of the primary, secondary and monitor server; the freshest timestamp wins, so the instance selector does not apply here."
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "s",
+          "noValue": "No data"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 174
+      },
+      "id": 78,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "min by (secondary_server, secondary_database, primary_server, primary_database) (sqlserver_log_shipping_secondary_last_restored_latency_seconds)",
+          "legendFormat": "{{secondary_server}} / {{secondary_database}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Last Restore Latency",
+      "type": "timeseries",
+      "description": "Time between the creation of the last restored log backup on the primary and its restore on the secondary (minute precision). Requires the opt-in log_shipping collector (--collector.log_shipping). Values come from the log shipping monitor tables of the primary, secondary and monitor server; the freshest timestamp wins, so the instance selector does not apply here."
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 183
+      },
       "id": 54,
       "panels": [],
       "title": "Exporter & Collector Health",
@@ -4795,7 +6548,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 142
+        "y": 184
       },
       "id": 55,
       "options": {
@@ -4871,7 +6624,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 142
+        "y": 184
       },
       "id": 56,
       "options": {
@@ -4991,7 +6744,7 @@
   "timezone": "browser",
   "title": "SQL Server Exporter (Go) - Overview",
   "uid": "sqlserver-go-exporter",
-  "version": 2,
+  "version": 4,
   "__inputs": [
     {
       "name": "DS_PROMETHEUS",

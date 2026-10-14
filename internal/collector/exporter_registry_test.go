@@ -42,8 +42,8 @@ func TestScraperRegistryConsistency(t *testing.T) {
 }
 
 // TestNewExporterEnabledMap guards the enable/disable semantics documented
-// on NewExporter: entries default to enabled, and the enabled map can only
-// ever turn off the specific collector it names.
+// on NewExporter: missing entries fall back to ScraperEnabledByDefault, and
+// an entry only ever toggles the specific collector it names.
 func TestNewExporterEnabledMap(t *testing.T) {
 	db, _ := newSQLMock(t)
 
@@ -55,16 +55,26 @@ func TestNewExporterEnabledMap(t *testing.T) {
 		return names
 	}
 
-	t.Run("nil map enables all registered collectors", func(t *testing.T) {
+	defaultNames := make(map[string]bool, len(scraperNames))
+	for _, name := range scraperNames {
+		if ScraperEnabledByDefault(name) {
+			defaultNames[name] = true
+		}
+	}
+
+	t.Run("nil map enables exactly the default collectors", func(t *testing.T) {
 		e := NewExporter(db, nil)
 		got := scraperNamesOf(e)
-		if len(got) != len(scraperNames) {
-			t.Errorf("got %d scrapers, want %d (all registered collectors)", len(got), len(scraperNames))
+		if len(got) != len(defaultNames) {
+			t.Errorf("got %d scrapers, want %d (collectors enabled by default)", len(got), len(defaultNames))
 		}
 		for _, name := range scraperNames {
-			if !got[name] {
-				t.Errorf("collector %q missing, want enabled by default", name)
+			if got[name] != defaultNames[name] {
+				t.Errorf("collector %q enabled = %v, want %v by default", name, got[name], defaultNames[name])
 			}
+		}
+		if got["log_shipping"] {
+			t.Error("log_shipping enabled with a nil map, want it disabled by default")
 		}
 	})
 
@@ -82,8 +92,15 @@ func TestNewExporterEnabledMap(t *testing.T) {
 		if got["sessions"] {
 			t.Error("sessions present, want disabled")
 		}
-		if len(got) != len(scraperNames)-1 {
-			t.Errorf("got %d scrapers, want %d (every collector except sessions)", len(got), len(scraperNames)-1)
+		if len(got) != len(defaultNames)-1 {
+			t.Errorf("got %d scrapers, want %d (every default collector except sessions)", len(got), len(defaultNames)-1)
+		}
+	})
+
+	t.Run("explicit true enables a collector disabled by default", func(t *testing.T) {
+		e := NewExporter(db, map[string]bool{"log_shipping": true})
+		if !scraperNamesOf(e)["log_shipping"] {
+			t.Error("log_shipping missing, want enabled by an explicit true")
 		}
 	})
 

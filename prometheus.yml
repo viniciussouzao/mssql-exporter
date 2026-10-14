@@ -4,6 +4,9 @@ global:
 scrape_configs:
   - job_name: 'sqlserver_exporter'
     scrape_interval: 15s
+    # Must exceed the exporter's 5s query timeout, or a slow scrape (e.g. SQL
+    # Server starting up) fails as a whole instead of returning partial data.
+    scrape_timeout: 10s
     static_configs:
       # host.docker.internal reaches the exporter running on the Docker host;
       # switch to 'mssql-exporter:9187' if you enable the exporter service in docker-compose.yml

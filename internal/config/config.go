@@ -40,7 +40,8 @@ type Config struct {
 	ConfigFile         string
 
 	// EnabledCollectors maps each SQL Server collector name (see
-	// collector.ScraperNames) to whether it should run. All default to true.
+	// collector.ScraperNames) to whether it should run. Defaults come from
+	// collector.ScraperEnabledByDefault.
 	EnabledCollectors map[string]bool
 }
 
@@ -72,7 +73,7 @@ func Load(args []string) (*Config, error) {
 
 	collectorFlags := make(map[string]*bool, len(collector.ScraperNames()))
 	for _, name := range collector.ScraperNames() {
-		collectorFlags[name] = fs.Bool("collector."+name, true, "Enable the "+name+" collector.")
+		collectorFlags[name] = fs.Bool("collector."+name, collector.ScraperEnabledByDefault(name), "Enable the "+name+" collector.")
 	}
 
 	if err := fs.Parse(args); err != nil {
@@ -147,7 +148,7 @@ func Load(args []string) (*Config, error) {
 	for _, name := range scraperNames {
 		known[name] = true
 
-		enabled := true
+		enabled := collector.ScraperEnabledByDefault(name)
 		if v, ok := fc.Collectors[name]; ok {
 			enabled = v
 		}

@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/viniciussouzao/mssql-exporter/internal/collector"
 )
 
 const testDSN = "sqlserver://sa:pass@localhost:1433?database=master"
@@ -187,12 +189,44 @@ func TestLoadCollectorsDefaultEnabled(t *testing.T) {
 		t.Fatalf("Load() error = %v", err)
 	}
 	if len(cfg.EnabledCollectors) == 0 {
-		t.Fatal("EnabledCollectors is empty, want all collectors enabled")
+		t.Fatal("EnabledCollectors is empty, want every collector listed")
 	}
 	for name, enabled := range cfg.EnabledCollectors {
-		if !enabled {
-			t.Errorf("collector %q disabled by default, want enabled", name)
+		if want := collector.ScraperEnabledByDefault(name); enabled != want {
+			t.Errorf("collector %q enabled = %v by default, want %v", name, enabled, want)
 		}
+	}
+	if cfg.EnabledCollectors["log_shipping"] {
+		t.Error("log_shipping enabled by default, want opt-in (needs extra msdb grants)")
+	}
+	if !cfg.EnabledCollectors["sessions"] {
+		t.Error("sessions disabled by default, want enabled")
+	}
+}
+
+func TestLoadDefaultDisabledCollectorEnabledViaFlagAndConfigFile(t *testing.T) {
+	t.Setenv("SQL_SERVER_DSN", testDSN)
+
+	cfg, err := Load([]string{"--collector.log_shipping"})
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if !cfg.EnabledCollectors["log_shipping"] {
+		t.Error("log_shipping = disabled, want enabled via flag")
+	}
+
+	t.Setenv("SQL_SERVER_DSN", "")
+	path := writeConfigFile(t, `
+dsn: "`+testDSN+`"
+collectors:
+  log_shipping: true
+`)
+	cfg, err = Load([]string{"--config.file", path})
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if !cfg.EnabledCollectors["log_shipping"] {
+		t.Error("log_shipping = disabled, want enabled via config file")
 	}
 }
 

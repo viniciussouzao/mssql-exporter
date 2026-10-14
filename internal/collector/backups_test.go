@@ -13,6 +13,8 @@ import (
 // backup_finish_date, which goes backwards after a time zone change or a DST
 // fall-back. It also pins the local-to-UTC conversion: backupset dates carry
 // no offset, so emitting them as-is skews the timestamp by the UTC offset.
+// The server_name filter keeps restored backups (log shipping secondary,
+// mirror) from being reported as local ones (HML-012).
 var backupsQueryRegex = sqlContainsInOrder(
 	"DATEADD(MINUTE, -tz.utc_offset_minutes, bs.backup_finish_date)",
 	"DATEADD(MINUTE, -tz.utc_offset_minutes, bs.backup_start_date)",
@@ -20,6 +22,7 @@ var backupsQueryRegex = sqlContainsInOrder(
 	"ORDER BY backup_set_id DESC",
 	"FROM msdb.dbo.backupset",
 	"WHERE backup_finish_date IS NOT NULL",
+	"AND server_name = @@SERVERNAME",
 	"WHEN bs.time_zone BETWEEN -48 AND 48 THEN bs.time_zone * 15",
 	"ELSE DATEPART(TZOFFSET, SYSDATETIMEOFFSET())",
 	"WHERE bs.rn = 1",

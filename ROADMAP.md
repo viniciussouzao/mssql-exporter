@@ -66,12 +66,27 @@ Progress legend: [ ] not started · [~] in progress · [x] done
 - [x] **Health check endpoint** (`/healthz`) — liveness only; use
   `sqlserver_up` for database reachability
 
+## Phase 5 — Legacy HA/DR
+
+- [x] **Database mirroring collector** (`sys.database_mirroring` +
+  `Database Mirroring` performance counters) —
+  `internal/collector/database_mirroring.go`: role, state, safety level,
+  witness state, send/redo queues, log throughput and transaction delay;
+  emits nothing when no database is mirrored
+- [x] **Log shipping collector** (`msdb.dbo.log_shipping_monitor_primary` /
+  `_secondary`) — `internal/collector/log_shipping.go`: last backup, copy and
+  restore timestamps (already UTC), restore latency and thresholds
+  - Decision (2026-10-13): disabled by default (`--collector.log_shipping`
+    to enable) — niche setup that needs SELECT grants on the two monitor
+    tables; enabling it by default would report scrape failures on most
+    instances after an upgrade
+
 ## Later / ideas (unprioritized)
 
 - Query performance metrics (`sys.dm_exec_query_stats`) — high cardinality,
   needs careful label design and possibly a longer scrape interval
 - Index health (fragmentation, missing indexes) — expensive queries, opt-in only
-- Log shipping / replication status
+- Replication status
 - Unit tests for collectors (mock `*sql.DB`), integration tests with
   SQL Server in Docker
 

@@ -50,6 +50,11 @@ func (c *SQLServerBackups) Describe(ch chan<- *prometheus.Desc) {
 }
 
 func (c *SQLServerBackups) Scrape(ctx context.Context, ch chan<- prometheus.Metric) error {
+	// Only backups taken by this instance count: RESTORE also writes the
+	// restored backup into the local backupset (with the original
+	// server_name), so a log shipping secondary or a mirror would otherwise
+	// report the primary's backups as its own.
+	//
 	// The latest backup per database/type is picked by backup_set_id (an
 	// identity), not by date: backupset dates are the server's local time,
 	// so after a time zone change or a DST fall-back an older backup can
@@ -81,6 +86,7 @@ func (c *SQLServerBackups) Scrape(ctx context.Context, ch chan<- prometheus.Metr
 				) AS rn
 			FROM msdb.dbo.backupset
 			WHERE backup_finish_date IS NOT NULL
+				AND server_name = @@SERVERNAME
 		) bs
 		CROSS APPLY (
 			SELECT CASE
