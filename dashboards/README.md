@@ -3,7 +3,10 @@
 `mssql-exporter-grafana-dashboard.json` is a ready-to-use Grafana dashboard
 covering the metrics exposed by this exporter: instance overview, throughput
 and compilation, memory, blocking/concurrency, CPU/schedulers, I/O, databases,
-TempDB, storage volumes, and exporter/collector self-health.
+TempDB, storage volumes, Availability Groups, database mirroring, log shipping,
+and exporter/collector self-health. The HA/DR rows show "No data" when the
+feature isn't in use; the Log Shipping row also needs the opt-in
+`log_shipping` collector (`--collector.log_shipping`).
 
 ## Requirements
 

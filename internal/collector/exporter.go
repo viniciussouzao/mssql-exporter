@@ -38,6 +38,15 @@ var scraperNames = []string{
 	"agent_jobs",
 	"volumes",
 	"schedulers",
+	"database_mirroring",
+	"log_shipping",
+}
+
+// scrapersDisabledByDefault lists collectors that only run when explicitly
+// enabled: they need extra grants and cover niche setups, so enabling them
+// by default would report scrape failures on most instances.
+var scrapersDisabledByDefault = map[string]bool{
+	"log_shipping": true,
 }
 
 var scraperFactories = map[string]func(*sql.DB) Scraper{
@@ -55,6 +64,8 @@ var scraperFactories = map[string]func(*sql.DB) Scraper{
 	"agent_jobs":          func(db *sql.DB) Scraper { return NewAgentJobsCollector(db) },
 	"volumes":             func(db *sql.DB) Scraper { return NewVolumesCollector(db) },
 	"schedulers":          func(db *sql.DB) Scraper { return NewSchedulersCollector(db) },
+	"database_mirroring":  func(db *sql.DB) Scraper { return NewDatabaseMirroringCollector(db) },
+	"log_shipping":        func(db *sql.DB) Scraper { return NewLogShippingCollector(db) },
 }
 
 // ScraperNames returns the names of all available collectors in
@@ -63,6 +74,12 @@ func ScraperNames() []string {
 	names := make([]string, len(scraperNames))
 	copy(names, scraperNames)
 	return names
+}
+
+// ScraperEnabledByDefault reports whether the named collector runs when no
+// flag or config file entry toggles it.
+func ScraperEnabledByDefault(name string) bool {
+	return !scrapersDisabledByDefault[name]
 }
 
 // pinger is the subset of *sql.DB the Exporter needs for the availability
@@ -84,11 +101,15 @@ type Exporter struct {
 }
 
 // NewExporter builds an Exporter running the scrapers enabled in the given
-// map (missing entries default to enabled).
+// map (missing entries fall back to ScraperEnabledByDefault).
 func NewExporter(db *sql.DB, enabled map[string]bool) *Exporter {
 	var scrapers []Scraper
 	for _, name := range scraperNames {
-		if on, ok := enabled[name]; ok && !on {
+		on, ok := enabled[name]
+		if !ok {
+			on = ScraperEnabledByDefault(name)
+		}
+		if !on {
 			continue
 		}
 		scrapers = append(scrapers, scraperFactories[name](db))
