@@ -18,11 +18,12 @@ simulando produção (AWS EC2 Windows/Linux e RDS for SQL Server).
 | HML-008 | Fila de envio some do gráfico com a réplica suspensa; faltam `is_suspended` e `secondary_lag_seconds` | EC2 Windows (AG 01+02) | média | resolvido (v0.3.0) |
 | HML-009 | Cenários de falha: banco offline, SQL parado, reboot, kill, backup diferencial (validação) | EC2 Windows (AG 01+02) | — | resolvido |
 | HML-010 | Timestamps de backup e Agent jobs tratam o horário local do SQL Server como UTC | EC2 Windows (UTC-3) | média | resolvido (v0.3.1) |
-| HML-011 | Sem cobertura de database mirroring e log shipping | EC2 Windows (01+02) | média | em andamento |
-| HML-012 | `backups` reporta no secundário os backups restaurados do primário | EC2 Windows (01+02) | média | em andamento (validado, aguardando merge) |
-| HML-013 | Scrape falha inteiro (`up 0`) quando o SQL demora: `scrape_timeout` do exemplo = timeout do exporter | EC2 Windows (01+02) | baixa | em andamento |
+| HML-011 | Sem cobertura de database mirroring e log shipping | EC2 Windows (01+02) | média | resolvido (v0.4.0) |
+| HML-012 | `backups` reporta no secundário os backups restaurados do primário | EC2 Windows (01+02) | média | resolvido (v0.4.0) |
+| HML-013 | Scrape falha inteiro (`up 0`) quando o SQL demora: `scrape_timeout` do exemplo = timeout do exporter | EC2 Windows (01+02) | baixa | resolvido (v0.4.0) |
 | HML-014 | Atualização do SQL Server 2019 RTM → CU32 + KB5128494 (validação) | EC2 Windows (01+02) | — | resolvido |
-| HML-015 | `blocking` falha esporadicamente na réplica secundária do AG (erro 976) | EC2 Windows (02) | baixa | em andamento |
+| HML-015 | `blocking` falha esporadicamente na réplica secundária do AG (erro 976) | EC2 Windows (02) | baixa | resolvido (v0.4.0) |
+| HML-016 | Driver `denisenkom/go-mssqldb` arquivado: migrar para `microsoft/go-mssqldb` | EC2 Windows (01+02) | média | em andamento |
 
 ---
 
@@ -734,7 +735,7 @@ SQL Server, fazer um backup e comparar
 - **Ambiente:** EC2 01 + 02 (SQL Server 2019), fora do AG `MSSQL_AG`
 - **Encontrado em:** 2026-10-13, revisão de cobertura de HA/DR
 - **Severidade:** média (ambientes legados com essas features ficam sem monitoramento de HA/DR)
-- **Status:** em andamento (branch `feat/mirroring-log-shipping`)
+- **Status:** resolvido (v0.4.0)
 
 **Observado**
 
@@ -918,7 +919,7 @@ terceira instância no lab).
 - **Ambiente:** EC2 02 (secundário do log shipping `LogShipDB` e espelho do `MirrorDB`), `0.4.1-homolog`
 - **Encontrado em:** 2026-10-14, durante o HML-011
 - **Severidade:** média (o secundário parece ter backup recente sem nunca ter feito um)
-- **Status:** em andamento (branch `feat/mirroring-log-shipping`)
+- **Status:** resolvido (v0.4.0)
 
 **Observado**
 
@@ -961,7 +962,7 @@ failover/role change).
 - **Ambiente:** Prometheus local (`prometheus.yml` do repositório), EC2 02, durante o HML-014
 - **Encontrado em:** 2026-10-14
 - **Severidade:** baixa (só em instantes de lentidão do SQL; perde o scrape inteiro em vez de parte)
-- **Status:** em andamento
+- **Status:** resolvido (v0.4.0)
 
 **Observado**
 
@@ -1024,7 +1025,7 @@ chega depois de 5 s e o Prometheus descarta tudo.
 - **Ambiente:** EC2 02 (secundária do `MSSQL_AG`, `ALLOW_CONNECTIONS = ALL`), `0.4.2-homolog`
 - **Encontrado em:** 2026-10-14, durante o HML-011
 - **Severidade:** baixa (≈1,4% dos scrapes da 02 com `success 0` no `blocking`; a 01 nunca falhou)
-- **Status:** em andamento (branch `feat/mirroring-log-shipping`)
+- **Status:** resolvido (v0.4.0)
 
 **Observado**
 
@@ -1064,7 +1065,43 @@ ambiente de DR (relato do usuário). Um loop de 300 execuções da query como
 - [x] Bloqueio provocado na 01 (`##blk`, 16:56–17:01): `blocked_sessions`
   0 → 1 → 0 e `blocked_max_wait_ms` subindo ~30 s a cada 30 s (7 964 →
   277 967 ms) até o `ROLLBACK`.
-- [ ] 02 sem `success 0` no `blocking` por ~1 h (em observação desde 17:03).
+- [x] 02 sem `success 0` no `blocking` de 17:03 a 17:49 (184 scrapes; antes
+  da correção seriam ~2–3 falhas no período). Janela encerrada por decisão do
+  usuário.
 - Obs.: depois da atualização, o serviço da 02 ficou parado (16:55–17:02)
   até ser iniciado manualmente — o `service start` não chegou a subir o
   processo; sem indício de crash do exporter.
+
+---
+
+## HML-016 — Driver `denisenkom/go-mssqldb` arquivado: migrar para `microsoft/go-mssqldb`
+
+- **Ambiente:** EC2 01 + 02 (SQL Server 2019 CU32), antes do upgrade para 2022/2025
+- **Encontrado em:** 2026-10-14, planejamento do upgrade de versão
+- **Severidade:** média (driver sem manutenção; sem TDS 8.0 / `encrypt=strict`)
+- **Status:** em andamento (branch `chore/microsoft-go-mssqldb`, build `0.5.0-homolog`)
+
+**Contexto**
+
+O `denisenkom/go-mssqldb` v0.12.3 está arquivado; o `microsoft/go-mssqldb` é
+o fork mantido e o driver oficial para Go. Antes de homologar o SQL Server
+2022 e 2025, o exporter passa a usar o driver novo.
+
+**Mudança**
+
+- Import e `go.mod`: `github.com/microsoft/go-mssqldb` v1.11.2 (Go 1.25+, o
+  projeto já está em 1.25.0).
+- Mesmo nome de driver (`sqlserver`) e mesmos formatos de DSN; mesmo padrão
+  de criptografia (só o pacote de login). Novo: `encrypt=strict` (TDS 8.0).
+- Binário Windows +0,5 MB (15,06 → 15,58 MB); nada do SDK da Azure entra no
+  binário.
+
+**Validação pendente**
+
+- [x] `0.5.0-homolog` nas duas EC2 (2019 CU32, 2026-10-14 17:55):
+  `sqlserver_up 1`, os 16 coletores com `success 1`, mesmos nomes de
+  métrica que a `0.4.3-homolog` (= v0.4.0): 01 156 nomes / 3 779 séries
+  (idêntico); 02 153 nomes / 3 802 séries (+5: o ISO do SQL 2022 montado em
+  `E:` (CDFS) apareceu nas `os_filesystem_*`). Duração média do scrape
+  0,29 s → 0,31 s (dentro do ruído).
+- [ ] Mesma validação no SQL Server 2022 e 2025, incluindo `encrypt=strict`.
