@@ -117,30 +117,36 @@ func TestBlockingScrapeRequestsRowIterationError(t *testing.T) {
 }
 
 func TestBlockingScrapeRequestsRetriesOnceOnAGNotAccessible(t *testing.T) {
-	db, mock := newSQLMock(t)
+	// 976: database not readable (HML-015); 983: replica RESOLVING right
+	// after SQL Server starts (HML-020).
+	for _, number := range []int32{976, 983} {
+		t.Run(fmt.Sprint(number), func(t *testing.T) {
+			db, mock := newSQLMock(t)
 
-	mock.ExpectQuery(blockedQueryRegex).WillReturnRows(
-		sqlmock.NewRows([]string{"blocked", "max_wait"}).AddRow(0.0, 0.0))
-	// The first attempt fails mid-iteration after one row was read: none of
-	// its counts may be emitted, or the retry would produce duplicates.
-	mock.ExpectQuery(requestsQueryRegex).WillReturnRows(
-		sqlmock.NewRows([]string{"status", "count"}).
-			AddRow("running", 9.0).
-			AddRow("suspended", 9.0).
-			RowError(1, sqlServerError{number: 976}))
-	mock.ExpectQuery(requestsQueryRegex).WillReturnRows(
-		sqlmock.NewRows([]string{"status", "count"}).
-			AddRow("running", 1.0).
-			AddRow("suspended", 2.0))
+			mock.ExpectQuery(blockedQueryRegex).WillReturnRows(
+				sqlmock.NewRows([]string{"blocked", "max_wait"}).AddRow(0.0, 0.0))
+			// The first attempt fails mid-iteration after one row was read: none of
+			// its counts may be emitted, or the retry would produce duplicates.
+			mock.ExpectQuery(requestsQueryRegex).WillReturnRows(
+				sqlmock.NewRows([]string{"status", "count"}).
+					AddRow("running", 9.0).
+					AddRow("suspended", 9.0).
+					RowError(1, sqlServerError{number: number}))
+			mock.ExpectQuery(requestsQueryRegex).WillReturnRows(
+				sqlmock.NewRows([]string{"status", "count"}).
+					AddRow("running", 1.0).
+					AddRow("suspended", 2.0))
 
-	c := NewBlockingCollector(db)
-	families := gatherScraper(t, c)
+			c := NewBlockingCollector(db)
+			families := gatherScraper(t, c)
 
-	if v, ok := metricValue(families, "sqlserver_active_requests", map[string]string{"status": "running"}); !ok || v != 1 {
-		t.Errorf("active_requests{running} = %v (found=%v), want 1 from the retry", v, ok)
-	}
-	if v, ok := metricValue(families, "sqlserver_active_requests", map[string]string{"status": "suspended"}); !ok || v != 2 {
-		t.Errorf("active_requests{suspended} = %v (found=%v), want 2 from the retry", v, ok)
+			if v, ok := metricValue(families, "sqlserver_active_requests", map[string]string{"status": "running"}); !ok || v != 1 {
+				t.Errorf("active_requests{running} = %v (found=%v), want 1 from the retry", v, ok)
+			}
+			if v, ok := metricValue(families, "sqlserver_active_requests", map[string]string{"status": "suspended"}); !ok || v != 2 {
+				t.Errorf("active_requests{suspended} = %v (found=%v), want 2 from the retry", v, ok)
+			}
+		})
 	}
 }
 
@@ -183,6 +189,6 @@ func TestBlockingScrapeRequestsOtherErrorsAreNotRetried(t *testing.T) {
 	}
 	// A retry would hit sqlmock with no expectation left.
 	if err != nil && strings.Contains(err.Error(), "all expectations were already fulfilled") {
-		t.Errorf("Scrape() retried a non-976 error: %v", err)
+		t.Errorf("Scrape() retried an error other than 976/983: %v", err)
 	}
 }
