@@ -27,7 +27,7 @@ simulando produção (AWS EC2 Windows/Linux e RDS for SQL Server).
 | HML-017 | Rolling upgrade SQL Server 2019 → 2022 (02) → 2025 (01, 02) com AG, mirroring e log shipping (validação) | EC2 Windows (01+02) | — | resolvido |
 | HML-018 | Estado do mirroring some (sem série) quando o banco espelhado não está acessível | EC2 Windows (01+02) | média | resolvido (documentação, v0.5.0) |
 | HML-019 | `volumes` estoura o timeout de query quando um banco está trocando de estado | EC2 Windows (01+02) | baixa | aberto |
-| HML-020 | `blocking` falha com erro 983 logo após o SQL Server subir (réplica do AG em `RESOLVING`) | EC2 Windows (02) | baixa | em andamento |
+| HML-020 | `blocking` falha com erro 983 logo após o SQL Server subir (réplica do AG em `RESOLVING`) | EC2 Windows (02) | baixa | resolvido (v0.5.0) |
 
 ---
 
@@ -1338,7 +1338,7 @@ query. Ganho pequeno; decidir depois.
 - **Ambiente:** EC2 02, durante o HML-017 (restart do setup do 2025)
 - **Encontrado em:** 2026-10-14 19:18:41
 - **Severidade:** baixa (uma coleta)
-- **Status:** em andamento (branch `chore/microsoft-go-mssqldb`)
+- **Status:** resolvido (v0.5.0)
 
 **Observado**
 
@@ -1358,7 +1358,8 @@ dois códigos. Mutação (remover o 983 do `case`) quebra
 dura alguns segundos, então o retry imediato nem sempre o supera; reduz o
 ruído sem mudar o comportamento essencial.
 
-**Validação pendente**
+**Validação**
 
-- [ ] `0.5.1-homolog` nas EC2: restart do SQL na secundária do AG sem
-  `success 0` no `blocking` (ou, se falhar, com o 983 já após o retry).
+Por teste unitário, sem reprodução nas EC2 (decisão do usuário): a janela do
+`RESOLVING` é de segundos e o caminho de retry é o mesmo já validado ao vivo no
+HML-015. Build `0.5.1-homolog` publicado no S3.
