@@ -28,6 +28,7 @@ simulando produção (AWS EC2 Windows/Linux e RDS for SQL Server).
 | HML-018 | Estado do mirroring some (sem série) quando o banco espelhado não está acessível | EC2 Windows (01+02) | média | resolvido (documentação, v0.5.0) |
 | HML-019 | `volumes` estoura o timeout de query quando um banco está trocando de estado | EC2 Windows (01+02) | baixa | aberto |
 | HML-020 | `blocking` falha com erro 983 logo após o SQL Server subir (réplica do AG em `RESOLVING`) | EC2 Windows (02) | baixa | resolvido (v0.5.0) |
+| HML-021 | `sqlserver_sessions_by_login` com carga de vários logins (validação) | EC2 Windows (01) | — | resolvido |
 
 ---
 
@@ -1363,3 +1364,34 @@ ruído sem mudar o comportamento essencial.
 Por teste unitário, sem reprodução nas EC2 (decisão do usuário): a janela do
 `RESOLVING` é de segundos e o caminho de retry é o mesmo já validado ao vivo no
 HML-015. Build `0.5.1-homolog` publicado no S3.
+
+---
+
+## HML-021 — `sqlserver_sessions_by_login` com carga de vários logins (validação)
+
+- **Ambiente:** EC2 01 (SQL Server 2025 RTM), `0.6.0-homolog`; AG, mirroring e
+  log shipping desmontados, 02 desligada
+- **Encontrado em:** 2026-10-15
+- **Severidade:** — (validação do item 1 da Fase 6 do roadmap)
+- **Status:** resolvido
+
+**Cenário**
+
+`hack/loadgen` rodando do Mac contra a 01: 10 logins `loadgen_01..10`
+(`setup.sql`), 2 workers cada, mistura de leituras, scans, updates, esperas
+longas e bloqueio proposital.
+
+**Resultado**
+
+- `sqlserver_sessions_by_login` = 2 por `loadgen_NN`, mais
+  `AWSDBSERVER01\usr_dbsvc` (SSMS), `usr_exporter` (pool do exporter, 5) e
+  `NT SERVICE\SQLTELEMETRY`; a soma bate com `sqlserver_user_connections`.
+- Um primeiro teste mostrou 4 sessões por login: eram dois processos do
+  loadgen ao mesmo tempo (um disparado pela UI). Reproduzido num SQL Server
+  2025 local em container com um processo: exatamente 2 sessões, sempre nas
+  mesmas 2 portas TCP.
+- Sem RCSI no `LoadTestDB`, o scan do `status_report` esperava o `blocker` e
+  38 sessões ficaram bloqueadas (o `blocking` reportou corretamente, espera
+  máxima de 54,7 s); com RCSI e pesos rebalanceados: ~42 batch requests/s,
+  bloqueio só em rajadas e version store do tempdb em uso.
+- 16/16 coletores com `success 1` durante toda a carga; scrape máximo 1,06 s.
