@@ -4,8 +4,10 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/viniciussouzao/mssql-exporter/internal/collector"
 )
@@ -375,7 +377,7 @@ func TestLoadTopQueriesOptionsDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if got, want := cfg.CollectorOptions, collector.DefaultOptions(); got != want {
+	if got, want := cfg.CollectorOptions, collector.DefaultOptions(); !reflect.DeepEqual(got, want) {
 		t.Errorf("CollectorOptions = %+v, want defaults %+v", got, want)
 	}
 	if cfg.EnabledCollectors["top_queries"] {
@@ -435,6 +437,69 @@ func TestLoadTopQueriesOptionsValidation(t *testing.T) {
 		{"--collector.top_queries.limit=1000"},
 		{"--collector.top_queries.text_length=16"},
 		{"--collector.top_queries.text_length=4000"},
+	} {
+		if _, err := Load(args); err != nil {
+			t.Errorf("Load(%v) error = %v, want the boundary accepted", args, err)
+		}
+	}
+}
+
+func TestLoadIndexFragmentationOptions(t *testing.T) {
+	t.Setenv("SQL_SERVER_DSN", testDSN)
+
+	cfg, err := Load(nil)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.EnabledCollectors["index_fragmentation"] {
+		t.Error("index_fragmentation enabled by default, want it opt-in")
+	}
+
+	path := writeConfigFile(t, `
+collectors:
+  index_fragmentation: true
+index_fragmentation:
+  interval: 30m
+  min_page_count: 200
+  databases: [AppDB, Sales]
+`)
+	cfg, err = Load([]string{"--config.file", path})
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	want := collector.IndexFragmentationOptions{Interval: 30 * time.Minute, MinPageCount: 200, Databases: []string{"AppDB", "Sales"}}
+	if !reflect.DeepEqual(cfg.CollectorOptions.IndexFragmentation, want) {
+		t.Errorf("IndexFragmentation = %+v, want %+v from the config file", cfg.CollectorOptions.IndexFragmentation, want)
+	}
+	if !cfg.EnabledCollectors["index_fragmentation"] {
+		t.Error("index_fragmentation disabled, want it enabled by the config file")
+	}
+
+	// Flags win over the file; unset fields keep the file's values.
+	cfg, err = Load([]string{"--config.file", path, "--collector.index_fragmentation.interval=2h", "--collector.index_fragmentation.databases=Only"})
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	want = collector.IndexFragmentationOptions{Interval: 2 * time.Hour, MinPageCount: 200, Databases: []string{"Only"}}
+	if !reflect.DeepEqual(cfg.CollectorOptions.IndexFragmentation, want) {
+		t.Errorf("IndexFragmentation = %+v, want %+v (flags over file)", cfg.CollectorOptions.IndexFragmentation, want)
+	}
+}
+
+func TestLoadIndexFragmentationOptionsValidation(t *testing.T) {
+	t.Setenv("SQL_SERVER_DSN", testDSN)
+
+	for _, args := range [][]string{
+		{"--collector.index_fragmentation.interval=59s"},
+		{"--collector.index_fragmentation.min_page_count=-1"},
+	} {
+		if _, err := Load(args); err == nil || !strings.Contains(err.Error(), "collector.index_fragmentation.") {
+			t.Errorf("Load(%v) error = %v, want a collector.index_fragmentation range error", args, err)
+		}
+	}
+	for _, args := range [][]string{
+		{"--collector.index_fragmentation.interval=1m"},
+		{"--collector.index_fragmentation.min_page_count=0"},
 	} {
 		if _, err := Load(args); err != nil {
 			t.Errorf("Load(%v) error = %v, want the boundary accepted", args, err)

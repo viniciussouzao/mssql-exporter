@@ -1,8 +1,11 @@
 package collector
 
+import "time"
+
 // Options tunes collectors that need more than the on/off toggle.
 type Options struct {
-	TopQueries TopQueriesOptions
+	TopQueries         TopQueriesOptions
+	IndexFragmentation IndexFragmentationOptions
 }
 
 // TopQueriesOptions configures the top_queries collector.
@@ -15,11 +18,26 @@ type TopQueriesOptions struct {
 	TextLength  int
 }
 
+// IndexFragmentationOptions configures the index_fragmentation collector,
+// which collects in the background instead of on every scrape.
+type IndexFragmentationOptions struct {
+	// Interval between background collections; each one is bounded by it.
+	Interval time.Duration
+	// MinPageCount skips indexes smaller than this (8 KB pages): their
+	// fragmentation is meaningless and they dominate the series count.
+	MinPageCount int
+	// Databases restricts the collection to these databases; empty means
+	// every online user database the login can access.
+	Databases []string
+}
+
 // Option bounds, enforced by the config package.
 const (
 	TopQueriesMaxLimit      = 1000
 	TopQueriesMinTextLength = 16
 	TopQueriesMaxTextLength = 4000
+
+	IndexFragmentationMinInterval = time.Minute
 )
 
 // DefaultOptions returns the options used when none are configured.
@@ -28,6 +46,10 @@ func DefaultOptions() Options {
 		TopQueries: TopQueriesOptions{
 			Limit:      50,
 			TextLength: 120,
+		},
+		IndexFragmentation: IndexFragmentationOptions{
+			Interval:     6 * time.Hour,
+			MinPageCount: 1000,
 		},
 	}
 }

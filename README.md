@@ -30,6 +30,7 @@ The exporter currently includes these collectors:
 - Database mirroring: role, state, safety level, witness state and send/redo queues per mirrored database (emits nothing when no database is mirrored).
 - Log shipping (opt-in): last backup/copy/restore timestamps, restore latency and alert thresholds from the log shipping monitor tables.
 - Top queries (opt-in): top N queries by CPU from the plan cache, per `query_hash`, with optional statement text (literals obfuscated).
+- Index fragmentation (opt-in): logical fragmentation and size per index, collected in the background on its own interval (default 6h).
 
 ## Quick Start
 
@@ -73,12 +74,12 @@ Flags (mirroring the ergonomics of `mysqld_exporter`/`postgres_exporter`):
 --web.listen-address string    Address to listen on for the web interface and metrics. (default ":9187")
 --web.telemetry-path string    Path under which to expose metrics. (default "/metrics")
 --collector.<name>             Enable/disable a SQL Server collector (all default to true
-                               except log_shipping and top_queries).
+                               except log_shipping, top_queries and index_fragmentation).
                                Names: wait_stats, io_file_stats, sessions, server_info,
                                memory_clerks, backups, tempdb, perf_counters, databases,
                                blocking, active_queries, availability_groups, agent_jobs,
                                volumes, schedulers, database_mirroring, log_shipping,
-                               top_queries.
+                               top_queries, index_fragmentation.
                                Example: --collector.backups=false, --collector.log_shipping
 --collector.top_queries.limit int
                                Queries (by total CPU) exposed by top_queries (default 50, max 1000).
@@ -86,6 +87,12 @@ Flags (mirroring the ergonomics of `mysqld_exporter`/`postgres_exporter`):
                                Expose the statement text in sqlserver_top_query_info (default false).
 --collector.top_queries.text_length int
                                Maximum statement text length (default 120, 16-4000).
+--collector.index_fragmentation.interval duration
+                               Interval between background collections (default 6h, min 1m).
+--collector.index_fragmentation.min_page_count int
+                               Skip indexes with fewer 8 KB pages (default 1000).
+--collector.index_fragmentation.databases strings
+                               Databases to read, comma-separated (default: all accessible user databases).
 --collector.os-collectors      Enable OS-level collectors (CPU, memory, disk).
 --config.file string           Path to an optional YAML config file.
 --web.config.file string       Path to an exporter-toolkit web config file enabling TLS and/or basic auth.
@@ -205,6 +212,18 @@ GRANT SELECT ON dbo.log_shipping_monitor_primary TO [your_login];
 GRANT SELECT ON dbo.log_shipping_monitor_secondary TO [your_login];
 ```
 
+The `index_fragmentation` collector is **disabled by default**. It reads
+every online user database the login can access (`HAS_DBACCESS`), and a
+database where the login has no user is silently skipped; to cover all of
+them without creating a user in each:
+
+```sql
+GRANT CONNECT ANY DATABASE TO [your_login];
+```
+
+Compare `sqlserver_index_fragmentation_last_collection_databases` with the
+number of databases you expect.
+
 Notes:
 
 - The `backups` collector reads `msdb.dbo.backupset`, which is readable by
@@ -232,6 +251,7 @@ The exporter reads from (among others):
 - `sys.database_mirroring`
 - `msdb.dbo.log_shipping_monitor_primary` / `log_shipping_monitor_secondary` (log_shipping only)
 - `sys.dm_exec_query_stats`, `sys.dm_exec_plan_attributes`, `sys.dm_exec_sql_text` (top_queries only)
+- `sys.dm_db_index_physical_stats` and each database's `sys.indexes`/`sys.objects`/`sys.schemas` (index_fragmentation only)
 - `SERVERPROPERTY(...)`
 
 ## Availability & Self-Metrics
@@ -449,6 +469,32 @@ Metric names are stable and follow Prometheus best practices. Selected examples:
       `sqlserver_scrape_collector_duration_seconds{collector="top_queries"}`
       on instances with very large caches
     - On an idle instance the top is the exporter's own DMV queries
+
+- Index fragmentation (opt-in, `--collector.index_fragmentation`)
+  - Unlike every other collector it **does not query SQL Server on
+    scrape**: `sys.dm_db_index_physical_stats` (`LIMITED` mode) reads index
+    pages, which takes minutes and real I/O on large databases, so it runs in
+    the background every `--collector.index_fragmentation.interval` (default
+    6h, first run on the first scrape, one database at a time, each run
+    bounded by the interval) and scrapes serve the last result
+  - `sqlserver_index_fragmentation_percent{db_name="app",schema_name="dbo",table_name="Orders",index_name="PK_Orders"} 37.5`:
+    logical fragmentation of the leaf level, weighted by page count across
+    partitions; `index_name=""` for heaps
+  - `sqlserver_index_page_count{...} 2048` (8 KB pages, in-row data)
+  - Indexes below `--collector.index_fragmentation.min_page_count` (default
+    1000 pages, ~8 MB) are skipped: fragmentation of small indexes doesn't
+    matter and they would dominate the series count
+  - `sqlserver_index_fragmentation_last_collection_timestamp_seconds`,
+    `_last_collection_duration_seconds`, `_last_collection_databases` and
+    `_last_collection_success` (0 when any database failed; the error is
+    logged once per collection). The scrape itself always succeeds, so
+    alert on staleness and success, e.g.
+    `time() - sqlserver_index_fragmentation_last_collection_timestamp_seconds > 2 * 6 * 3600`
+  - Example alert (large and fragmented):
+    `sqlserver_index_fragmentation_percent > 30 and on (db_name, schema_name, table_name, index_name) sqlserver_index_page_count > 10000`
+  - On SSD/EBS storage, logical fragmentation matters much less than page
+    density (`avg_page_space_used_in_percent`), which needs the more
+    expensive `SAMPLED` mode and is not collected
 
 - Volumes
   - `sqlserver_volume_total_bytes{volume_mount_point="C:\\"} 1962694664192`

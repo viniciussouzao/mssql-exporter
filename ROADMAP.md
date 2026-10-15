@@ -119,7 +119,7 @@ this order.
     `--collector.top_queries.limit|include_text|text_length` (also
     `top_queries:` in the YAML config), statement text in a separate
     `sqlserver_top_query_info` series joined on `query_hash`
-- [ ] **Index fragmentation** (`sys.dm_db_index_physical_stats`, `LIMITED`
+- [x] **Index fragmentation** (`sys.dm_db_index_physical_stats`, `LIMITED`
   mode) — **disabled by default**, heavy I/O on large objects:
   - collected **in the background on its own interval** (e.g.
     `--collector.index_fragmentation.interval=6h`), one database at a time
@@ -134,6 +134,11 @@ this order.
     (`avg_page_space_used_in_percent`) needs `SAMPLED` mode — out of scope
     for now; document that on SSD/EBS storage density matters more than
     logical fragmentation
+  - Done as the `index_fragmentation` collector: background loop started on
+    the first scrape, bounded by the interval, scrapes serve the cached
+    result; `HAS_DBACCESS` database filter (needs `CONNECT ANY DATABASE` to
+    cover databases without a user for the login), three-part catalog names
+    with bracket-quoted database names, heaps with an empty `index_name`
 - Validate all of the above on EC2 (2025) and in the RDS phase
 
 ## Later / ideas (unprioritized)

@@ -7,6 +7,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/spf13/pflag"
 	"github.com/viniciussouzao/mssql-exporter/internal/collector"
@@ -65,6 +66,12 @@ type fileConfig struct {
 		IncludeText *bool `yaml:"include_text"`
 		TextLength  *int  `yaml:"text_length"`
 	} `yaml:"top_queries"`
+	// IndexFragmentation holds the index_fragmentation collector options.
+	IndexFragmentation struct {
+		Interval     *time.Duration `yaml:"interval"`
+		MinPageCount *int           `yaml:"min_page_count"`
+		Databases    []string       `yaml:"databases"`
+	} `yaml:"index_fragmentation"`
 }
 
 // Load parses CLI flags from args (typically os.Args[1:]) and merges them
@@ -85,6 +92,9 @@ func Load(args []string) (*Config, error) {
 	topQueriesLimit := fs.Int("collector.top_queries.limit", defaultOpts.TopQueries.Limit, "Number of queries (by total CPU time) exposed by the top_queries collector.")
 	topQueriesIncludeText := fs.Bool("collector.top_queries.include_text", defaultOpts.TopQueries.IncludeText, "Expose the statement text of top queries (literals replaced with ?) in sqlserver_top_query_info.")
 	topQueriesTextLength := fs.Int("collector.top_queries.text_length", defaultOpts.TopQueries.TextLength, "Maximum length of the statement text exposed by the top_queries collector.")
+	fragInterval := fs.Duration("collector.index_fragmentation.interval", defaultOpts.IndexFragmentation.Interval, "Interval between background collections of the index_fragmentation collector (minimum 1m).")
+	fragMinPageCount := fs.Int("collector.index_fragmentation.min_page_count", defaultOpts.IndexFragmentation.MinPageCount, "Skip indexes with fewer 8 KB pages than this in the index_fragmentation collector.")
+	fragDatabases := fs.StringSlice("collector.index_fragmentation.databases", nil, "Comma-separated databases read by the index_fragmentation collector (default: every accessible user database).")
 
 	collectorFlags := make(map[string]*bool, len(collector.ScraperNames()))
 	for _, name := range collector.ScraperNames() {
@@ -204,6 +214,32 @@ func Load(args []string) (*Config, error) {
 	if tq.TextLength < collector.TopQueriesMinTextLength || tq.TextLength > collector.TopQueriesMaxTextLength {
 		return nil, fmt.Errorf("collector.top_queries.text_length must be between %d and %d",
 			collector.TopQueriesMinTextLength, collector.TopQueriesMaxTextLength)
+	}
+
+	fo := &cfg.CollectorOptions.IndexFragmentation
+	if fc.IndexFragmentation.Interval != nil {
+		fo.Interval = *fc.IndexFragmentation.Interval
+	}
+	if fs.Changed("collector.index_fragmentation.interval") {
+		fo.Interval = *fragInterval
+	}
+	if fc.IndexFragmentation.MinPageCount != nil {
+		fo.MinPageCount = *fc.IndexFragmentation.MinPageCount
+	}
+	if fs.Changed("collector.index_fragmentation.min_page_count") {
+		fo.MinPageCount = *fragMinPageCount
+	}
+	if fc.IndexFragmentation.Databases != nil {
+		fo.Databases = fc.IndexFragmentation.Databases
+	}
+	if fs.Changed("collector.index_fragmentation.databases") {
+		fo.Databases = *fragDatabases
+	}
+	if fo.Interval < collector.IndexFragmentationMinInterval {
+		return nil, fmt.Errorf("collector.index_fragmentation.interval must be at least %s", collector.IndexFragmentationMinInterval)
+	}
+	if fo.MinPageCount < 0 {
+		return nil, fmt.Errorf("collector.index_fragmentation.min_page_count must not be negative")
 	}
 
 	cfg.DSN = fc.DSN
