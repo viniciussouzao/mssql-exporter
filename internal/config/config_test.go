@@ -367,3 +367,77 @@ func TestLoadUnknownFlag(t *testing.T) {
 		t.Error("unknown flag should not be ErrExitRequested")
 	}
 }
+
+func TestLoadTopQueriesOptionsDefaults(t *testing.T) {
+	t.Setenv("SQL_SERVER_DSN", testDSN)
+
+	cfg, err := Load(nil)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if got, want := cfg.CollectorOptions, collector.DefaultOptions(); got != want {
+		t.Errorf("CollectorOptions = %+v, want defaults %+v", got, want)
+	}
+	if cfg.EnabledCollectors["top_queries"] {
+		t.Error("top_queries enabled by default, want it opt-in")
+	}
+}
+
+func TestLoadTopQueriesOptionsFromConfigFileAndFlags(t *testing.T) {
+	t.Setenv("SQL_SERVER_DSN", testDSN)
+	path := writeConfigFile(t, `
+collectors:
+  top_queries: true
+top_queries:
+  limit: 20
+  include_text: true
+  text_length: 200
+`)
+
+	cfg, err := Load([]string{"--config.file", path})
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	want := collector.TopQueriesOptions{Limit: 20, IncludeText: true, TextLength: 200}
+	if cfg.CollectorOptions.TopQueries != want {
+		t.Errorf("TopQueries = %+v, want %+v from the config file", cfg.CollectorOptions.TopQueries, want)
+	}
+	if !cfg.EnabledCollectors["top_queries"] {
+		t.Error("top_queries disabled, want it enabled by the config file")
+	}
+
+	// Flags win over the file; unset fields keep the file's values.
+	cfg, err = Load([]string{"--config.file", path, "--collector.top_queries.limit=5", "--collector.top_queries.include_text=false"})
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	want = collector.TopQueriesOptions{Limit: 5, IncludeText: false, TextLength: 200}
+	if cfg.CollectorOptions.TopQueries != want {
+		t.Errorf("TopQueries = %+v, want %+v (flags over file)", cfg.CollectorOptions.TopQueries, want)
+	}
+}
+
+func TestLoadTopQueriesOptionsValidation(t *testing.T) {
+	t.Setenv("SQL_SERVER_DSN", testDSN)
+
+	for _, args := range [][]string{
+		{"--collector.top_queries.limit=0"},
+		{"--collector.top_queries.limit=1001"},
+		{"--collector.top_queries.text_length=15"},
+		{"--collector.top_queries.text_length=4001"},
+	} {
+		if _, err := Load(args); err == nil || !strings.Contains(err.Error(), "collector.top_queries.") {
+			t.Errorf("Load(%v) error = %v, want a collector.top_queries range error", args, err)
+		}
+	}
+	for _, args := range [][]string{
+		{"--collector.top_queries.limit=1"},
+		{"--collector.top_queries.limit=1000"},
+		{"--collector.top_queries.text_length=16"},
+		{"--collector.top_queries.text_length=4000"},
+	} {
+		if _, err := Load(args); err != nil {
+			t.Errorf("Load(%v) error = %v, want the boundary accepted", args, err)
+		}
+	}
+}

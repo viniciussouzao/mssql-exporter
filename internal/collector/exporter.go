@@ -41,33 +41,37 @@ var scraperNames = []string{
 	"schedulers",
 	"database_mirroring",
 	"log_shipping",
+	"top_queries",
 }
 
 // scrapersDisabledByDefault lists collectors that only run when explicitly
-// enabled: they need extra grants and cover niche setups, so enabling them
-// by default would report scrape failures on most instances.
+// enabled: log_shipping needs extra grants and covers a niche setup, so
+// enabling it by default would report scrape failures on most instances;
+// top_queries scans the plan cache and its labels churn with the workload.
 var scrapersDisabledByDefault = map[string]bool{
 	"log_shipping": true,
+	"top_queries":  true,
 }
 
-var scraperFactories = map[string]func(*sql.DB) Scraper{
-	"wait_stats":          func(db *sql.DB) Scraper { return NewWaitStatsCollector(db) },
-	"io_file_stats":       func(db *sql.DB) Scraper { return NewIOFileStatsCollector(db) },
-	"sessions":            func(db *sql.DB) Scraper { return NewSessionsCollector(db) },
-	"server_info":         func(db *sql.DB) Scraper { return NewServerInfoCollector(db) },
-	"memory_clerks":       func(db *sql.DB) Scraper { return NewMemoryClerksCollector(db) },
-	"backups":             func(db *sql.DB) Scraper { return NewBackupsCollector(db) },
-	"tempdb":              func(db *sql.DB) Scraper { return NewTempDBCollector(db) },
-	"perf_counters":       func(db *sql.DB) Scraper { return NewPerfCountersCollector(db) },
-	"databases":           func(db *sql.DB) Scraper { return NewDatabasesCollector(db) },
-	"blocking":            func(db *sql.DB) Scraper { return NewBlockingCollector(db) },
-	"active_queries":      func(db *sql.DB) Scraper { return NewActiveQueriesCollector(db) },
-	"availability_groups": func(db *sql.DB) Scraper { return NewAvailabilityGroupsCollector(db) },
-	"agent_jobs":          func(db *sql.DB) Scraper { return NewAgentJobsCollector(db) },
-	"volumes":             func(db *sql.DB) Scraper { return NewVolumesCollector(db) },
-	"schedulers":          func(db *sql.DB) Scraper { return NewSchedulersCollector(db) },
-	"database_mirroring":  func(db *sql.DB) Scraper { return NewDatabaseMirroringCollector(db) },
-	"log_shipping":        func(db *sql.DB) Scraper { return NewLogShippingCollector(db) },
+var scraperFactories = map[string]func(*sql.DB, Options) Scraper{
+	"wait_stats":          func(db *sql.DB, _ Options) Scraper { return NewWaitStatsCollector(db) },
+	"io_file_stats":       func(db *sql.DB, _ Options) Scraper { return NewIOFileStatsCollector(db) },
+	"sessions":            func(db *sql.DB, _ Options) Scraper { return NewSessionsCollector(db) },
+	"server_info":         func(db *sql.DB, _ Options) Scraper { return NewServerInfoCollector(db) },
+	"memory_clerks":       func(db *sql.DB, _ Options) Scraper { return NewMemoryClerksCollector(db) },
+	"backups":             func(db *sql.DB, _ Options) Scraper { return NewBackupsCollector(db) },
+	"tempdb":              func(db *sql.DB, _ Options) Scraper { return NewTempDBCollector(db) },
+	"perf_counters":       func(db *sql.DB, _ Options) Scraper { return NewPerfCountersCollector(db) },
+	"databases":           func(db *sql.DB, _ Options) Scraper { return NewDatabasesCollector(db) },
+	"blocking":            func(db *sql.DB, _ Options) Scraper { return NewBlockingCollector(db) },
+	"active_queries":      func(db *sql.DB, _ Options) Scraper { return NewActiveQueriesCollector(db) },
+	"availability_groups": func(db *sql.DB, _ Options) Scraper { return NewAvailabilityGroupsCollector(db) },
+	"agent_jobs":          func(db *sql.DB, _ Options) Scraper { return NewAgentJobsCollector(db) },
+	"volumes":             func(db *sql.DB, _ Options) Scraper { return NewVolumesCollector(db) },
+	"schedulers":          func(db *sql.DB, _ Options) Scraper { return NewSchedulersCollector(db) },
+	"database_mirroring":  func(db *sql.DB, _ Options) Scraper { return NewDatabaseMirroringCollector(db) },
+	"log_shipping":        func(db *sql.DB, _ Options) Scraper { return NewLogShippingCollector(db) },
+	"top_queries":         func(db *sql.DB, o Options) Scraper { return NewTopQueriesCollector(db, o.TopQueries) },
 }
 
 // ScraperNames returns the names of all available collectors in
@@ -105,6 +109,11 @@ type Exporter struct {
 // NewExporter builds an Exporter running the scrapers enabled in the given
 // map (missing entries fall back to ScraperEnabledByDefault).
 func NewExporter(db *sql.DB, enabled map[string]bool) *Exporter {
+	return NewExporterWithOptions(db, enabled, DefaultOptions())
+}
+
+// NewExporterWithOptions is NewExporter with collector options.
+func NewExporterWithOptions(db *sql.DB, enabled map[string]bool, opts Options) *Exporter {
 	var scrapers []Scraper
 	for _, name := range scraperNames {
 		on, ok := enabled[name]
@@ -114,7 +123,7 @@ func NewExporter(db *sql.DB, enabled map[string]bool) *Exporter {
 		if !on {
 			continue
 		}
-		scrapers = append(scrapers, scraperFactories[name](db))
+		scrapers = append(scrapers, scraperFactories[name](db, opts))
 	}
 	return newExporter(db, scrapers)
 }

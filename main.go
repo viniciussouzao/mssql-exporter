@@ -100,7 +100,7 @@ func run(ctx context.Context, cfg *config.Config) error {
 		prometheus.DefaultRegisterer,
 	)
 
-	reg.MustRegister(collector.NewExporter(conn, cfg.EnabledCollectors))
+	reg.MustRegister(collector.NewExporterWithOptions(conn, cfg.EnabledCollectors, cfg.CollectorOptions))
 
 	prometheus.MustRegister(prometheus.NewGaugeFunc(
 		prometheus.GaugeOpts{

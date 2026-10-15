@@ -43,6 +43,9 @@ type Config struct {
 	// collector.ScraperNames) to whether it should run. Defaults come from
 	// collector.ScraperEnabledByDefault.
 	EnabledCollectors map[string]bool
+
+	// CollectorOptions tunes collectors that need more than the toggle.
+	CollectorOptions collector.Options
 }
 
 type fileConfig struct {
@@ -55,6 +58,13 @@ type fileConfig struct {
 	// Collectors toggles collectors by name; `os_collectors` toggles the
 	// OS-level collectors, every other key must match a SQL Server collector.
 	Collectors map[string]bool `yaml:"collectors"`
+	// TopQueries holds the top_queries collector options; nil fields keep
+	// the defaults.
+	TopQueries struct {
+		Limit       *int  `yaml:"limit"`
+		IncludeText *bool `yaml:"include_text"`
+		TextLength  *int  `yaml:"text_length"`
+	} `yaml:"top_queries"`
 }
 
 // Load parses CLI flags from args (typically os.Args[1:]) and merges them
@@ -70,6 +80,11 @@ func Load(args []string) (*Config, error) {
 	enableOSCollectors := fs.Bool("collector.os-collectors", false, "Enable OS-level collectors (CPU, memory, disk).")
 	configFile := fs.String("config.file", "", "Path to an optional YAML config file.")
 	showVersion := fs.Bool("version", false, "Print version information and exit.")
+
+	defaultOpts := collector.DefaultOptions()
+	topQueriesLimit := fs.Int("collector.top_queries.limit", defaultOpts.TopQueries.Limit, "Number of queries (by total CPU time) exposed by the top_queries collector.")
+	topQueriesIncludeText := fs.Bool("collector.top_queries.include_text", defaultOpts.TopQueries.IncludeText, "Expose the statement text of top queries (literals replaced with ?) in sqlserver_top_query_info.")
+	topQueriesTextLength := fs.Int("collector.top_queries.text_length", defaultOpts.TopQueries.TextLength, "Maximum length of the statement text exposed by the top_queries collector.")
 
 	collectorFlags := make(map[string]*bool, len(collector.ScraperNames()))
 	for _, name := range collector.ScraperNames() {
@@ -161,6 +176,34 @@ func Load(args []string) (*Config, error) {
 		if !known[name] {
 			slog.Warn("unknown collector in config file, ignoring", slog.String("collector", name))
 		}
+	}
+
+	cfg.CollectorOptions = defaultOpts
+	tq := &cfg.CollectorOptions.TopQueries
+	if fc.TopQueries.Limit != nil {
+		tq.Limit = *fc.TopQueries.Limit
+	}
+	if fs.Changed("collector.top_queries.limit") {
+		tq.Limit = *topQueriesLimit
+	}
+	if fc.TopQueries.IncludeText != nil {
+		tq.IncludeText = *fc.TopQueries.IncludeText
+	}
+	if fs.Changed("collector.top_queries.include_text") {
+		tq.IncludeText = *topQueriesIncludeText
+	}
+	if fc.TopQueries.TextLength != nil {
+		tq.TextLength = *fc.TopQueries.TextLength
+	}
+	if fs.Changed("collector.top_queries.text_length") {
+		tq.TextLength = *topQueriesTextLength
+	}
+	if tq.Limit < 1 || tq.Limit > collector.TopQueriesMaxLimit {
+		return nil, fmt.Errorf("collector.top_queries.limit must be between 1 and %d", collector.TopQueriesMaxLimit)
+	}
+	if tq.TextLength < collector.TopQueriesMinTextLength || tq.TextLength > collector.TopQueriesMaxTextLength {
+		return nil, fmt.Errorf("collector.top_queries.text_length must be between %d and %d",
+			collector.TopQueriesMinTextLength, collector.TopQueriesMaxTextLength)
 	}
 
 	cfg.DSN = fc.DSN
