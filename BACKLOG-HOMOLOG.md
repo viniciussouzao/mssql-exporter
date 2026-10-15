@@ -3,7 +3,7 @@
 Pontos encontrados durante a homologação do mssql-exporter em ambientes
 simulando produção (AWS EC2 Windows/Linux e RDS for SQL Server).
 
-**Status:** `aberto` · `em andamento` · `resolvido` · `não será feito`
+**Status:** `aberto` · `em andamento` · `resolvido` · `adiado` (virou item do ROADMAP) · `não será feito`
 **Severidade:** `alta` (bloqueia uso) · `média` (atrapalha operação) · `baixa` (cosmético/ruído)
 
 | ID | Título | Ambiente | Severidade | Status |
@@ -13,7 +13,7 @@ simulando produção (AWS EC2 Windows/Linux e RDS for SQL Server).
 | HML-003 | Coleta de disk I/O no Windows falha com `Invalid class` | EC2 Windows | média | resolvido (v0.1.1) |
 | HML-004 | Gaps intermitentes: `/metrics` retorna HTTP 500 por série duplicada em `volumes` | EC2 Windows | alta | resolvido (v0.1.1) |
 | HML-005 | Disco C: da EC2 quase cheio durante carga no `StressDB` (ambiente) | EC2 Windows | alta | resolvido |
-| HML-006 | Exporter não roda como serviço Windows nativo (ponto de atenção) | EC2 Windows | média | resolvido (v0.2.0; `uninstall` no fim da homologação) |
+| HML-006 | Exporter não roda como serviço Windows nativo (ponto de atenção) | EC2 Windows | média | resolvido (v0.2.0; `uninstall` validado em 2026-10-15) |
 | HML-007 | Validação do coletor `availability_groups` em AG real (validação) | EC2 Windows (AG 01+02) | — | resolvido (v0.3.0) |
 | HML-008 | Fila de envio some do gráfico com a réplica suspensa; faltam `is_suspended` e `secondary_lag_seconds` | EC2 Windows (AG 01+02) | média | resolvido (v0.3.0) |
 | HML-009 | Cenários de falha: banco offline, SQL parado, reboot, kill, backup diferencial (validação) | EC2 Windows (AG 01+02) | — | resolvido |
@@ -26,12 +26,38 @@ simulando produção (AWS EC2 Windows/Linux e RDS for SQL Server).
 | HML-016 | Driver `denisenkom/go-mssqldb` arquivado: migrar para `microsoft/go-mssqldb` | EC2 Windows (01+02) | média | resolvido (v0.5.0) |
 | HML-017 | Rolling upgrade SQL Server 2019 → 2022 (02) → 2025 (01, 02) com AG, mirroring e log shipping (validação) | EC2 Windows (01+02) | — | resolvido |
 | HML-018 | Estado do mirroring some (sem série) quando o banco espelhado não está acessível | EC2 Windows (01+02) | média | resolvido (documentação, v0.5.0) |
-| HML-019 | `volumes` estoura o timeout de query quando um banco está trocando de estado | EC2 Windows (01+02) | baixa | aberto |
+| HML-019 | `volumes` estoura o timeout de query quando um banco está trocando de estado | EC2 Windows (01+02) | baixa | adiado (ROADMAP) |
 | HML-020 | `blocking` falha com erro 983 logo após o SQL Server subir (réplica do AG em `RESOLVING`) | EC2 Windows (02) | baixa | resolvido (v0.5.0) |
 | HML-021 | `sqlserver_sessions_by_login` com carga de vários logins (validação) | EC2 Windows (01) | — | resolvido |
 | HML-022 | Coletor `active_queries`: requests longas e transações abertas (validação) | EC2 Windows (01) | — | resolvido |
 | HML-023 | Coletor `top_queries` com texto ofuscado (validação) | EC2 Windows (01) | — | resolvido |
 | HML-024 | Coletor `index_fragmentation` em background e `CONNECT ANY DATABASE` (validação) | EC2 Windows (01) | — | resolvido |
+
+## Encerramento da fase EC2 (2026-10-15)
+
+Fase EC2 Windows encerrada com a v0.9.0 rodando na 01. Coberto:
+
+- **Versões do SQL Server:** 2019 CU32 → 2022 → 2025 RTM com rolling upgrade
+  nas duas instâncias (HML-017), sem mudança de query.
+- **HA/DR:** Always On AG com 2 réplicas (failover, suspend/resume, lag),
+  database mirroring (failover, parceiro fora, suspend) e log shipping.
+- **Conexão:** `encrypt=strict` (TDS 8) com certificado próprio, após a
+  migração para `microsoft/go-mssqldb` (HML-016).
+- **Operação:** serviço Windows nativo (install/start/stop/status, reboot,
+  restart pelo SCM após kill, uninstall/reinstall), Event Log, cenários de
+  falha (HML-009), fuso UTC-3 (HML-010), timeout de scrape (HML-013).
+- **Fase 6 do ROADMAP com carga do `hack/loadgen`:** sessões por login,
+  `active_queries`, `top_queries` e `index_fragmentation` (HML-021 a HML-024).
+
+Fica para depois:
+
+- **Fase RDS:** repetir as permissões no `msdb` (HML-002) e testar se o
+  usuário master consegue conceder `CONNECT ANY DATABASE` (HML-024).
+- **ROADMAP (Later):** filtro de estado na query de `volumes` (HML-019) e
+  correção de `os_disk_*_queue_length` no Windows (pendência do HML-003).
+- **Limitações do laboratório:** mirroring com witness (sem terceira
+  instância); conta virtual de serviço no lugar de `LocalSystem` (HML-006)
+  segue como ponto a considerar.
 
 ---
 
@@ -323,7 +349,7 @@ Arquivos removidos da EC2 para liberar espaço.
 - **Ambiente:** EC2 Windows (instâncias 01 e 02)
 - **Encontrado em:** 2026-10-08
 - **Severidade:** média
-- **Status:** resolvido (v0.2.0; `uninstall` no fim da homologação)
+- **Status:** resolvido (v0.2.0; `uninstall` validado em 2026-10-15)
 
 **Observado**
 
@@ -377,6 +403,16 @@ Get-EventLog -LogName Application -Source mssql-exporter -Newest 10
 - Matar o processo (`Stop-Process -Name mssql-exporter -Force`) e confirmar
   que o SCM reinicia em ~5 s.
 - `service stop` / `service uninstall` sem deixar processo órfão.
+
+**Validação do `uninstall` (2026-10-15, v0.9.0, EC2 01)**
+
+- [x] `service uninstall` com o serviço rodando: parou e removeu
+  (`Service "mssql-exporter" removed.`); `Get-Service` não encontra o serviço,
+  nenhum processo `mssql-exporter`, porta 9187 livre e a origem do Event Log
+  removida do registro.
+- [x] `service install` + `start` de novo: `automatic delayed start, restarts
+  on failure`, rodando. No Prometheus, `up 0` só entre 18:01:10 e 18:01:25;
+  de volta às 18:01:40 com os 19 coletores em `success 1`.
 
 **Pontos a considerar**
 
@@ -1312,7 +1348,7 @@ inventar um valor que o SQL Server não informa.
 - **Ambiente:** EC2 01 + 02, durante o HML-017
 - **Encontrado em:** 2026-10-14
 - **Severidade:** baixa (uma coleta parcial por evento)
-- **Status:** aberto
+- **Status:** adiado (ROADMAP, Later)
 
 **Observado**
 

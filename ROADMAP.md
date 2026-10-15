@@ -139,11 +139,18 @@ this order.
     result; `HAS_DBACCESS` database filter (needs `CONNECT ANY DATABASE` to
     cover databases without a user for the login), three-part catalog names
     with bracket-quoted database names, heaps with an empty `index_name`
-- Validate all of the above on EC2 (2025) and in the RDS phase
+- Validated on EC2 with SQL Server 2025 (HML-021 to HML-024); repeat in the
+  RDS phase
 
 ## Later / ideas (unprioritized)
 
 - Missing indexes (`sys.dm_db_missing_index_*`)
+- `volumes`: skip databases changing state (`sys.databases.state` filter) to
+  narrow the window where `sys.dm_os_volume_stats` waits and the query times
+  out (HML-019; low impact, the next scrape succeeds)
+- Windows OS collector: `os_disk_read_queue_length` / `os_disk_write_queue_length`
+  are exposed as gauges over raw cumulative WMI counters; fixing needs a new
+  name/type aligned with Linux (pending from HML-003)
 - Replication status
 - Unit tests for collectors (mock `*sql.DB`), integration tests with
   SQL Server in Docker
