@@ -10,6 +10,14 @@ IF DB_ID(N'LoadTestDB') IS NULL
     CREATE DATABASE LoadTestDB;
 GO
 
+-- Readers use row versions instead of waiting for writers, so blocking stays
+-- between writers (hot_update vs blocker) as in a typical OLTP database;
+-- without it every scan queues behind the blocker. Kicks out open sessions
+-- of LoadTestDB, so stop loadgen before re-running this script.
+IF EXISTS (SELECT 1 FROM sys.databases WHERE name = N'LoadTestDB' AND is_read_committed_snapshot_on = 0)
+    ALTER DATABASE LoadTestDB SET READ_COMMITTED_SNAPSHOT ON WITH ROLLBACK IMMEDIATE;
+GO
+
 USE LoadTestDB;
 GO
 

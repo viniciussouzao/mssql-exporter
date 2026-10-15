@@ -35,33 +35,37 @@ type workload struct {
 
 // hotRows are updated by "hot_update" and held by "blocker", so the two
 // collide and produce real blocking.
+//
+// Weights are per mille. long_wait and blocker last 20-30s against a few ms
+// for the rest, so even at 1‰ each they keep roughly a quarter of the
+// workers busy waiting; higher weights leave the generator mostly idle.
 const hotRows = 5
 
 var workloads = []workload{
-	{"point_lookup", 50, func(ctx context.Context, db *sql.DB) error {
+	{"point_lookup", 500, func(ctx context.Context, db *sql.DB) error {
 		return queryDiscard(ctx, db, `SELECT id, amount, status FROM dbo.Orders WHERE id = @p1`, rand.IntN(200000)+1)
 	}},
-	{"customer_orders", 20, func(ctx context.Context, db *sql.DB) error {
+	{"customer_orders", 200, func(ctx context.Context, db *sql.DB) error {
 		return queryDiscard(ctx, db, `SELECT TOP (50) id, amount FROM dbo.Orders WHERE customer_id = @p1 ORDER BY created_at DESC`, rand.IntN(5000))
 	}},
-	{"status_report", 10, func(ctx context.Context, db *sql.DB) error {
+	{"status_report", 100, func(ctx context.Context, db *sql.DB) error {
 		// Clustered index scan: the "heavier" query of the mix.
 		return queryDiscard(ctx, db, `SELECT status, COUNT(*), SUM(amount) FROM dbo.Orders WHERE created_at >= DATEADD(DAY, -@p1, SYSUTCDATETIME()) GROUP BY status`, rand.IntN(365)+1)
 	}},
-	{"update_order", 10, func(ctx context.Context, db *sql.DB) error {
+	{"update_order", 148, func(ctx context.Context, db *sql.DB) error {
 		_, err := db.ExecContext(ctx, `UPDATE dbo.Orders SET amount = amount + 1 WHERE id = @p1`, rand.IntN(200000-hotRows)+hotRows+1)
 		return err
 	}},
-	{"hot_update", 5, func(ctx context.Context, db *sql.DB) error {
+	{"hot_update", 50, func(ctx context.Context, db *sql.DB) error {
 		_, err := db.ExecContext(ctx, `UPDATE dbo.Orders SET status = (status + 1) % 5 WHERE id = @p1`, rand.IntN(hotRows)+1)
 		return err
 	}},
-	{"long_wait", 3, func(ctx context.Context, db *sql.DB) error {
+	{"long_wait", 1, func(ctx context.Context, db *sql.DB) error {
 		// A request that stays active for a while without using resources.
 		_, err := db.ExecContext(ctx, `WAITFOR DELAY '00:00:30'`)
 		return err
 	}},
-	{"blocker", 2, func(ctx context.Context, db *sql.DB) error {
+	{"blocker", 1, func(ctx context.Context, db *sql.DB) error {
 		// Holds a hot row locked for 20s; hot_update sessions queue behind it.
 		_, err := db.ExecContext(ctx, `
 			BEGIN TRANSACTION;
