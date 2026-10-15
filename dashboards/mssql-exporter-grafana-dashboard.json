@@ -2145,12 +2145,351 @@
       "description": "User sessions per login (sqlserver_sessions_by_login); system sessions are excluded"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 62
+      },
+      "id": 80,
+      "options": {
+        "legend": {
+          "calcs": [
+            "max",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sum by (over_seconds) (sqlserver_requests_long_running{sqlserver_instance=~\"$sqlserver_instance\"})",
+          "legendFormat": ">= {{over_seconds}}s",
+          "refId": "A"
+        }
+      ],
+      "title": "Long-running User Requests",
+      "type": "timeseries",
+      "description": "User requests running for at least N seconds (sqlserver_requests_long_running)"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 62
+      },
+      "id": 81,
+      "options": {
+        "legend": {
+          "calcs": [
+            "max",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "max by (command) (sqlserver_request_max_elapsed_seconds{sqlserver_instance=~\"$sqlserver_instance\"})",
+          "legendFormat": "{{command}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Longest Running Request by Command",
+      "type": "timeseries",
+      "description": "Elapsed time of the longest running user request per command (sqlserver_request_max_elapsed_seconds). WAITFOR/BACKUP can be long by design."
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "sleeping with open tran"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "open transactions"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 62
+      },
+      "id": 82,
+      "options": {
+        "legend": {
+          "calcs": [
+            "max",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "max(sqlserver_oldest_open_transaction_seconds{sqlserver_instance=~\"$sqlserver_instance\"})",
+          "legendFormat": "oldest open transaction",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sum(sqlserver_open_transactions{sqlserver_instance=~\"$sqlserver_instance\"})",
+          "legendFormat": "open transactions",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sum(sqlserver_sleeping_sessions_with_open_transaction{sqlserver_instance=~\"$sqlserver_instance\"})",
+          "legendFormat": "sleeping with open tran",
+          "refId": "C"
+        }
+      ],
+      "title": "Open Transactions",
+      "type": "timeseries",
+      "description": "Oldest open user transaction (left, seconds) and sessions sleeping with an open transaction (right)"
+    },
+    {
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 62
+        "y": 70
       },
       "id": 30,
       "panels": [],
@@ -2220,7 +2559,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 63
+        "y": 71
       },
       "id": 31,
       "options": {
@@ -2325,7 +2664,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 63
+        "y": 71
       },
       "id": 32,
       "options": {
@@ -2404,7 +2743,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 63
+        "y": 71
       },
       "id": 33,
       "options": {
@@ -2443,7 +2782,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 71
+        "y": 79
       },
       "id": 34,
       "panels": [],
@@ -2513,7 +2852,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 72
+        "y": 80
       },
       "id": 35,
       "options": {
@@ -2618,7 +2957,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 72
+        "y": 80
       },
       "id": 36,
       "options": {
@@ -2723,7 +3062,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 80
+        "y": 88
       },
       "id": 37,
       "options": {
@@ -2771,7 +3110,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 88
+        "y": 96
       },
       "id": 38,
       "panels": [],
@@ -2806,7 +3145,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 89
+        "y": 97
       },
       "id": 39,
       "options": {
@@ -2868,7 +3207,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 89
+        "y": 97
       },
       "id": 40,
       "options": {
@@ -2938,7 +3277,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 89
+        "y": 97
       },
       "id": 41,
       "options": {
@@ -3010,7 +3349,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 97
+        "y": 105
       },
       "id": 42,
       "options": {
@@ -3098,7 +3437,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 97
+        "y": 105
       },
       "id": 43,
       "options": {
@@ -3154,7 +3493,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 105
+        "y": 113
       },
       "id": 44,
       "panels": [],
@@ -3189,7 +3528,7 @@
         "h": 4,
         "w": 6,
         "x": 0,
-        "y": 106
+        "y": 114
       },
       "id": 45,
       "options": {
@@ -3250,7 +3589,7 @@
         "h": 4,
         "w": 6,
         "x": 6,
-        "y": 106
+        "y": 114
       },
       "id": 46,
       "options": {
@@ -3311,7 +3650,7 @@
         "h": 4,
         "w": 6,
         "x": 12,
-        "y": 106
+        "y": 114
       },
       "id": 47,
       "options": {
@@ -3372,7 +3711,7 @@
         "h": 4,
         "w": 6,
         "x": 18,
-        "y": 106
+        "y": 114
       },
       "id": 48,
       "options": {
@@ -3468,7 +3807,7 @@
         "h": 8,
         "w": 16,
         "x": 0,
-        "y": 110
+        "y": 118
       },
       "id": 49,
       "options": {
@@ -3591,7 +3930,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 110
+        "y": 118
       },
       "id": 50,
       "options": {
@@ -3630,7 +3969,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 118
+        "y": 126
       },
       "id": 51,
       "panels": [],
@@ -3673,7 +4012,7 @@
         "h": 6,
         "w": 12,
         "x": 0,
-        "y": 119
+        "y": 127
       },
       "id": 52,
       "options": {
@@ -3770,7 +4109,7 @@
         "h": 6,
         "w": 12,
         "x": 12,
-        "y": 119
+        "y": 127
       },
       "id": 53,
       "options": {
@@ -3813,7 +4152,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 125
+        "y": 133
       }
     },
     {
@@ -3829,7 +4168,7 @@
         "h": 8,
         "w": 10,
         "x": 0,
-        "y": 126
+        "y": 134
       },
       "fieldConfig": {
         "defaults": {
@@ -3998,7 +4337,7 @@
         "h": 8,
         "w": 14,
         "x": 10,
-        "y": 126
+        "y": 134
       },
       "fieldConfig": {
         "defaults": {
@@ -4316,7 +4655,7 @@
         "h": 7,
         "w": 12,
         "x": 0,
-        "y": 134
+        "y": 142
       },
       "fieldConfig": {
         "defaults": {
@@ -4513,7 +4852,7 @@
         "h": 7,
         "w": 12,
         "x": 12,
-        "y": 134
+        "y": 142
       },
       "id": 61,
       "options": {
@@ -4611,7 +4950,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 141
+        "y": 149
       },
       "id": 62,
       "options": {
@@ -4709,7 +5048,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 141
+        "y": 149
       },
       "id": 63,
       "options": {
@@ -4807,7 +5146,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 141
+        "y": 149
       },
       "id": 64,
       "options": {
@@ -4847,7 +5186,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 149
+        "y": 157
       },
       "id": 65,
       "panels": [],
@@ -4867,7 +5206,7 @@
         "h": 7,
         "w": 12,
         "x": 0,
-        "y": 150
+        "y": 158
       },
       "fieldConfig": {
         "defaults": {
@@ -5179,7 +5518,7 @@
         "h": 7,
         "w": 12,
         "x": 12,
-        "y": 150
+        "y": 158
       },
       "fieldConfig": {
         "defaults": {
@@ -5382,7 +5721,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 157
+        "y": 165
       },
       "id": 68,
       "options": {
@@ -5480,7 +5819,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 157
+        "y": 165
       },
       "id": 69,
       "options": {
@@ -5578,7 +5917,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 157
+        "y": 165
       },
       "id": 70,
       "options": {
@@ -5676,7 +6015,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 165
+        "y": 173
       },
       "id": 71,
       "options": {
@@ -5792,7 +6131,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 165
+        "y": 173
       },
       "id": 72,
       "options": {
@@ -5832,7 +6171,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 174
+        "y": 182
       },
       "id": 73,
       "panels": [],
@@ -5852,7 +6191,7 @@
         "h": 7,
         "w": 10,
         "x": 0,
-        "y": 175
+        "y": 183
       },
       "fieldConfig": {
         "defaults": {
@@ -6020,7 +6359,7 @@
         "h": 7,
         "w": 14,
         "x": 10,
-        "y": 175
+        "y": 183
       },
       "fieldConfig": {
         "defaults": {
@@ -6320,7 +6659,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 182
+        "y": 190
       },
       "id": 76,
       "options": {
@@ -6453,7 +6792,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 182
+        "y": 190
       },
       "id": 77,
       "options": {
@@ -6560,7 +6899,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 182
+        "y": 190
       },
       "id": 78,
       "options": {
@@ -6600,7 +6939,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 191
+        "y": 199
       },
       "id": 54,
       "panels": [],
@@ -6645,7 +6984,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 192
+        "y": 200
       },
       "id": 55,
       "options": {
@@ -6721,7 +7060,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 192
+        "y": 200
       },
       "id": 56,
       "options": {

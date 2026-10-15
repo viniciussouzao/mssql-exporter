@@ -22,6 +22,7 @@ The exporter currently includes these collectors:
 - Performance counters: batch requests, compilations, page life expectancy, buffer cache hit ratio, deadlocks, lock waits, user connections and more.
 - Databases: state, recovery model, data/log sizes and log usage per database.
 - Blocking: blocked sessions, longest current block and requests by status.
+- Active queries: long-running user requests and open user transactions, aggregated (no per-query labels).
 - Availability Groups: replica role, synchronization health and send/redo queues (emits nothing when Always On is disabled).
 - SQL Agent jobs: enabled state, last run outcome, timestamp and duration.
 - Volumes: total/available disk space per volume hosting database files, as seen by SQL Server (works for remote monitoring).
@@ -305,6 +306,25 @@ Metric names are stable and follow Prometheus best practices. Selected examples:
     database is momentarily not accessible: error 976 on a secondary, 983
     while the replica is still resolving its role right after SQL Server
     starts; the collector retries once before reporting the scrape as failed)
+
+- Active queries (user sessions only; the exporter's own request is excluded)
+  - `sqlserver_requests_long_running{over_seconds="60"} 2`: user requests
+    running for at least 10, 60, 300 and 1800 seconds (always emitted, 0 when
+    idle)
+  - `sqlserver_request_max_elapsed_seconds{command="SELECT"} 75`: longest
+    running user request per command, only for commands currently running.
+    Exclude commands that wait by design when alerting, e.g.
+    `max(sqlserver_request_max_elapsed_seconds{command!~"WAITFOR|BACKUP.*|RESTORE.*|DBCC.*"}) > 600`
+    (a Service Broker `WAITFOR (RECEIVE ...)` or a polling loop can run for days)
+  - `sqlserver_open_transactions 4`
+  - `sqlserver_oldest_open_transaction_seconds 620` (0 when there is none):
+    long open transactions hold locks, keep row versions in tempdb and
+    prevent log truncation
+  - `sqlserver_sleeping_sessions_with_open_transaction 1`: idle sessions
+    holding a transaction, typically a `BEGIN TRAN` never committed
+  - Elapsed times are computed in server local time (`GETDATE()`), so a
+    daylight saving change can skew them by one hour for requests spanning it
+    (negative values are reported as 0)
 
 - Availability Groups (only when Always On is enabled)
   - `sqlserver_hadr_replica_role{ag_name="ag1",replica_server="NODE1"} 1`

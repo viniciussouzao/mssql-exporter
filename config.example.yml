@@ -28,6 +28,7 @@ collectors:
   # perf_counters: true
   # databases: true
   # blocking: true
+  # active_queries: true
   # availability_groups: true
   # agent_jobs: true
   # volumes: true
