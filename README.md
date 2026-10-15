@@ -29,6 +29,7 @@ The exporter currently includes these collectors:
 - Schedulers: runnable tasks (CPU pressure signal), active workers and work queue.
 - Database mirroring: role, state, safety level, witness state and send/redo queues per mirrored database (emits nothing when no database is mirrored).
 - Log shipping (opt-in): last backup/copy/restore timestamps, restore latency and alert thresholds from the log shipping monitor tables.
+- Top queries (opt-in): top N queries by CPU from the plan cache, per `query_hash`, with optional statement text (literals obfuscated).
 
 ## Quick Start
 
@@ -72,12 +73,19 @@ Flags (mirroring the ergonomics of `mysqld_exporter`/`postgres_exporter`):
 --web.listen-address string    Address to listen on for the web interface and metrics. (default ":9187")
 --web.telemetry-path string    Path under which to expose metrics. (default "/metrics")
 --collector.<name>             Enable/disable a SQL Server collector (all default to true
-                               except log_shipping).
+                               except log_shipping and top_queries).
                                Names: wait_stats, io_file_stats, sessions, server_info,
                                memory_clerks, backups, tempdb, perf_counters, databases,
-                               blocking, availability_groups, agent_jobs, volumes, schedulers,
-                               database_mirroring, log_shipping.
+                               blocking, active_queries, availability_groups, agent_jobs,
+                               volumes, schedulers, database_mirroring, log_shipping,
+                               top_queries.
                                Example: --collector.backups=false, --collector.log_shipping
+--collector.top_queries.limit int
+                               Queries (by total CPU) exposed by top_queries (default 50, max 1000).
+--collector.top_queries.include_text
+                               Expose the statement text in sqlserver_top_query_info (default false).
+--collector.top_queries.text_length int
+                               Maximum statement text length (default 120, 16-4000).
 --collector.os-collectors      Enable OS-level collectors (CPU, memory, disk).
 --config.file string           Path to an optional YAML config file.
 --web.config.file string       Path to an exporter-toolkit web config file enabling TLS and/or basic auth.
@@ -223,6 +231,7 @@ The exporter reads from (among others):
 - `msdb.dbo.backupset`
 - `sys.database_mirroring`
 - `msdb.dbo.log_shipping_monitor_primary` / `log_shipping_monitor_secondary` (log_shipping only)
+- `sys.dm_exec_query_stats`, `sys.dm_exec_plan_attributes`, `sys.dm_exec_sql_text` (top_queries only)
 - `SERVERPROPERTY(...)`
 
 ## Availability & Self-Metrics
@@ -409,6 +418,37 @@ Metric names are stable and follow Prometheus best practices. Selected examples:
     job history shows "Failed to convert parameter value from a SqlGuid to a
     String"), so these timestamps stay frozen — the same values
     `sp_help_log_shipping_monitor` reports. Fixed in CU2.
+
+- Top queries (opt-in, `--collector.top_queries`; no extra grants beyond
+  `VIEW SERVER STATE`)
+  - The top N queries (`--collector.top_queries.limit`, default 50) by total
+    CPU time in the plan cache (`sys.dm_exec_query_stats`), aggregated by
+    `query_hash`; `db_name` is the database the statement ran in
+  - `sqlserver_top_query_executions_total{db_name="app",query_hash="0x1A2B3C4D5E6F7081"} 72600`
+  - `sqlserver_top_query_cpu_seconds_total{...}`,
+    `sqlserver_top_query_elapsed_seconds_total{...}`,
+    `sqlserver_top_query_logical_reads_total{...}`,
+    `sqlserver_top_query_physical_reads_total{...}`,
+    `sqlserver_top_query_logical_writes_total{...}`
+  - Average duration:
+    `rate(sqlserver_top_query_elapsed_seconds_total[5m]) / rate(sqlserver_top_query_executions_total[5m])`
+  - `sqlserver_top_query_info{db_name="app",query_hash="0x1A2B...",query_text="SELECT p.parcela FROM dbo.t p WHERE p.id = ?"} 1`
+    only with `--collector.top_queries.include_text`: the statement text with
+    string, numeric and hex literals replaced by `?`, comments removed and
+    cut to `--collector.top_queries.text_length` characters. Ad hoc
+    statements carry real values (customer data, IDs) in their text, so it
+    is off by default; join it in queries with
+    `* on (query_hash) group_left(query_text) sqlserver_top_query_info`
+  - Caveats:
+    - Series come and go as queries enter and leave the top N, so `rate()`
+      has gaps; and the counters only cover what is still in the plan cache:
+      when a plan is evicted (memory pressure, recompile, `DBCC
+      FREEPROCCACHE`) a query's counters drop, which Prometheus treats as a
+      counter reset
+    - The plan cache is scanned on every scrape; check
+      `sqlserver_scrape_collector_duration_seconds{collector="top_queries"}`
+      on instances with very large caches
+    - On an idle instance the top is the exporter's own DMV queries
 
 - Volumes
   - `sqlserver_volume_total_bytes{volume_mount_point="C:\\"} 1962694664192`

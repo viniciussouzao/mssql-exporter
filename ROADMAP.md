@@ -101,7 +101,7 @@ this order.
   `sqlserver_request_max_elapsed_seconds{command}` (per command so alerts can
   skip `WAITFOR`/`BACKUP`), open transactions, oldest open transaction age
   and sleeping sessions holding a transaction
-- [ ] **Top queries** (`sys.dm_exec_query_stats` aggregated by `query_hash`) —
+- [x] **Top queries** (`sys.dm_exec_query_stats` aggregated by `query_hash`) —
   **disabled by default**. Follows `postgres_exporter`'s `stat_statements`
   and `mysqld_exporter`'s `perf_schema.eventsstatements`:
   - top N by CPU (`--collector.top_queries.limit`, default 50–100), labels
@@ -114,6 +114,11 @@ this order.
   - document: series churn when queries enter/leave the top N (gaps in
     `rate()`), counter resets on plan cache eviction, DMV scan cost on large
     plan caches (may need its own collection interval, see below)
+  - Done as the `top_queries` collector: one plan cache scan per scrape
+    (window functions + TOP before the per-row APPLYs), options
+    `--collector.top_queries.limit|include_text|text_length` (also
+    `top_queries:` in the YAML config), statement text in a separate
+    `sqlserver_top_query_info` series joined on `query_hash`
 - [ ] **Index fragmentation** (`sys.dm_db_index_physical_stats`, `LIMITED`
   mode) — **disabled by default**, heavy I/O on large objects:
   - collected **in the background on its own interval** (e.g.

@@ -14,8 +14,8 @@ import (
 	"syscall"
 	"time"
 
-	_ "github.com/microsoft/go-mssqldb"
 	"github.com/joho/godotenv"
+	_ "github.com/microsoft/go-mssqldb"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/exporter-toolkit/web"
@@ -100,7 +100,7 @@ func run(ctx context.Context, cfg *config.Config) error {
 		prometheus.DefaultRegisterer,
 	)
 
-	reg.MustRegister(collector.NewExporter(conn, cfg.EnabledCollectors))
+	reg.MustRegister(collector.NewExporterWithOptions(conn, cfg.EnabledCollectors, cfg.CollectorOptions))
 
 	prometheus.MustRegister(prometheus.NewGaugeFunc(
 		prometheus.GaugeOpts{

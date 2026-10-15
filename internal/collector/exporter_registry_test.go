@@ -28,7 +28,7 @@ func TestScraperRegistryConsistency(t *testing.T) {
 			continue
 		}
 
-		scraper := factory(db)
+		scraper := factory(db, DefaultOptions())
 		if scraper.Name() != name {
 			t.Errorf("scraperFactories[%q] produced a scraper with Name() = %q, want %q (factory wired to the wrong constructor?)", name, scraper.Name(), name)
 		}
@@ -111,4 +111,23 @@ func TestNewExporterEnabledMap(t *testing.T) {
 			t.Error("sessions missing, want enabled")
 		}
 	})
+}
+
+// TestNewExporterWithOptionsPassesTopQueriesOptions guards the options
+// plumbing: the configured limit must reach the collector.
+func TestNewExporterWithOptionsPassesTopQueriesOptions(t *testing.T) {
+	db, _ := newSQLMock(t)
+	opts := DefaultOptions()
+	opts.TopQueries.Limit = 7
+
+	e := NewExporterWithOptions(db, map[string]bool{"top_queries": true}, opts)
+	for _, s := range e.scrapers {
+		if tq, ok := s.(*SQLServerTopQueries); ok {
+			if tq.opts.Limit != 7 {
+				t.Errorf("top_queries limit = %d, want 7 from the options", tq.opts.Limit)
+			}
+			return
+		}
+	}
+	t.Fatal("top_queries scraper not registered")
 }

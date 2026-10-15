@@ -35,3 +35,10 @@ collectors:
   # schedulers: true
   # database_mirroring: true
   # log_shipping: false
+  # top_queries: false
+
+# Options of the top_queries collector (only used when it is enabled).
+# top_queries:
+#   limit: 50            # queries by total CPU time, 1-1000
+#   include_text: false  # statement text with literals obfuscated
+#   text_length: 120     # 16-4000
