@@ -29,6 +29,7 @@ simulando produção (AWS EC2 Windows/Linux e RDS for SQL Server).
 | HML-019 | `volumes` estoura o timeout de query quando um banco está trocando de estado | EC2 Windows (01+02) | baixa | aberto |
 | HML-020 | `blocking` falha com erro 983 logo após o SQL Server subir (réplica do AG em `RESOLVING`) | EC2 Windows (02) | baixa | resolvido (v0.5.0) |
 | HML-021 | `sqlserver_sessions_by_login` com carga de vários logins (validação) | EC2 Windows (01) | — | resolvido |
+| HML-022 | Coletor `active_queries`: requests longas e transações abertas (validação) | EC2 Windows (01) | — | resolvido |
 
 ---
 
@@ -1395,3 +1396,32 @@ longas e bloqueio proposital.
   máxima de 54,7 s); com RCSI e pesos rebalanceados: ~42 batch requests/s,
   bloqueio só em rajadas e version store do tempdb em uso.
 - 16/16 coletores com `success 1` durante toda a carga; scrape máximo 1,06 s.
+
+---
+
+## HML-022 — Coletor `active_queries`: requests longas e transações abertas (validação)
+
+- **Ambiente:** EC2 01 (SQL Server 2025 RTM), `0.7.0-homolog`
+- **Encontrado em:** 2026-10-15
+- **Severidade:** — (validação do item 2 da Fase 6 do roadmap)
+- **Status:** resolvido
+
+**Cenário**
+
+`hack/loadgen` (10 logins × 2 workers, a partir de 16:32) mais dois testes no
+SSMS por volta de 16:32: um `BEGIN TRAN` + `UPDATE` sem `COMMIT` (sessão ociosa
+com transação aberta) e um `WAITFOR DELAY '00:02:00'` (request longa).
+`ROLLBACK` às 16:44.
+
+**Resultado**
+
+| Métrica | Observado |
+|---------|-----------|
+| `sqlserver_request_max_elapsed_seconds{command="WAITFOR"}` | 27 → 117 s, +15 s por scrape; depois do fim do `WAITFOR` do SSMS, só os `long_wait` do loadgen (até ~30 s) |
+| `sqlserver_requests_long_running{over_seconds="60"}` | 0 → 1 às 16:33:20 (o `WAITFOR` passou de 57 para 72 s), volta a 0 às 16:34:20 |
+| `sqlserver_requests_long_running{over_seconds="10"}` | 1–2 (o `WAITFOR` do SSMS + `long_wait`/`blocker` do loadgen) |
+| `sqlserver_sleeping_sessions_with_open_transaction` | 1 durante todo o teste, 0 às 16:45:11 |
+| `sqlserver_oldest_open_transaction_seconds` | 32 → 767 s em linha reta; 17 s às 16:45:11 (só os `blocker` do loadgen) |
+| `sqlserver_request_max_elapsed_seconds` de `SELECT`/`UPDATE` | 0 s (queries do loadgen são rápidas) |
+
+- `active_queries` sempre com `success 1`, ≈27 ms por scrape.
