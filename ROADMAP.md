@@ -91,12 +91,16 @@ this order.
   `sqlserver_sessions_by_login{login_name}` in the `sessions` collector.
   Cardinality follows the number of logins with open sessions (bounded in
   practice; document it for Windows-auth shops with one login per person)
-- [ ] **Active queries, aggregated** (`sys.dm_exec_requests`,
+- [x] **Active queries, aggregated** (`sys.dm_exec_requests`,
   `sys.dm_tran_active_transactions`) — no per-query labels: running user
   requests above a duration threshold, longest running request duration,
   age of the oldest open transaction. Cheap, alert-friendly ("a query has
   been stuck for 20 minutes"); candidate for default on. Reuse the AG
-  976/983 retry from `blocking`
+  976/983 retry from `blocking`. Done as the `active_queries` collector
+  (default on): `sqlserver_requests_long_running{over_seconds}`,
+  `sqlserver_request_max_elapsed_seconds{command}` (per command so alerts can
+  skip `WAITFOR`/`BACKUP`), open transactions, oldest open transaction age
+  and sleeping sessions holding a transaction
 - [ ] **Top queries** (`sys.dm_exec_query_stats` aggregated by `query_hash`) —
   **disabled by default**. Follows `postgres_exporter`'s `stat_statements`
   and `mysqld_exporter`'s `perf_schema.eventsstatements`:
