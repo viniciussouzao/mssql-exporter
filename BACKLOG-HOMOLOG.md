@@ -32,6 +32,7 @@ simulando produção (AWS EC2 Windows/Linux e RDS for SQL Server).
 | HML-022 | Coletor `active_queries`: requests longas e transações abertas (validação) | EC2 Windows (01) | — | resolvido |
 | HML-023 | Coletor `top_queries` com texto ofuscado (validação) | EC2 Windows (01) | — | resolvido |
 | HML-024 | Coletor `index_fragmentation` em background e `CONNECT ANY DATABASE` (validação) | EC2 Windows (01) | — | resolvido |
+| HML-025 | Exporter como serviço Linux (systemd) no bastion da fase RDS (validação) | Linux (bastion) | — | em andamento |
 
 ## Encerramento da fase EC2 (2026-10-15)
 
@@ -1532,3 +1533,46 @@ no ciclo seguinte (intervalo de 1 min); banco chamado `Odd]Name` lido sem erro
 **Pendente para a fase RDS:** confirmar se o usuário master do RDS consegue
 executar `GRANT CONNECT ANY DATABASE` para o login do exporter (ele não é
 sysadmin); se não conseguir, documentar a alternativa (usuário em cada banco).
+
+---
+
+## HML-025 — Exporter como serviço Linux (systemd) no bastion da fase RDS (validação)
+
+- **Ambiente:** bastion Linux da fase RDS (o exporter roda nele e acessa o RDS
+  pela VPC; o Prometheus local lê o exporter por túnel SSH)
+- **Encontrado em:** 2026-10-15
+- **Severidade:** — (até aqui o Linux não tinha forma documentada de rodar
+  como serviço; o subcomando `service` é só do Windows)
+- **Status:** em andamento
+
+**Entrega**
+
+- Unit `contrib/systemd/mssql-exporter.service`, incluída nos arquivos de
+  release a partir da v0.9.1 junto com `config.example.yml`: usuário de
+  sistema `mssql-exporter` sem shell, config em `/etc/mssql-exporter`
+  (`0640 root:mssql-exporter`), `Restart=on-failure`, sandbox do systemd.
+- README: seção "Running as a Linux service (systemd)" com o roteiro de
+  instalação a partir da release.
+
+**Validação local (2026-10-15, container Debian 12 com systemd, build snapshot)**
+
+- [x] Roteiro do README a partir do tarball: checksum OK, binário, usuário,
+  config e unit instalados com as permissões esperadas.
+- [x] `systemctl enable --now`: serviço ativo como `mssql-exporter`,
+  `sqlserver_up 1` e os 16 coletores padrão + `index_fragmentation` com
+  `success 1` contra o SQL Server 2025 local.
+- [x] Com o sandbox, os coletores de SO (CPU, memória, disco, rede, boot)
+  funcionam; `os_filesystem_*` e `os_process_*` não aparecem no container nem
+  sem o sandbox (sem partição física nem processo do SQL Server) — conferir
+  `os_filesystem_*` numa VM.
+- [x] `kill -9` → reiniciado em 5 s (`NRestarts=1`); `systemctl stop` →
+  `shutting down` no journal, status 0; restart do container → serviço volta
+  sozinho (`enabled`).
+- [x] `systemd-analyze security`: exposição 3.1 ("OK").
+
+**Pendente no bastion**
+
+- Instalar pelo roteiro do README a partir da release v0.9.1 (distribuição e
+  arquitetura do bastion).
+- `web.listen_address: "127.0.0.1:9187"` + túnel SSH a partir do Mac, target
+  novo no `prometheus.yml` local.

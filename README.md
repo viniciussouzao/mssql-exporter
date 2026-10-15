@@ -177,6 +177,59 @@ wrapper (NSSM, WinSW) is needed. From an elevated PowerShell:
 - Other actions: `stop`, `uninstall`. Run `mssql-exporter service --help` for
   details. Allow the listen port in Windows Firewall separately.
 
+### Running as a Linux service (systemd)
+
+The Linux release archives include a hardened unit file,
+`contrib/systemd/mssql-exporter.service`. It runs the exporter as a dedicated
+system user with no login shell and no home directory, and reads
+`/etc/mssql-exporter/config.yml`. As root, or with `sudo` on each command:
+
+```bash
+VERSION=0.9.1   # release to install (archives from v0.9.1 include the unit)
+ARCH=amd64      # arm64 on Graviton
+URL=https://github.com/viniciussouzao/mssql-exporter/releases/download/v${VERSION}
+curl -fsSLO ${URL}/mssql-exporter_${VERSION}_linux_${ARCH}.tar.gz
+curl -fsSLO ${URL}/checksums.txt
+sha256sum --check --ignore-missing checksums.txt
+mkdir -p mssql-exporter && tar xzf mssql-exporter_${VERSION}_linux_${ARCH}.tar.gz -C mssql-exporter
+cd mssql-exporter
+
+install -m 0755 mssql-exporter /usr/local/bin/
+useradd --system --no-create-home --shell /usr/sbin/nologin mssql-exporter
+install -d -m 0750 -o root -g mssql-exporter /etc/mssql-exporter
+install -m 0640 -o root -g mssql-exporter config.example.yml /etc/mssql-exporter/config.yml
+install -m 0644 contrib/systemd/mssql-exporter.service /etc/systemd/system/
+```
+
+Edit `/etc/mssql-exporter/config.yml` (DSN and collectors), then:
+
+```bash
+systemctl daemon-reload
+systemctl enable --now mssql-exporter
+systemctl status mssql-exporter
+curl -s localhost:9187/metrics | grep sqlserver_up
+```
+
+- The config file holds the DSN, so it is readable only by root and the
+  service group (`0640 root:mssql-exporter`). Keep certificates referenced by
+  the DSN (`certificate=...`) in `/etc/mssql-exporter` with the same mode.
+- Logs go to the journal: `journalctl -u mssql-exporter -f`.
+- Relative paths in the config file are resolved from `/etc/mssql-exporter`,
+  as with the Windows service.
+- The unit restarts the exporter 5s after a failure, and a stop sends
+  `SIGTERM` for a clean shutdown.
+- It is sandboxed: read-only system, no capabilities, no new privileges
+  (`systemd-analyze security mssql-exporter` rates it 3.1, "OK").
+- If Prometheus reaches the exporter through an SSH tunnel (e.g. from a
+  bastion host), bind it to loopback with `web.listen_address:
+  "127.0.0.1:9187"` and forward the port:
+  `ssh -N -L 19187:127.0.0.1:9187 user@bastion`.
+- When the exporter runs on a different host than SQL Server (a bastion, or
+  any managed instance such as RDS), leave `os_collectors` disabled: they
+  would describe the exporter's host, not the database server.
+- To upgrade, replace `/usr/local/bin/mssql-exporter` and run
+  `systemctl restart mssql-exporter`.
+
 ## Permissions
 
 For **all default collectors** to succeed, the monitoring login needs the
