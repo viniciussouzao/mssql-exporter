@@ -1,0 +1,49 @@
+# systemd unit for mssql-exporter. Installation steps are in the README
+# ("Running as a Linux service"). Expects:
+#   /usr/local/bin/mssql-exporter         the binary
+#   /etc/mssql-exporter/config.yml        root:mssql-exporter, mode 0640 (holds the DSN)
+#   system user and group mssql-exporter  no login shell, no home
+[Unit]
+Description=Prometheus exporter for Microsoft SQL Server
+Documentation=https://github.com/viniciussouzao/mssql-exporter
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=mssql-exporter
+Group=mssql-exporter
+# Relative paths in the config file (web.config_file, certificate=...) are
+# resolved from here, as with the Windows service.
+WorkingDirectory=/etc/mssql-exporter
+ExecStart=/usr/local/bin/mssql-exporter --config.file=/etc/mssql-exporter/config.yml
+# SIGTERM triggers a clean shutdown; logs go to the journal
+# (journalctl -u mssql-exporter).
+Restart=on-failure
+RestartSec=5s
+
+# Hardening: the exporter only needs to read its config and open TCP
+# connections. ProtectHome is read-only (not "yes") so the optional Linux OS
+# collectors still report the real usage of /home.
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

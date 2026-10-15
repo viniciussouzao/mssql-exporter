@@ -162,3 +162,5 @@ this order.
 - [x] CLI flags (`pflag`) + optional YAML config file with
   flag > env > file > default precedence (PR #7)
 - [x] First unit tests (`internal/config`) (PR #7)
+- [x] Linux service: hardened systemd unit (`contrib/systemd`) shipped in the
+  release archives, install steps in the README (HML-025)

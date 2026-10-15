@@ -32,6 +32,12 @@ archives:
     format_overrides:
       - goos: windows
         formats: [zip]
+    # Listing files replaces GoReleaser's default (README/LICENSE/CHANGELOG).
+    files:
+      - README.md
+      - LICENSE
+      - config.example.yml
+      - contrib/systemd/mssql-exporter.service
 
 checksum:
   name_template: "checksums.txt"
