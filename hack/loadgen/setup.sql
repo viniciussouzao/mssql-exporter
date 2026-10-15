@@ -42,6 +42,12 @@ DECLARE @password nvarchar(128) = N'change-me';
 DECLARE @logins int = 10;
 DECLARE @i int = 1, @name sysname, @sql nvarchar(max);
 
+IF @password = N'change-me'
+BEGIN
+    RAISERROR (N'Set @password before creating the loadgen logins.', 16, 1);
+    RETURN;
+END
+
 WHILE @i <= @logins
 BEGIN
     SET @name = N'loadgen_' + RIGHT(N'0' + CAST(@i AS nvarchar(2)), 2);
