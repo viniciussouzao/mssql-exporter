@@ -87,7 +87,7 @@ Inspired by a Datadog DBM proof of concept (top queries with text, execution
 count, duration and currently running load). Decided 2026-10-15; implement in
 this order.
 
-- [ ] **Sessions by login** (`sys.dm_exec_sessions`, user processes only) —
+- [x] **Sessions by login** (`sys.dm_exec_sessions`, user processes only) —
   `sqlserver_sessions_by_login{login_name}` in the `sessions` collector.
   Cardinality follows the number of logins with open sessions (bounded in
   practice; document it for Windows-auth shops with one login per person)
