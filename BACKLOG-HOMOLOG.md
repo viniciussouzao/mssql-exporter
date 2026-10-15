@@ -30,6 +30,7 @@ simulando produção (AWS EC2 Windows/Linux e RDS for SQL Server).
 | HML-020 | `blocking` falha com erro 983 logo após o SQL Server subir (réplica do AG em `RESOLVING`) | EC2 Windows (02) | baixa | resolvido (v0.5.0) |
 | HML-021 | `sqlserver_sessions_by_login` com carga de vários logins (validação) | EC2 Windows (01) | — | resolvido |
 | HML-022 | Coletor `active_queries`: requests longas e transações abertas (validação) | EC2 Windows (01) | — | resolvido |
+| HML-023 | Coletor `top_queries` com texto ofuscado (validação) | EC2 Windows (01) | — | resolvido |
 
 ---
 
@@ -1425,3 +1426,32 @@ com transação aberta) e um `WAITFOR DELAY '00:02:00'` (request longa).
 | `sqlserver_request_max_elapsed_seconds` de `SELECT`/`UPDATE` | 0 s (queries do loadgen são rápidas) |
 
 - `active_queries` sempre com `success 1`, ≈27 ms por scrape.
+
+---
+
+## HML-023 — Coletor `top_queries` com texto ofuscado (validação)
+
+- **Ambiente:** EC2 01 (SQL Server 2025 RTM), `0.8.0-homolog`, com
+  `collectors: {top_queries: true}` e `top_queries: {include_text: true}`
+- **Encontrado em:** 2026-10-15
+- **Severidade:** — (validação do item 3 da Fase 6 do roadmap)
+- **Status:** resolvido
+
+**Antes da EC2**
+
+Query e exporter completos validados contra um SQL Server 2025 local em
+container: `query_hash` em hexadecimal, `db_name` vindo dos atributos do plano,
+texto por statement (não o batch inteiro), literais ofuscados e truncamento.
+
+**Resultado (carga do `hack/loadgen` a partir de 17:01)**
+
+- `top_queries` com `success 1` em ≈19 ms por scrape; 50 séries por métrica
+  (= `limit` padrão) e 50 `sqlserver_top_query_info`.
+- Top por CPU: o `status_report` do loadgen (scan da tabela; 450 s de CPU em
+  7 691 execuções, ≈58 ms cada) com folga, seguido das queries do próprio
+  exporter em `master` (documentado: num servidor ocioso o top é o exporter).
+- Texto: `TOP (50)` → `TOP (?)`, strings das queries do exporter → `?`,
+  parâmetros `@p1` mantidos, corte em 120 caracteres com `...`.
+- Top 5 por CPU acumulada (hash, CPU, execuções) conferido no SSMS com
+  `sys.dm_exec_query_stats` agrupado por `query_hash`: mesmos hashes, mesma
+  ordem.
