@@ -13,7 +13,7 @@ Prometheus exporter for Microsoft SQL Server. It collects a handful of instance-
 The exporter currently includes these collectors:
 
 - Server info: basic instance information and memory/CPU facts.
-- Sessions: number of sessions grouped by state.
+- Sessions: number of sessions grouped by state and user sessions per login.
 - IO file stats: per-database file IO counters and stalls.
 - Wait stats: wait time and counts by wait type.
 - Memory clerks: memory usage by clerk type.
@@ -259,6 +259,10 @@ Metric names are stable and follow Prometheus best practices. Selected examples:
 - Sessions
   - `sqlserver_sessions_total{session_state="running"} 12`
   - `sqlserver_sessions_total{session_state="sleeping"} 84`
+  - `sqlserver_sessions_by_login{login_name="app_user"} 40` (user sessions
+    only, `is_user_process = 1`; one series per login with open sessions,
+    so expect many series where each person connects with their own
+    Windows login)
 
 - IO file stats (per file)
   - `sqlserver_io_file_reads_total{db_name="master",file_name="master",file_type="ROWS",physical_name="/var/opt/mssql/data/master.mdf"} 12345`
