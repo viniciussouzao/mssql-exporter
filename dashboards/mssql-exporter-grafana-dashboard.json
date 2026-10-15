@@ -3712,12 +3712,189 @@
       "type": "table"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "id": 84,
+      "type": "table",
+      "title": "Index Fragmentation (most fragmented)",
+      "description": "Requires the opt-in index_fragmentation collector (--collector.index_fragmentation). Collected in the background every few hours, not on each scrape; only indexes above min_page_count. Empty index name = heap.",
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 123
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "noValue": "index_fragmentation collector disabled or not collected yet"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Fragmentation"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "basic"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 10
+                    },
+                    {
+                      "color": "red",
+                      "value": 30
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Pages"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "cellHeight": "sm",
+        "showHeader": true,
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "max by (db_name, schema_name, table_name, index_name) (sqlserver_index_fragmentation_percent{sqlserver_instance=~\"$sqlserver_instance\"})",
+          "legendFormat": "__auto",
+          "refId": "A",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "max by (db_name, schema_name, table_name, index_name) (sqlserver_index_page_count{sqlserver_instance=~\"$sqlserver_instance\"})",
+          "legendFormat": "__auto",
+          "refId": "B",
+          "format": "table",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "includeByName": {
+              "db_name": true,
+              "schema_name": true,
+              "table_name": true,
+              "index_name": true,
+              "Value #A": true,
+              "Value #B": true
+            },
+            "indexByName": {
+              "db_name": 0,
+              "schema_name": 1,
+              "table_name": 2,
+              "index_name": 3,
+              "Value #A": 4,
+              "Value #B": 5
+            },
+            "renameByName": {
+              "db_name": "Database",
+              "schema_name": "Schema",
+              "table_name": "Table",
+              "index_name": "Index",
+              "Value #A": "Fragmentation",
+              "Value #B": "Pages"
+            }
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "sort": [
+              {
+                "field": "Fragmentation",
+                "desc": true
+              }
+            ]
+          }
+        },
+        {
+          "id": "limit",
+          "options": {
+            "limitField": 25
+          }
+        }
+      ]
+    },
+    {
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 123
+        "y": 132
       },
       "id": 44,
       "panels": [],
@@ -3752,7 +3929,7 @@
         "h": 4,
         "w": 6,
         "x": 0,
-        "y": 124
+        "y": 133
       },
       "id": 45,
       "options": {
@@ -3813,7 +3990,7 @@
         "h": 4,
         "w": 6,
         "x": 6,
-        "y": 124
+        "y": 133
       },
       "id": 46,
       "options": {
@@ -3874,7 +4051,7 @@
         "h": 4,
         "w": 6,
         "x": 12,
-        "y": 124
+        "y": 133
       },
       "id": 47,
       "options": {
@@ -3935,7 +4112,7 @@
         "h": 4,
         "w": 6,
         "x": 18,
-        "y": 124
+        "y": 133
       },
       "id": 48,
       "options": {
@@ -4031,7 +4208,7 @@
         "h": 8,
         "w": 16,
         "x": 0,
-        "y": 128
+        "y": 137
       },
       "id": 49,
       "options": {
@@ -4154,7 +4331,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 128
+        "y": 137
       },
       "id": 50,
       "options": {
@@ -4193,7 +4370,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 136
+        "y": 145
       },
       "id": 51,
       "panels": [],
@@ -4236,7 +4413,7 @@
         "h": 6,
         "w": 12,
         "x": 0,
-        "y": 137
+        "y": 146
       },
       "id": 52,
       "options": {
@@ -4333,7 +4510,7 @@
         "h": 6,
         "w": 12,
         "x": 12,
-        "y": 137
+        "y": 146
       },
       "id": 53,
       "options": {
@@ -4376,7 +4553,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 143
+        "y": 152
       }
     },
     {
@@ -4392,7 +4569,7 @@
         "h": 8,
         "w": 10,
         "x": 0,
-        "y": 144
+        "y": 153
       },
       "fieldConfig": {
         "defaults": {
@@ -4561,7 +4738,7 @@
         "h": 8,
         "w": 14,
         "x": 10,
-        "y": 144
+        "y": 153
       },
       "fieldConfig": {
         "defaults": {
@@ -4879,7 +5056,7 @@
         "h": 7,
         "w": 12,
         "x": 0,
-        "y": 152
+        "y": 161
       },
       "fieldConfig": {
         "defaults": {
@@ -5076,7 +5253,7 @@
         "h": 7,
         "w": 12,
         "x": 12,
-        "y": 152
+        "y": 161
       },
       "id": 61,
       "options": {
@@ -5174,7 +5351,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 159
+        "y": 168
       },
       "id": 62,
       "options": {
@@ -5272,7 +5449,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 159
+        "y": 168
       },
       "id": 63,
       "options": {
@@ -5370,7 +5547,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 159
+        "y": 168
       },
       "id": 64,
       "options": {
@@ -5410,7 +5587,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 167
+        "y": 176
       },
       "id": 65,
       "panels": [],
@@ -5430,7 +5607,7 @@
         "h": 7,
         "w": 12,
         "x": 0,
-        "y": 168
+        "y": 177
       },
       "fieldConfig": {
         "defaults": {
@@ -5742,7 +5919,7 @@
         "h": 7,
         "w": 12,
         "x": 12,
-        "y": 168
+        "y": 177
       },
       "fieldConfig": {
         "defaults": {
@@ -5945,7 +6122,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 175
+        "y": 184
       },
       "id": 68,
       "options": {
@@ -6043,7 +6220,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 175
+        "y": 184
       },
       "id": 69,
       "options": {
@@ -6141,7 +6318,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 175
+        "y": 184
       },
       "id": 70,
       "options": {
@@ -6239,7 +6416,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 183
+        "y": 192
       },
       "id": 71,
       "options": {
@@ -6355,7 +6532,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 183
+        "y": 192
       },
       "id": 72,
       "options": {
@@ -6395,7 +6572,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 192
+        "y": 201
       },
       "id": 73,
       "panels": [],
@@ -6415,7 +6592,7 @@
         "h": 7,
         "w": 10,
         "x": 0,
-        "y": 193
+        "y": 202
       },
       "fieldConfig": {
         "defaults": {
@@ -6583,7 +6760,7 @@
         "h": 7,
         "w": 14,
         "x": 10,
-        "y": 193
+        "y": 202
       },
       "fieldConfig": {
         "defaults": {
@@ -6883,7 +7060,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 200
+        "y": 209
       },
       "id": 76,
       "options": {
@@ -7016,7 +7193,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 200
+        "y": 209
       },
       "id": 77,
       "options": {
@@ -7123,7 +7300,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 200
+        "y": 209
       },
       "id": 78,
       "options": {
@@ -7163,7 +7340,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 209
+        "y": 218
       },
       "id": 54,
       "panels": [],
@@ -7208,7 +7385,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 210
+        "y": 219
       },
       "id": 55,
       "options": {
@@ -7284,7 +7461,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 210
+        "y": 219
       },
       "id": 56,
       "options": {

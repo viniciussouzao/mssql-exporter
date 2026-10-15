@@ -31,6 +31,7 @@ simulando produção (AWS EC2 Windows/Linux e RDS for SQL Server).
 | HML-021 | `sqlserver_sessions_by_login` com carga de vários logins (validação) | EC2 Windows (01) | — | resolvido |
 | HML-022 | Coletor `active_queries`: requests longas e transações abertas (validação) | EC2 Windows (01) | — | resolvido |
 | HML-023 | Coletor `top_queries` com texto ofuscado (validação) | EC2 Windows (01) | — | resolvido |
+| HML-024 | Coletor `index_fragmentation` em background e `CONNECT ANY DATABASE` (validação) | EC2 Windows (01) | — | resolvido |
 
 ---
 
@@ -1455,3 +1456,43 @@ texto por statement (não o batch inteiro), literais ofuscados e truncamento.
 - Top 5 por CPU acumulada (hash, CPU, execuções) conferido no SSMS com
   `sys.dm_exec_query_stats` agrupado por `query_hash`: mesmos hashes, mesma
   ordem.
+
+## HML-024 — Coletor `index_fragmentation` em background e `CONNECT ANY DATABASE` (validação)
+
+- **Ambiente:** EC2 01 (SQL Server 2025 RTM), `0.9.0-homolog`, com
+  `collectors: {index_fragmentation: true}` e
+  `index_fragmentation: {interval: 2m, min_page_count: 100}`
+- **Encontrado em:** 2026-10-15
+- **Severidade:** — (validação do item 4 da Fase 6 do roadmap)
+- **Status:** resolvido
+
+**Antes da EC2**
+
+Validado contra um SQL Server 2025 local em container: tabela com chave
+`NEWID()` e 20 000 inserts linha a linha levou o `PK_Guids` de 0,05% a 99,03%
+no ciclo seguinte (intervalo de 1 min); banco chamado `Odd]Name` lido sem erro
+(nome entre colchetes); scrape em microssegundos.
+
+**Resultado**
+
+- Primeira subida (17:31) sem o coletor: a seção `index_fragmentation:` com as
+  opções estava no arquivo, mas faltava `index_fragmentation: true` dentro de
+  `collectors:` — a seção de opções não liga o coletor (mesma regra do
+  `top_queries`). `config.example.yml` passou a dizer isso explicitamente.
+- 17:37, **sem grant novo**: `last_collection_success 1`,
+  `last_collection_databases 0` em 0,13 s — o `usr_exporter` não tem usuário
+  nos bancos e o filtro `HAS_DBACCESS` os ignora sem erro. Como `success 1`
+  com zero bancos esconde que nada é coletado, o README documenta o alerta
+  `last_collection_databases == 0`.
+- Após `GRANT CONNECT ANY DATABASE TO usr_exporter` (≈17:38), o ciclo
+  seguinte leu **3 bancos** em 0,36 s: `LoadTestDB.dbo.Guids.PK_Guids` com
+  **98,9%** (1 614 páginas, criado pelo script de inserts aleatórios),
+  `Orders` com 0,02% / 0,86%; `MirrorDB` com índices de 277 778 e 286 838
+  páginas (~4,4 GB) e fragmentação < 0,3%. Modo `LIMITED` lê só o nível acima
+  da folha: barato mesmo em índices de GB.
+- O scrape do coletor reporta duração 0 (serve o cache);
+  `scrape_collector_success 1` o tempo todo.
+
+**Pendente para a fase RDS:** confirmar se o usuário master do RDS consegue
+executar `GRANT CONNECT ANY DATABASE` para o login do exporter (ele não é
+sysadmin); se não conseguir, documentar a alternativa (usuário em cada banco).

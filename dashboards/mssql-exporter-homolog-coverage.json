@@ -241,7 +241,7 @@
     {
       "id": 4,
       "type": "gauge",
-      "title": "Métricas com dados (de 136)",
+      "title": "Métricas com dados (de 142)",
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -255,7 +255,7 @@
       "fieldConfig": {
         "defaults": {
           "min": 0,
-          "max": 136,
+          "max": 142,
           "decimals": 0,
           "color": {
             "mode": "thresholds"
@@ -296,7 +296,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "refId": "A",
-          "expr": "(count(sqlserver_up{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_scrape_collector_success{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_scrape_collector_duration_seconds{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(mssql_exporter_build_info{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_hostname{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_servername{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_edition{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_product_version{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_engine_edition{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_is_hadr_enabled{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_visible_cpus{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_total_physical_memory_kb{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_available_physical_memory_kb{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_sessions_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_sessions_by_login{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_wait_time_ms{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_waiting_tasks{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_max_wait_time_ms{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_io_file_reads_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_io_file_writes_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_io_file_read_bytes_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_io_file_write_bytes_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_io_file_stall_read_ms_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_io_file_stall_write_ms_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_memory_clerk_used_kb{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_backup_last_completed_timestamp_seconds{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_backup_last_duration_seconds{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_backup_last_size_bytes{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_tempdb_free_space_kb{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_tempdb_version_store_kb{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_tempdb_internal_objects_kb{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_tempdb_user_objects_kb{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_tempdb_active_temp_tables{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_tempdb_temp_tables_created_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_batch_requests_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_sql_compilations_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_sql_recompilations_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_page_life_expectancy_seconds{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_buffer_cache_hit_ratio{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_lazy_writes_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_deadlocks_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_lock_waits_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_user_connections{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_page_splits_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_database_state{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_database_recovery_model{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_database_data_size_bytes{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_database_log_size_bytes{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_database_log_used_percent{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_blocked_sessions{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_blocked_max_wait_ms{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_active_requests{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_requests_long_running{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_request_max_elapsed_seconds{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_open_transactions{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_oldest_open_transaction_seconds{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_sleeping_sessions_with_open_transaction{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_top_query_executions_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_top_query_cpu_seconds_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_top_query_elapsed_seconds_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_top_query_logical_reads_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_top_query_physical_reads_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_top_query_logical_writes_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_top_query_info{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_hadr_replica_role{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_hadr_replica_synchronization_health{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_hadr_database_synchronization_state{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_hadr_database_log_send_queue_kb{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_hadr_database_redo_queue_kb{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_agent_job_enabled{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_agent_job_last_run_status{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_agent_job_last_run_timestamp_seconds{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_agent_job_last_run_duration_seconds{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_volume_total_bytes{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_volume_available_bytes{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_schedulers_runnable_tasks{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_schedulers_current_tasks{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_schedulers_active_workers{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_schedulers_work_queue{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_schedulers_online{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_cpu_usage_percent{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_memory_total_bytes{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_memory_used_bytes{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_memory_free_bytes{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_memory_available_bytes{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_memory_cached_bytes{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_memory_buffers_bytes{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_memory_swap_total_bytes{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_memory_swap_used_bytes{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_memory_swap_free_bytes{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_disk_reads_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_disk_writes_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_disk_read_bytes_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_disk_write_bytes_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_disk_io_time_ms_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_disk_queue_length{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_disk_read_queue_length{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_disk_write_queue_length{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_filesystem_size_bytes{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_filesystem_used_bytes{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_filesystem_free_bytes{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_filesystem_inodes_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_filesystem_inodes_used{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_network_receive_bytes_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_network_transmit_bytes_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_network_receive_packets_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_network_transmit_packets_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_network_receive_errors_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_network_transmit_errors_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_network_receive_drops_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_network_transmit_drops_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_process_cpu_seconds_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_process_memory_rss_bytes{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_process_open_fds{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_boot_time_seconds{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_hadr_database_is_suspended{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_hadr_database_suspend_reason{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_hadr_database_secondary_lag_seconds{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_mirroring_info{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_mirroring_role{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_mirroring_state{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_mirroring_safety_level{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_mirroring_witness_state{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_mirroring_log_send_queue_kb{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_mirroring_redo_queue_kb{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_mirroring_log_sent_bytes_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_mirroring_log_received_bytes_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_mirroring_redo_bytes_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_mirroring_transaction_delay_ms_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_mirroring_write_transactions_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_log_shipping_primary_last_backup_timestamp_seconds{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_log_shipping_primary_backup_threshold_seconds{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_log_shipping_secondary_last_copied_timestamp_seconds{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_log_shipping_secondary_last_restored_timestamp_seconds{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_log_shipping_secondary_last_restored_latency_seconds{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_log_shipping_secondary_restore_threshold_seconds{instance=~\"$instance\"}) > bool 0 or vector(0))"
+          "expr": "(count(sqlserver_up{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_scrape_collector_success{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_scrape_collector_duration_seconds{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(mssql_exporter_build_info{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_hostname{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_servername{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_edition{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_product_version{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_engine_edition{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_is_hadr_enabled{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_visible_cpus{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_total_physical_memory_kb{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_available_physical_memory_kb{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_sessions_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_sessions_by_login{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_wait_time_ms{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_waiting_tasks{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_max_wait_time_ms{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_io_file_reads_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_io_file_writes_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_io_file_read_bytes_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_io_file_write_bytes_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_io_file_stall_read_ms_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_io_file_stall_write_ms_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_memory_clerk_used_kb{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_backup_last_completed_timestamp_seconds{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_backup_last_duration_seconds{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_backup_last_size_bytes{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_tempdb_free_space_kb{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_tempdb_version_store_kb{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_tempdb_internal_objects_kb{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_tempdb_user_objects_kb{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_tempdb_active_temp_tables{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_tempdb_temp_tables_created_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_batch_requests_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_sql_compilations_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_sql_recompilations_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_page_life_expectancy_seconds{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_buffer_cache_hit_ratio{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_lazy_writes_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_deadlocks_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_lock_waits_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_user_connections{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_page_splits_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_database_state{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_database_recovery_model{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_database_data_size_bytes{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_database_log_size_bytes{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_database_log_used_percent{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_blocked_sessions{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_blocked_max_wait_ms{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_active_requests{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_requests_long_running{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_request_max_elapsed_seconds{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_open_transactions{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_oldest_open_transaction_seconds{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_sleeping_sessions_with_open_transaction{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_top_query_executions_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_top_query_cpu_seconds_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_top_query_elapsed_seconds_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_top_query_logical_reads_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_top_query_physical_reads_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_top_query_logical_writes_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_top_query_info{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_index_fragmentation_percent{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_index_page_count{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_index_fragmentation_last_collection_timestamp_seconds{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_index_fragmentation_last_collection_duration_seconds{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_index_fragmentation_last_collection_success{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_index_fragmentation_last_collection_databases{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_hadr_replica_role{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_hadr_replica_synchronization_health{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_hadr_database_synchronization_state{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_hadr_database_log_send_queue_kb{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_hadr_database_redo_queue_kb{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_agent_job_enabled{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_agent_job_last_run_status{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_agent_job_last_run_timestamp_seconds{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_agent_job_last_run_duration_seconds{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_volume_total_bytes{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_volume_available_bytes{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_schedulers_runnable_tasks{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_schedulers_current_tasks{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_schedulers_active_workers{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_schedulers_work_queue{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_schedulers_online{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_cpu_usage_percent{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_memory_total_bytes{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_memory_used_bytes{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_memory_free_bytes{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_memory_available_bytes{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_memory_cached_bytes{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_memory_buffers_bytes{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_memory_swap_total_bytes{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_memory_swap_used_bytes{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_memory_swap_free_bytes{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_disk_reads_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_disk_writes_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_disk_read_bytes_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_disk_write_bytes_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_disk_io_time_ms_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_disk_queue_length{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_disk_read_queue_length{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_disk_write_queue_length{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_filesystem_size_bytes{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_filesystem_used_bytes{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_filesystem_free_bytes{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_filesystem_inodes_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_filesystem_inodes_used{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_network_receive_bytes_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_network_transmit_bytes_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_network_receive_packets_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_network_transmit_packets_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_network_receive_errors_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_network_transmit_errors_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_network_receive_drops_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_network_transmit_drops_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_process_cpu_seconds_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_process_memory_rss_bytes{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_process_open_fds{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(os_boot_time_seconds{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_hadr_database_is_suspended{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_hadr_database_suspend_reason{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_hadr_database_secondary_lag_seconds{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_mirroring_info{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_mirroring_role{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_mirroring_state{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_mirroring_safety_level{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_mirroring_witness_state{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_mirroring_log_send_queue_kb{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_mirroring_redo_queue_kb{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_mirroring_log_sent_bytes_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_mirroring_log_received_bytes_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_mirroring_redo_bytes_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_mirroring_transaction_delay_ms_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_mirroring_write_transactions_total{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_log_shipping_primary_last_backup_timestamp_seconds{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_log_shipping_primary_backup_threshold_seconds{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_log_shipping_secondary_last_copied_timestamp_seconds{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_log_shipping_secondary_last_restored_timestamp_seconds{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_log_shipping_secondary_last_restored_latency_seconds{instance=~\"$instance\"}) > bool 0 or vector(0)) + (count(sqlserver_log_shipping_secondary_restore_threshold_seconds{instance=~\"$instance\"}) > bool 0 or vector(0))"
         }
       ]
     },
@@ -2807,6 +2807,135 @@
           "refId": "G",
           "expr": "count(sqlserver_top_query_info{instance=~\"$instance\"}) or vector(0)",
           "legendFormat": "sqlserver_top_query_info",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "id": 197,
+      "type": "stat",
+      "title": "Index fragmentation [index_fragmentation] (opt-in)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Séries emitidas por métrica. 0 = SEM DADOS (coletor falhando, desabilitado, sem permissão ou sem dados na origem).",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 65
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "SEM DADOS"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "horizontal",
+        "textMode": "value_and_name",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "text": {
+          "titleSize": 11,
+          "valueSize": 14
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A",
+          "expr": "count(sqlserver_index_fragmentation_percent{instance=~\"$instance\"}) or vector(0)",
+          "legendFormat": "sqlserver_index_fragmentation_percent",
+          "instant": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "B",
+          "expr": "count(sqlserver_index_page_count{instance=~\"$instance\"}) or vector(0)",
+          "legendFormat": "sqlserver_index_page_count",
+          "instant": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "C",
+          "expr": "count(sqlserver_index_fragmentation_last_collection_timestamp_seconds{instance=~\"$instance\"}) or vector(0)",
+          "legendFormat": "sqlserver_index_fragmentation_last_collection_timestamp_seconds",
+          "instant": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "D",
+          "expr": "count(sqlserver_index_fragmentation_last_collection_duration_seconds{instance=~\"$instance\"}) or vector(0)",
+          "legendFormat": "sqlserver_index_fragmentation_last_collection_duration_seconds",
+          "instant": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "E",
+          "expr": "count(sqlserver_index_fragmentation_last_collection_success{instance=~\"$instance\"}) or vector(0)",
+          "legendFormat": "sqlserver_index_fragmentation_last_collection_success",
+          "instant": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "F",
+          "expr": "count(sqlserver_index_fragmentation_last_collection_databases{instance=~\"$instance\"}) or vector(0)",
+          "legendFormat": "sqlserver_index_fragmentation_last_collection_databases",
           "instant": true
         }
       ]
@@ -8868,6 +8997,314 @@
       ]
     },
     {
+      "id": 198,
+      "type": "row",
+      "title": "Detalhe: Index fragmentation [index_fragmentation]",
+      "collapsed": true,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 118
+      },
+      "panels": [
+        {
+          "id": 199,
+          "type": "timeseries",
+          "title": "sqlserver_index_fragmentation_percent",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "Collector: blocking",
+          "gridPos": {
+            "h": 7,
+            "w": 8,
+            "x": 0,
+            "y": 119
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "none",
+              "noValue": "SEM DADOS (blocking)",
+              "custom": {
+                "fillOpacity": 10,
+                "showPoints": "never"
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "topk(10, sqlserver_index_fragmentation_percent{instance=~\"$instance\"})",
+              "legendFormat": "{{db_name}}.{{schema_name}}.{{table_name}}.{{index_name}}",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "id": 200,
+          "type": "timeseries",
+          "title": "sqlserver_index_page_count",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "Collector: blocking",
+          "gridPos": {
+            "h": 7,
+            "w": 8,
+            "x": 8,
+            "y": 119
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "none",
+              "noValue": "SEM DADOS (blocking)",
+              "custom": {
+                "fillOpacity": 10,
+                "showPoints": "never"
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "topk(10, sqlserver_index_page_count{instance=~\"$instance\"})",
+              "legendFormat": "{{db_name}}.{{schema_name}}.{{table_name}}.{{index_name}}",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "id": 201,
+          "type": "timeseries",
+          "title": "sqlserver_index_fragmentation_last_collection_timestamp_seconds",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "Collector: blocking",
+          "gridPos": {
+            "h": 7,
+            "w": 8,
+            "x": 16,
+            "y": 119
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "none",
+              "noValue": "SEM DADOS (blocking)",
+              "custom": {
+                "fillOpacity": 10,
+                "showPoints": "never"
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "sqlserver_index_fragmentation_last_collection_timestamp_seconds{instance=~\"$instance\"}",
+              "legendFormat": "last collection",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "id": 202,
+          "type": "timeseries",
+          "title": "sqlserver_index_fragmentation_last_collection_duration_seconds",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "Collector: blocking",
+          "gridPos": {
+            "h": 7,
+            "w": 8,
+            "x": 0,
+            "y": 126
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "none",
+              "noValue": "SEM DADOS (blocking)",
+              "custom": {
+                "fillOpacity": 10,
+                "showPoints": "never"
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "sqlserver_index_fragmentation_last_collection_duration_seconds{instance=~\"$instance\"}",
+              "legendFormat": "duration",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "id": 203,
+          "type": "timeseries",
+          "title": "sqlserver_index_fragmentation_last_collection_success",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "Collector: blocking",
+          "gridPos": {
+            "h": 7,
+            "w": 8,
+            "x": 8,
+            "y": 126
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "none",
+              "noValue": "SEM DADOS (blocking)",
+              "custom": {
+                "fillOpacity": 10,
+                "showPoints": "never"
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "sqlserver_index_fragmentation_last_collection_success{instance=~\"$instance\"}",
+              "legendFormat": "success",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "id": 204,
+          "type": "timeseries",
+          "title": "sqlserver_index_fragmentation_last_collection_databases",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "Collector: blocking",
+          "gridPos": {
+            "h": 7,
+            "w": 8,
+            "x": 16,
+            "y": 126
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "none",
+              "noValue": "SEM DADOS (blocking)",
+              "custom": {
+                "fillOpacity": 10,
+                "showPoints": "never"
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "sqlserver_index_fragmentation_last_collection_databases{instance=~\"$instance\"}",
+              "legendFormat": "databases",
+              "refId": "A"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "id": 114,
       "type": "row",
       "title": "Detalhe: OS: CPU [cpu]",
@@ -8876,7 +9313,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 118
+        "y": 119
       },
       "panels": [
         {
@@ -8892,7 +9329,7 @@
             "h": 7,
             "w": 8,
             "x": 0,
-            "y": 119
+            "y": 120
           },
           "fieldConfig": {
             "defaults": {
@@ -8939,7 +9376,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 119
+        "y": 120
       },
       "panels": [
         {
@@ -8955,7 +9392,7 @@
             "h": 7,
             "w": 8,
             "x": 0,
-            "y": 120
+            "y": 121
           },
           "fieldConfig": {
             "defaults": {
@@ -9004,7 +9441,7 @@
             "h": 7,
             "w": 8,
             "x": 8,
-            "y": 120
+            "y": 121
           },
           "fieldConfig": {
             "defaults": {
@@ -9053,7 +9490,7 @@
             "h": 7,
             "w": 8,
             "x": 16,
-            "y": 120
+            "y": 121
           },
           "fieldConfig": {
             "defaults": {
@@ -9102,7 +9539,7 @@
             "h": 7,
             "w": 8,
             "x": 0,
-            "y": 127
+            "y": 128
           },
           "fieldConfig": {
             "defaults": {
@@ -9151,7 +9588,7 @@
             "h": 7,
             "w": 8,
             "x": 8,
-            "y": 127
+            "y": 128
           },
           "fieldConfig": {
             "defaults": {
@@ -9200,7 +9637,7 @@
             "h": 7,
             "w": 8,
             "x": 16,
-            "y": 127
+            "y": 128
           },
           "fieldConfig": {
             "defaults": {
@@ -9249,7 +9686,7 @@
             "h": 7,
             "w": 8,
             "x": 0,
-            "y": 134
+            "y": 135
           },
           "fieldConfig": {
             "defaults": {
@@ -9298,7 +9735,7 @@
             "h": 7,
             "w": 8,
             "x": 8,
-            "y": 134
+            "y": 135
           },
           "fieldConfig": {
             "defaults": {
@@ -9347,7 +9784,7 @@
             "h": 7,
             "w": 8,
             "x": 16,
-            "y": 134
+            "y": 135
           },
           "fieldConfig": {
             "defaults": {
@@ -9394,7 +9831,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 120
+        "y": 121
       },
       "panels": [
         {
@@ -9410,7 +9847,7 @@
             "h": 7,
             "w": 8,
             "x": 0,
-            "y": 121
+            "y": 122
           },
           "fieldConfig": {
             "defaults": {
@@ -9459,7 +9896,7 @@
             "h": 7,
             "w": 8,
             "x": 8,
-            "y": 121
+            "y": 122
           },
           "fieldConfig": {
             "defaults": {
@@ -9508,7 +9945,7 @@
             "h": 7,
             "w": 8,
             "x": 16,
-            "y": 121
+            "y": 122
           },
           "fieldConfig": {
             "defaults": {
@@ -9557,7 +9994,7 @@
             "h": 7,
             "w": 8,
             "x": 0,
-            "y": 128
+            "y": 129
           },
           "fieldConfig": {
             "defaults": {
@@ -9606,7 +10043,7 @@
             "h": 7,
             "w": 8,
             "x": 8,
-            "y": 128
+            "y": 129
           },
           "fieldConfig": {
             "defaults": {
@@ -9655,7 +10092,7 @@
             "h": 7,
             "w": 8,
             "x": 16,
-            "y": 128
+            "y": 129
           },
           "fieldConfig": {
             "defaults": {
@@ -9704,7 +10141,7 @@
             "h": 7,
             "w": 8,
             "x": 0,
-            "y": 135
+            "y": 136
           },
           "fieldConfig": {
             "defaults": {
@@ -9753,7 +10190,7 @@
             "h": 7,
             "w": 8,
             "x": 8,
-            "y": 135
+            "y": 136
           },
           "fieldConfig": {
             "defaults": {
@@ -9800,7 +10237,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 121
+        "y": 122
       },
       "panels": [
         {
@@ -9816,7 +10253,7 @@
             "h": 7,
             "w": 8,
             "x": 0,
-            "y": 122
+            "y": 123
           },
           "fieldConfig": {
             "defaults": {
@@ -9865,7 +10302,7 @@
             "h": 7,
             "w": 8,
             "x": 8,
-            "y": 122
+            "y": 123
           },
           "fieldConfig": {
             "defaults": {
@@ -9914,7 +10351,7 @@
             "h": 7,
             "w": 8,
             "x": 16,
-            "y": 122
+            "y": 123
           },
           "fieldConfig": {
             "defaults": {
@@ -9963,7 +10400,7 @@
             "h": 7,
             "w": 8,
             "x": 0,
-            "y": 129
+            "y": 130
           },
           "fieldConfig": {
             "defaults": {
@@ -10012,7 +10449,7 @@
             "h": 7,
             "w": 8,
             "x": 8,
-            "y": 129
+            "y": 130
           },
           "fieldConfig": {
             "defaults": {
@@ -10059,7 +10496,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 122
+        "y": 123
       },
       "panels": [
         {
@@ -10075,7 +10512,7 @@
             "h": 7,
             "w": 8,
             "x": 0,
-            "y": 123
+            "y": 124
           },
           "fieldConfig": {
             "defaults": {
@@ -10124,7 +10561,7 @@
             "h": 7,
             "w": 8,
             "x": 8,
-            "y": 123
+            "y": 124
           },
           "fieldConfig": {
             "defaults": {
@@ -10173,7 +10610,7 @@
             "h": 7,
             "w": 8,
             "x": 16,
-            "y": 123
+            "y": 124
           },
           "fieldConfig": {
             "defaults": {
@@ -10222,7 +10659,7 @@
             "h": 7,
             "w": 8,
             "x": 0,
-            "y": 130
+            "y": 131
           },
           "fieldConfig": {
             "defaults": {
@@ -10271,7 +10708,7 @@
             "h": 7,
             "w": 8,
             "x": 8,
-            "y": 130
+            "y": 131
           },
           "fieldConfig": {
             "defaults": {
@@ -10320,7 +10757,7 @@
             "h": 7,
             "w": 8,
             "x": 16,
-            "y": 130
+            "y": 131
           },
           "fieldConfig": {
             "defaults": {
@@ -10369,7 +10806,7 @@
             "h": 7,
             "w": 8,
             "x": 0,
-            "y": 137
+            "y": 138
           },
           "fieldConfig": {
             "defaults": {
@@ -10418,7 +10855,7 @@
             "h": 7,
             "w": 8,
             "x": 8,
-            "y": 137
+            "y": 138
           },
           "fieldConfig": {
             "defaults": {
@@ -10465,7 +10902,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 123
+        "y": 124
       },
       "panels": [
         {
@@ -10481,7 +10918,7 @@
             "h": 7,
             "w": 8,
             "x": 0,
-            "y": 124
+            "y": 125
           },
           "fieldConfig": {
             "defaults": {
@@ -10530,7 +10967,7 @@
             "h": 7,
             "w": 8,
             "x": 8,
-            "y": 124
+            "y": 125
           },
           "fieldConfig": {
             "defaults": {
@@ -10579,7 +11016,7 @@
             "h": 7,
             "w": 8,
             "x": 16,
-            "y": 124
+            "y": 125
           },
           "fieldConfig": {
             "defaults": {
@@ -10626,7 +11063,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 124
+        "y": 125
       },
       "panels": [
         {
@@ -10642,7 +11079,7 @@
             "h": 7,
             "w": 8,
             "x": 0,
-            "y": 125
+            "y": 126
           },
           "fieldConfig": {
             "defaults": {

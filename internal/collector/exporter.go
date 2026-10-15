@@ -42,15 +42,18 @@ var scraperNames = []string{
 	"database_mirroring",
 	"log_shipping",
 	"top_queries",
+	"index_fragmentation",
 }
 
 // scrapersDisabledByDefault lists collectors that only run when explicitly
 // enabled: log_shipping needs extra grants and covers a niche setup, so
 // enabling it by default would report scrape failures on most instances;
-// top_queries scans the plan cache and its labels churn with the workload.
+// top_queries scans the plan cache and its labels churn with the workload;
+// index_fragmentation reads index pages (heavy I/O on large objects).
 var scrapersDisabledByDefault = map[string]bool{
-	"log_shipping": true,
-	"top_queries":  true,
+	"log_shipping":        true,
+	"top_queries":         true,
+	"index_fragmentation": true,
 }
 
 var scraperFactories = map[string]func(*sql.DB, Options) Scraper{
@@ -72,6 +75,9 @@ var scraperFactories = map[string]func(*sql.DB, Options) Scraper{
 	"database_mirroring":  func(db *sql.DB, _ Options) Scraper { return NewDatabaseMirroringCollector(db) },
 	"log_shipping":        func(db *sql.DB, _ Options) Scraper { return NewLogShippingCollector(db) },
 	"top_queries":         func(db *sql.DB, o Options) Scraper { return NewTopQueriesCollector(db, o.TopQueries) },
+	"index_fragmentation": func(db *sql.DB, o Options) Scraper {
+		return NewIndexFragmentationCollector(db, o.IndexFragmentation)
+	},
 }
 
 // ScraperNames returns the names of all available collectors in
