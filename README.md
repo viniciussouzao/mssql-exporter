@@ -3,7 +3,10 @@
 Prometheus exporter for Microsoft SQL Server. It collects a handful of instance-level metrics and exposes them on an HTTP endpoint for Prometheus to scrape, following a similar structure and naming style to other official database exporters (e.g. `mysqld_exporter`).
 
 - Endpoint: `:9187/metrics`
-- Driver: [`denisenkom/go-mssqldb`](https://github.com/denisenkom/go-mssqldb)
+- Driver: [`microsoft/go-mssqldb`](https://github.com/microsoft/go-mssqldb)
+- Validated against SQL Server 2019 (CU32), 2022 (RTM) and 2025 (RTM) on Windows,
+  including rolling upgrades of an Availability Group, database mirroring and
+  log shipping across those versions
 
 ## Features
 
@@ -109,6 +112,28 @@ collectors:
 ```
 
 Connection pool/timeouts: adjust defaults in `internal/db/options.go` (`DefaultOptions()`).
+
+### Encrypted connections (`encrypt=strict`)
+
+By default the driver encrypts only the login packet. Add `encrypt=true` for a
+fully encrypted TDS 7.x connection, or `encrypt=strict` for TDS 8.0 (SQL Server
+2022+), where TLS is negotiated before any TDS traffic:
+
+```
+sqlserver://user:pass@NODE1:1433?database=master&encrypt=strict&certificate=C:/mssql-exporter/node1.pem
+```
+
+- SQL Server only accepts TDS 8.0 with a certificate configured for the
+  instance (SQL Server Configuration Manager → Protocols → Certificate); with
+  the self-generated certificate it closes the connection during the handshake.
+- The driver always validates the server certificate in strict mode:
+  `trustservercertificate=true` is ignored. Point it at the certificate
+  instead (PEM): `certificate=<file>` validates the chain and the host name,
+  `servercertificate=<file>` only compares the certificate bytes (no host name
+  check). When the DSN connects by IP or alias, set
+  `hostnameincertificate=<name in the certificate>`.
+- Confirm on the server with `sys.dm_exec_connections`: `encrypt_option` TRUE
+  and `protocol_version` 134217728 (0x08000000, TDS 8.0).
 
 ### Running as a Windows service
 
@@ -271,10 +296,11 @@ Metric names are stable and follow Prometheus best practices. Selected examples:
   - `sqlserver_blocked_sessions 0` (from `sys.dm_os_waiting_tasks`; a parallel
     request waiting on its own session is not counted)
   - `sqlserver_blocked_max_wait_ms 0`
-  - `sqlserver_active_requests{status="running"} 3` (on an AG secondary,
-    `sys.dm_exec_requests` intermittently fails with error 976 while an
-    availability database is momentarily not readable; the collector retries
-    once before reporting the scrape as failed)
+  - `sqlserver_active_requests{status="running"} 3` (on an AG replica,
+    `sys.dm_exec_requests` intermittently fails while an availability
+    database is momentarily not accessible: error 976 on a secondary, 983
+    while the replica is still resolving its role right after SQL Server
+    starts; the collector retries once before reporting the scrape as failed)
 
 - Availability Groups (only when Always On is enabled)
   - `sqlserver_hadr_replica_role{ag_name="ag1",replica_server="NODE1"} 1`
@@ -330,6 +356,13 @@ Metric names are stable and follow Prometheus best practices. Selected examples:
     it. The mirror still exposes the queues and throughput counters.
     Alert with `sqlserver_mirroring_state != 4` and on the principal's
     `sqlserver_up`/`up` for a principal that is down.
+  - While the mirrored database is not accessible (e.g. stuck `RECOVERING`
+    on the principal), `sys.database_mirroring` returns NULL even for
+    sysadmin, so the state series disappear instead of changing value. The
+    performance counters are still reported by both partners, so also alert
+    on mirrored databases without a state:
+    `count by (db_name) (sqlserver_mirroring_log_send_queue_kb) unless on (db_name) count by (db_name) (sqlserver_mirroring_state)`
+    (`sqlserver_database_state{state="RECOVERING"}` covers the same case).
   - Average commit delay in high-safety mode:
     `rate(sqlserver_mirroring_transaction_delay_ms_total[5m]) / rate(sqlserver_mirroring_write_transactions_total[5m])`
 
@@ -403,6 +436,8 @@ A ready-to-use dashboard is included in [`dashboards/`](dashboards/) — see
   ```
 
   Without a web config file the exporter serves plain HTTP.
+- For encrypted connections to SQL Server (including TDS 8.0 strict
+  encryption), see [Encrypted connections](#encrypted-connections-encryptstrict).
 - A `/healthz` endpoint returns 200 while the process is alive (liveness);
   use `sqlserver_up` for database reachability.
 - Avoid embedding secrets in source control. Keep the DSN in environment variables or a config file excluded from git.

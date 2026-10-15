@@ -80,18 +80,26 @@ func (c *SQLServerBlocking) collectBlocked(ctx context.Context, ch chan<- promet
 	return nil
 }
 
-// errAGDatabaseNotAccessible is SQL Server error 976: an availability
-// database on this replica is momentarily not readable.
-const errAGDatabaseNotAccessible = 976
+// isAGDatabaseNotAccessible reports SQL Server errors raised while an
+// availability database on this replica is momentarily not accessible:
+// 976 (not readable, HML-015) and 983 (replica neither PRIMARY nor
+// SECONDARY, e.g. RESOLVING right after SQL Server starts, HML-020).
+func isAGDatabaseNotAccessible(err error) bool {
+	switch sqlErrorNumber(err) {
+	case 976, 983:
+		return true
+	}
+	return false
+}
 
 func (c *SQLServerBlocking) collectRequests(ctx context.Context, ch chan<- prometheus.Metric) error {
-	// On an AG secondary, reading dm_exec_requests intermittently fails
-	// with error 976 even with readable secondaries (HML-015); it is
+	// On an AG replica, reading dm_exec_requests intermittently fails while
+	// an availability database is not accessible (HML-015, HML-020); it is
 	// transient, so one retry avoids reporting the whole collector as
 	// failed. Counts are buffered so a failed attempt never emits
 	// duplicates of the retry's metrics.
 	counts, err := c.queryRequestsByStatus(ctx)
-	if sqlErrorNumber(err) == errAGDatabaseNotAccessible {
+	if isAGDatabaseNotAccessible(err) {
 		counts, err = c.queryRequestsByStatus(ctx)
 	}
 
