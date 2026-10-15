@@ -38,13 +38,15 @@ collectors:
   # top_queries: false
   # index_fragmentation: false
 
-# Options of the top_queries collector (only used when it is enabled).
+# Options of the top_queries collector. They do not enable it: set
+# `top_queries: true` under `collectors:` above.
 # top_queries:
 #   limit: 50            # queries by total CPU time, 1-1000
 #   include_text: false  # statement text with literals obfuscated
 #   text_length: 120     # 16-4000
 
-# Options of the index_fragmentation collector (only used when it is enabled).
+# Options of the index_fragmentation collector. They do not enable it: set
+# `index_fragmentation: true` under `collectors:` above.
 # It collects in the background on its own interval, not on every scrape.
 # index_fragmentation:
 #   interval: 6h          # minimum 1m

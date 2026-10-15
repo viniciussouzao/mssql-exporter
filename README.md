@@ -221,8 +221,11 @@ them without creating a user in each:
 GRANT CONNECT ANY DATABASE TO [your_login];
 ```
 
-Compare `sqlserver_index_fragmentation_last_collection_databases` with the
-number of databases you expect.
+`CONNECT ANY DATABASE` exists since SQL Server 2014; on older versions create
+a user for the login in each database. A skipped database is not an error:
+without the grant the collection succeeds with
+`sqlserver_index_fragmentation_last_collection_databases 0`, so compare that
+metric with the number of databases you expect (or alert on `== 0`).
 
 Notes:
 
@@ -490,6 +493,8 @@ Metric names are stable and follow Prometheus best practices. Selected examples:
     logged once per collection). The scrape itself always succeeds, so
     alert on staleness and success, e.g.
     `time() - sqlserver_index_fragmentation_last_collection_timestamp_seconds > 2 * 6 * 3600`
+    and `sqlserver_index_fragmentation_last_collection_databases == 0`
+    (no accessible database, usually a missing `CONNECT ANY DATABASE`)
   - Example alert (large and fragmented):
     `sqlserver_index_fragmentation_percent > 30 and on (db_name, schema_name, table_name, index_name) sqlserver_index_page_count > 10000`
   - On SSD/EBS storage, logical fragmentation matters much less than page
