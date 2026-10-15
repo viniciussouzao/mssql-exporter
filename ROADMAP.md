@@ -81,11 +81,55 @@ Progress legend: [ ] not started · [~] in progress · [x] done
     tables; enabling it by default would report scrape failures on most
     instances after an upgrade
 
+## Phase 6 — Workload & index insights
+
+Inspired by a Datadog DBM proof of concept (top queries with text, execution
+count, duration and currently running load). Decided 2026-10-15; implement in
+this order.
+
+- [ ] **Sessions by login** (`sys.dm_exec_sessions`, user processes only) —
+  `sqlserver_sessions_by_login{login_name}` in the `sessions` collector.
+  Cardinality follows the number of logins with open sessions (bounded in
+  practice; document it for Windows-auth shops with one login per person)
+- [ ] **Active queries, aggregated** (`sys.dm_exec_requests`,
+  `sys.dm_tran_active_transactions`) — no per-query labels: running user
+  requests above a duration threshold, longest running request duration,
+  age of the oldest open transaction. Cheap, alert-friendly ("a query has
+  been stuck for 20 minutes"); candidate for default on. Reuse the AG
+  976/983 retry from `blocking`
+- [ ] **Top queries** (`sys.dm_exec_query_stats` aggregated by `query_hash`) —
+  **disabled by default**. Follows `postgres_exporter`'s `stat_statements`
+  and `mysqld_exporter`'s `perf_schema.eventsstatements`:
+  - top N by CPU (`--collector.top_queries.limit`, default 50–100), labels
+    `db_name` + `query_hash`; counters for executions, CPU, elapsed, logical
+    and physical reads, writes (average duration = rate(elapsed)/rate(executions))
+  - query text **off by default**; when enabled, a truncated label (e.g. 120
+    chars) with **literals obfuscated** (`'...'`/numbers → `?`, as Datadog
+    does): ad hoc statements carry literal values (customer data, IDs) that
+    must not land in Prometheus
+  - document: series churn when queries enter/leave the top N (gaps in
+    `rate()`), counter resets on plan cache eviction, DMV scan cost on large
+    plan caches (may need its own collection interval, see below)
+- [ ] **Index fragmentation** (`sys.dm_db_index_physical_stats`, `LIMITED`
+  mode) — **disabled by default**, heavy I/O on large objects:
+  - collected **in the background on its own interval** (e.g.
+    `--collector.index_fragmentation.interval=6h`), one database at a time
+    with its own timeout; the scrape serves the cached result plus
+    `_last_collection_timestamp_seconds` / `_last_collection_duration_seconds`.
+    First collector outside the per-scrape model — build the async
+    infrastructure so other expensive collectors can reuse it
+  - labels db/schema/table/index; filters: minimum page count (e.g. 1000),
+    database include/exclude list, skip inaccessible databases (mirror,
+    restoring, AG non-readable secondary)
+  - metrics: `avg_fragmentation_in_percent`, `page_count`. Page density
+    (`avg_page_space_used_in_percent`) needs `SAMPLED` mode — out of scope
+    for now; document that on SSD/EBS storage density matters more than
+    logical fragmentation
+- Validate all of the above on EC2 (2025) and in the RDS phase
+
 ## Later / ideas (unprioritized)
 
-- Query performance metrics (`sys.dm_exec_query_stats`) — high cardinality,
-  needs careful label design and possibly a longer scrape interval
-- Index health (fragmentation, missing indexes) — expensive queries, opt-in only
+- Missing indexes (`sys.dm_db_missing_index_*`)
 - Replication status
 - Unit tests for collectors (mock `*sql.DB`), integration tests with
   SQL Server in Docker
