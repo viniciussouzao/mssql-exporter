@@ -7,6 +7,17 @@ import (
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
 )
 
+// logUsageQueryRegex pins the join with sys.databases: the counter also has
+// instances for hidden databases (mssqlsystemresource, model_msdb,
+// model_replicatedmaster) and _Total, which must not become series.
+var logUsageQueryRegex = sqlContainsInOrder(
+	"SELECT d.name, pc.cntr_value",
+	"FROM sys.dm_os_performance_counters pc",
+	"INNER JOIN sys.databases d",
+	"ON d.name = RTRIM(pc.instance_name) COLLATE DATABASE_DEFAULT",
+	"AND pc.counter_name = 'Percent Log Used'",
+)
+
 func TestDatabasesScrapeHappyPath(t *testing.T) {
 	db, mock := newSQLMock(t)
 
@@ -17,7 +28,7 @@ func TestDatabasesScrapeHappyPath(t *testing.T) {
 		sqlmock.NewRows([]string{"db_name", "type", "size_bytes"}).
 			AddRow("AppDB", 0, 1_000_000.0).
 			AddRow("AppDB", 1, 200_000.0))
-	mock.ExpectQuery("FROM sys.dm_os_performance_counters").WillReturnRows(
+	mock.ExpectQuery(logUsageQueryRegex).WillReturnRows(
 		sqlmock.NewRows([]string{"instance_name", "cntr_value"}).
 			AddRow("AppDB", 12.5))
 
