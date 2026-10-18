@@ -33,7 +33,7 @@ simulando produção (AWS EC2 Windows/Linux e RDS for SQL Server).
 | HML-023 | Coletor `top_queries` com texto ofuscado (validação) | EC2 Windows (01) | — | resolvido |
 | HML-024 | Coletor `index_fragmentation` em background e `CONNECT ANY DATABASE` (validação) | EC2 Windows (01) | — | resolvido |
 | HML-025 | Exporter como serviço Linux (systemd) no bastion da fase RDS (validação) | Linux (bastion) | — | em andamento |
-| HML-026 | `database_log_used_percent` com bancos ocultos e, no RDS, sem os bancos de sistema | RDS (SQL Server 2025 SE) | baixa | em andamento |
+| HML-026 | `database_log_used_percent` com bancos ocultos e, no RDS, sem os bancos de sistema | RDS (SQL Server 2025 SE) | baixa | resolvido (v0.9.2) |
 
 ## Encerramento da fase EC2 (2026-10-15)
 
@@ -1533,7 +1533,8 @@ no ciclo seguinte (intervalo de 1 min); banco chamado `Odd]Name` lido sem erro
 
 **Fase RDS (2026-10-18):** o usuário master do RDS **não** consegue conceder
 o grant (`Grantor does not have GRANT permission`). Alternativa documentada
-no README: criar um usuário para o login em cada banco a ser lido. O
+no README e validada no HML-026: criar um usuário para o login em cada banco
+a ser lido. O
 `rdsadmin` já é acessível a qualquer login, então mesmo sem nada o coletor lê
 1 banco no RDS (sem índices acima de 100 páginas).
 
@@ -1588,7 +1589,7 @@ no README: criar um usuário para o login em cada banco a ser lido. O
   exporter `0.9.1` no bastion; reproduzido no SQL Server 2025 local
 - **Encontrado em:** 2026-10-18
 - **Severidade:** baixa
-- **Status:** em andamento
+- **Status:** resolvido (v0.9.2)
 
 **Observado**
 
@@ -1632,4 +1633,14 @@ as fontes faria a mesma métrica significar coisas diferentes por ambiente.
 Validado no SQL Server 2025 local: antes 9 séries (com `model_msdb`,
 `model_replicatedmaster` e `mssqlsystemresource`), depois só os 6 bancos de
 `sys.databases`.
+
+**Validação no RDS (2026-10-18, `0.9.2-homolog` no bastion, reiniciado 23:32 UTC)**
+
+- `log_used_percent` só para `StressDB` (17) e `tempdb` (9); os três bancos
+  ocultos sumiram. `databases` com `success 1` em 22 ms; os 18 coletores com
+  `success 1`.
+- Alternativa ao `CONNECT ANY DATABASE` (HML-024): com
+  `CREATE USER usr_exporter FOR LOGIN usr_exporter` no `StressDB`, o ciclo
+  seguinte do `index_fragmentation` leu 2 bancos (`rdsadmin` + `StressDB`) em
+  0,46 s: `PK_Orders` com 277 778 páginas (0,01%) e `cx_Numbers` (0%).
 
