@@ -1634,6 +1634,20 @@ Validado no SQL Server 2025 local: antes 9 séries (com `model_msdb`,
 `model_replicatedmaster` e `mssqlsystemresource`), depois só os 6 bancos de
 `sys.databases`.
 
+**Regressão em outras plataformas (2026-10-18)**
+
+- Histórico da EC2 01 (2025) no Prometheus: `log_used_percent` tinha os 10
+  bancos reais **+** `model_msdb`, `model_replicatedmaster` e
+  `mssqlsystemresource`; com o join ficam exatamente os 10 (bancos
+  `RESTORING` de mirroring/log shipping continuam, estão em `sys.databases`).
+  Em 2019/2022 só o `mssqlsystemresource` some.
+- Nomes difíceis, SQL Server 2025 local (Linux): 11 bancos de teste —
+  `]`, `/`, `\`, `#`, `%`, `'`, `.`, `(`/`)`, espaço, acentos e um nome de 128
+  caracteres. Instância do contador idêntica ao `sys.databases` em todos; o
+  exporter com a correção emitiu as 11 séries. Não verificado no Windows (o
+  DMV lê os contadores do próprio SQL Server, não do PerfMon, então não se
+  espera troca de caracteres; os bancos da EC2 não tinham nomes especiais).
+
 **Validação no RDS (2026-10-18, `0.9.2-homolog` no bastion, reiniciado 23:32 UTC)**
 
 - `log_used_percent` só para `StressDB` (17) e `tempdb` (9); os três bancos
