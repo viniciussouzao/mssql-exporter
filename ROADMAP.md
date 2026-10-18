@@ -145,6 +145,10 @@ this order.
 ## Later / ideas (unprioritized)
 
 - Missing indexes (`sys.dm_db_missing_index_*`)
+- Transaction log health from `sys.dm_db_log_stats` (one row per database,
+  works on RDS where the `Percent Log Used` counter misses the system
+  databases): VLF count, `log_truncation_holdup_reason`, log generated since
+  the last log backup (HML-026)
 - `volumes`: skip databases changing state (`sys.databases.state` filter) to
   narrow the window where `sys.dm_os_volume_stats` waits and the query times
   out (HML-019; low impact, the next scrape succeeds)

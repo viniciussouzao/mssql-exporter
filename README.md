@@ -280,6 +280,16 @@ without the grant the collection succeeds with
 `sqlserver_index_fragmentation_last_collection_databases 0`, so compare that
 metric with the number of databases you expect (or alert on `== 0`).
 
+On **Amazon RDS** the master user cannot grant `CONNECT ANY DATABASE`
+(`Grantor does not have GRANT permission`). Create a user for the login in
+each database to cover instead (it grants access to the database, not to its
+data):
+
+```sql
+USE [your_database];
+CREATE USER [your_login] FOR LOGIN [your_login];
+```
+
 Notes:
 
 - The `backups` collector reads `msdb.dbo.backupset`, which is readable by
@@ -380,7 +390,12 @@ Metric names are stable and follow Prometheus best practices. Selected examples:
   - `sqlserver_database_recovery_model{db_name="master",recovery_model="SIMPLE"} 1`
   - `sqlserver_database_data_size_bytes{db_name="master"} 4915200`
   - `sqlserver_database_log_size_bytes{db_name="master"} 2097152`
-  - `sqlserver_database_log_used_percent{db_name="master"} 71`
+  - `sqlserver_database_log_used_percent{db_name="master"} 71`: the `Percent
+    Log Used` performance counter, reported only for databases listed in
+    `sys.databases` (the counter also has instances for hidden databases such
+    as `mssqlsystemresource`). On Amazon RDS the counter has no instance for
+    `master`, `model`, `msdb` and `rdsadmin`, so they have no series there;
+    user databases are reported normally
 
 - Blocking
   - `sqlserver_blocked_sessions 0` (from `sys.dm_os_waiting_tasks`; a parallel

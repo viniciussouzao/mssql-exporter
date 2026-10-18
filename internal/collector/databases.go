@@ -134,13 +134,20 @@ func (c *SQLServerDatabases) collectFileSizes(ctx context.Context, ch chan<- pro
 	return errors.Join(append(scanErrs, rows.Err())...)
 }
 
+// collectLogUsage reads the "Percent Log Used" counter of the databases listed
+// in sys.databases. The counter also has instances for hidden databases
+// (mssqlsystemresource, and model_msdb/model_replicatedmaster on SQL Server
+// 2025) that no other metric reports, plus _Total; the join drops them. On
+// Amazon RDS the counter has no instance for master, model, msdb and rdsadmin,
+// so those databases get no series there.
 func (c *SQLServerDatabases) collectLogUsage(ctx context.Context, ch chan<- prometheus.Metric) error {
 	rows, err := c.db.QueryContext(ctx, `
-		SELECT RTRIM(instance_name), cntr_value
-		FROM sys.dm_os_performance_counters
-		WHERE object_name LIKE '%Databases%'
-			AND counter_name = 'Percent Log Used'
-			AND instance_name <> '_Total'
+		SELECT d.name, pc.cntr_value
+		FROM sys.dm_os_performance_counters pc
+		INNER JOIN sys.databases d
+			ON d.name = RTRIM(pc.instance_name) COLLATE DATABASE_DEFAULT
+		WHERE pc.object_name LIKE '%Databases%'
+			AND pc.counter_name = 'Percent Log Used'
 	`)
 	if err != nil {
 		return fmt.Errorf("failed to query log usage performance counters: %w", err)

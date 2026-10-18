@@ -33,6 +33,7 @@ simulando produção (AWS EC2 Windows/Linux e RDS for SQL Server).
 | HML-023 | Coletor `top_queries` com texto ofuscado (validação) | EC2 Windows (01) | — | resolvido |
 | HML-024 | Coletor `index_fragmentation` em background e `CONNECT ANY DATABASE` (validação) | EC2 Windows (01) | — | resolvido |
 | HML-025 | Exporter como serviço Linux (systemd) no bastion da fase RDS (validação) | Linux (bastion) | — | em andamento |
+| HML-026 | `database_log_used_percent` com bancos ocultos e, no RDS, sem os bancos de sistema | RDS (SQL Server 2025 SE) | baixa | resolvido (v0.9.2) |
 
 ## Encerramento da fase EC2 (2026-10-15)
 
@@ -1530,9 +1531,12 @@ no ciclo seguinte (intervalo de 1 min); banco chamado `Odd]Name` lido sem erro
 - O scrape do coletor reporta duração 0 (serve o cache);
   `scrape_collector_success 1` o tempo todo.
 
-**Pendente para a fase RDS:** confirmar se o usuário master do RDS consegue
-executar `GRANT CONNECT ANY DATABASE` para o login do exporter (ele não é
-sysadmin); se não conseguir, documentar a alternativa (usuário em cada banco).
+**Fase RDS (2026-10-18):** o usuário master do RDS **não** consegue conceder
+o grant (`Grantor does not have GRANT permission`). Alternativa documentada
+no README e validada no HML-026: criar um usuário para o login em cada banco
+a ser lido. O
+`rdsadmin` já é acessível a qualquer login, então mesmo sem nada o coletor lê
+1 banco no RDS (sem índices acima de 100 páginas).
 
 ---
 
@@ -1576,3 +1580,81 @@ sysadmin); se não conseguir, documentar a alternativa (usuário em cada banco).
   arquitetura do bastion).
 - `web.listen_address: "127.0.0.1:9187"` + túnel SSH a partir do Mac, target
   novo no `prometheus.yml` local.
+
+---
+
+## HML-026 — `database_log_used_percent` com bancos ocultos e, no RDS, sem os bancos de sistema
+
+- **Ambiente:** RDS for SQL Server 2025 Standard (`17.0.5005.3`, Single-AZ),
+  exporter `0.9.1` no bastion; reproduzido no SQL Server 2025 local
+- **Encontrado em:** 2026-10-18
+- **Severidade:** baixa
+- **Status:** resolvido (v0.9.2)
+
+**Observado**
+
+No RDS, `sqlserver_database_log_used_percent` vinha para `model_msdb`,
+`model_replicatedmaster`, `mssqlsystemresource`, `tempdb` e o banco de usuário
+`StressDB`, mas não para `master`, `model`, `msdb` e `rdsadmin`. Nenhuma outra
+métrica conhece os três primeiros: não estão em `sys.databases`.
+
+**Causa**
+
+A métrica repassa todas as instâncias do contador `Percent Log Used`
+(`sys.dm_os_performance_counters`). O contador tem instâncias para bancos
+ocultos — `mssqlsystemresource` em qualquer versão e, no SQL Server 2025,
+`model_msdb`/`model_replicatedmaster` (o container local mostra os mesmos) —
+e, só no RDS, não tem instância para os bancos de sistema. Não é permissão:
+`usr_exporter` e `usr_dba` veem a mesma lista.
+
+Fontes alternativas testadas no RDS como `usr_exporter`:
+
+| Fonte | Bancos | Faltam |
+|---|---|---|
+| Contador `Percent Log Used` | StressDB, tempdb + 3 ocultos | master, model, msdb, rdsadmin |
+| `DBCC SQLPERF(LOGSPACE)` | master, tempdb, msdb, rdsadmin + 2 ocultos | **model e StressDB** |
+| `sys.dm_db_log_stats` | os 6 de `sys.databases` | — |
+
+`dm_db_log_stats` é completo, mas `active_log_size_mb` mede outra coisa (VLFs
+ativos): master 10,6% contra 44% do DBCC, msdb 0,5% contra 10,9%. Misturar
+as fontes faria a mesma métrica significar coisas diferentes por ambiente.
+
+**Correção** — branch `fix/log-used-percent-ghost-databases`
+
+- Contador cruzado com `sys.databases` (`COLLATE DATABASE_DEFAULT` no nome,
+  para não depender da collation do DMV): some a série dos bancos ocultos em
+  qualquer ambiente.
+- README documenta que no RDS os bancos de sistema não têm a métrica (os de
+  usuário têm).
+- ROADMAP (Later): métricas próprias do `sys.dm_db_log_stats` (VLFs, motivo
+  de não truncar o log, log desde o último backup), que funcionam no RDS para
+  todos os bancos.
+
+Validado no SQL Server 2025 local: antes 9 séries (com `model_msdb`,
+`model_replicatedmaster` e `mssqlsystemresource`), depois só os 6 bancos de
+`sys.databases`.
+
+**Regressão em outras plataformas (2026-10-18)**
+
+- Histórico da EC2 01 (2025) no Prometheus: `log_used_percent` tinha os 10
+  bancos reais **+** `model_msdb`, `model_replicatedmaster` e
+  `mssqlsystemresource`; com o join ficam exatamente os 10 (bancos
+  `RESTORING` de mirroring/log shipping continuam, estão em `sys.databases`).
+  Em 2019/2022 só o `mssqlsystemresource` some.
+- Nomes difíceis, SQL Server 2025 local (Linux): 11 bancos de teste —
+  `]`, `/`, `\`, `#`, `%`, `'`, `.`, `(`/`)`, espaço, acentos e um nome de 128
+  caracteres. Instância do contador idêntica ao `sys.databases` em todos; o
+  exporter com a correção emitiu as 11 séries. Não verificado no Windows (o
+  DMV lê os contadores do próprio SQL Server, não do PerfMon, então não se
+  espera troca de caracteres; os bancos da EC2 não tinham nomes especiais).
+
+**Validação no RDS (2026-10-18, `0.9.2-homolog` no bastion, reiniciado 23:32 UTC)**
+
+- `log_used_percent` só para `StressDB` (17) e `tempdb` (9); os três bancos
+  ocultos sumiram. `databases` com `success 1` em 22 ms; os 18 coletores com
+  `success 1`.
+- Alternativa ao `CONNECT ANY DATABASE` (HML-024): com
+  `CREATE USER usr_exporter FOR LOGIN usr_exporter` no `StressDB`, o ciclo
+  seguinte do `index_fragmentation` leu 2 bancos (`rdsadmin` + `StressDB`) em
+  0,46 s: `PK_Orders` com 277 778 páginas (0,01%) e `cx_Numbers` (0%).
+
