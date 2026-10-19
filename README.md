@@ -150,6 +150,14 @@ sqlserver://user:pass@NODE1:1433?database=master&encrypt=strict&certificate=C:/m
   `hostnameincertificate=<name in the certificate>`.
 - Confirm on the server with `sys.dm_exec_connections`: `encrypt_option` TRUE
   and `protocol_version` 134217728 (0x08000000, TDS 8.0).
+- The certificate file must end in `.pem` or `.der`. Any other extension
+  (e.g. `.crt`) makes the DSN invalid and the exporter exits at startup.
+- **Amazon RDS:** download the AWS CA bundle
+  (`https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem`) and
+  use it with the instance endpoint as the host, with `encrypt=true` or
+  `encrypt=strict`. Both are validated on RDS for SQL Server 2025, and no
+  server-side change is needed:
+  `sqlserver://user:pass@mydb.xxxx.us-east-1.rds.amazonaws.com:1433?database=master&encrypt=strict&certificate=/etc/mssql-exporter/global-bundle.pem`
 
 ### Running as a Windows service
 

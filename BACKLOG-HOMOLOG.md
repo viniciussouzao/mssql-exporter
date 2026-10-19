@@ -32,7 +32,8 @@ simulando produção (AWS EC2 Windows/Linux e RDS for SQL Server).
 | HML-022 | Coletor `active_queries`: requests longas e transações abertas (validação) | EC2 Windows (01) | — | resolvido |
 | HML-023 | Coletor `top_queries` com texto ofuscado (validação) | EC2 Windows (01) | — | resolvido |
 | HML-024 | Coletor `index_fragmentation` em background e `CONNECT ANY DATABASE` (validação) | EC2 Windows (01) | — | resolvido |
-| HML-025 | Exporter como serviço Linux (systemd) no bastion da fase RDS (validação) | Linux (bastion) | — | em andamento |
+| HML-025 | Exporter como serviço Linux (systemd) no bastion da fase RDS (validação) | Linux (bastion) | — | resolvido (v0.9.1) |
+| HML-027 | Linha de base no RDS Single-AZ: permissões, coletores, carga e TLS (validação) | RDS (SQL Server 2025 SE) | — | resolvido |
 | HML-026 | `database_log_used_percent` com bancos ocultos e, no RDS, sem os bancos de sistema | RDS (SQL Server 2025 SE) | baixa | resolvido (v0.9.2) |
 
 ## Encerramento da fase EC2 (2026-10-15)
@@ -1547,7 +1548,7 @@ a ser lido. O
 - **Encontrado em:** 2026-10-15
 - **Severidade:** — (até aqui o Linux não tinha forma documentada de rodar
   como serviço; o subcomando `service` é só do Windows)
-- **Status:** em andamento
+- **Status:** resolvido (v0.9.1)
 
 **Entrega**
 
@@ -1574,12 +1575,19 @@ a ser lido. O
   sozinho (`enabled`).
 - [x] `systemd-analyze security`: exposição 3.1 ("OK").
 
-**Pendente no bastion**
+**Validação no bastion (2026-10-18, Ubuntu 26.04 `amd64`, release v0.9.1)**
 
-- Instalar pelo roteiro do README a partir da release v0.9.1 (distribuição e
-  arquitetura do bastion).
-- `web.listen_address: "127.0.0.1:9187"` + túnel SSH a partir do Mac, target
-  novo no `prometheus.yml` local.
+- [x] Roteiro do README seguido no bastion, com uma diferença: o repositório
+  ainda é privado, então o `curl` da release no GitHub não funciona; o
+  tarball e o `.sha256` foram para o S3 e baixados com `aws s3 cp`. Depois de
+  público, o roteiro do README vale como está.
+- [x] `systemctl enable --now` às 23:14:49 UTC: ativo de primeira, sem erro
+  no journal; `web.listen_address: "127.0.0.1:9187"` e túnel SSH
+  (`-L 19187:127.0.0.1:9187`) até o Prometheus local, alvo `up` às 23:15.
+- [x] Atualizações para `0.9.2-homolog` e `0.9.2` trocando só o binário
+  (`install` + `systemctl restart`), sem mexer em config ou unit.
+- `cd /etc/mssql-exporter` como `ubuntu` dá *Permission denied* (pasta
+  `0750 root:mssql-exporter`, como planejado); editar com `sudo`.
 
 ---
 
@@ -1657,4 +1665,73 @@ Validado no SQL Server 2025 local: antes 9 séries (com `model_msdb`,
   `CREATE USER usr_exporter FOR LOGIN usr_exporter` no `StressDB`, o ciclo
   seguinte do `index_fragmentation` leu 2 bancos (`rdsadmin` + `StressDB`) em
   0,46 s: `PK_Orders` com 277 778 páginas (0,01%) e `cx_Numbers` (0%).
+
+---
+
+## HML-027 — Linha de base no RDS Single-AZ: permissões, coletores, carga e TLS (validação)
+
+- **Ambiente:** RDS for SQL Server 2025 Standard (`17.0.5005.3`, RTM-CU9),
+  `db.t3.xlarge` Single-AZ, `mssql-exporter-hml`, fuso UTC-3, subnets
+  privadas; exporter `0.9.2` no bastion (HML-025)
+- **Encontrado em:** 2026-10-18
+- **Severidade:** — (validação)
+- **Status:** resolvido
+
+**Permissões**
+
+Os mesmos grants da EC2, dados pelo usuário master (`usr_dba`):
+`VIEW SERVER STATE`, `VIEW ANY DEFINITION` e `SELECT` em
+`msdb.dbo.sysjobs`/`sysjobhistory` (HML-002 repetido no RDS: OK).
+`CONNECT ANY DATABASE` **não** pode ser concedido (HML-024); usuário por banco
+no lugar.
+
+**Coletores (padrão + `top_queries` e `index_fragmentation`)**
+
+- Os 18 coletores com `success 1` desde a primeira coleta; medianas por
+  coletor iguais às da EC2 (`perf_counters` ≈ 0,13 s, demais < 0,09 s).
+- `server_info`: Standard Edition, 4 CPUs, 16 GB, `is_hadr_enabled 1` mesmo
+  em Single-AZ.
+- `volumes`: `D:\` do RDS (21,4 GB). `io_file_stats`: 13 arquivos.
+- `backups`: FULL de `model`, `msdb` e `rdsadmin` feitos pelo RDS na criação
+  da instância (retenção de backup 0).
+- `agent_jobs`: `syspolicy_purge_history`.
+- `sqlserver_instance` = `EC2AMAZ-UU69199` (nome do host Windows por trás do
+  RDS), não o identificador da instância — rever no failover do Multi-AZ.
+- `rdsadmin` é acessível a qualquer login: entra em `databases`,
+  `index_fragmentation` etc.
+- `log_used_percent`: ver HML-026.
+
+**Carga (`hack/loadgen`, 10 logins × 2 workers, 23:52–00:12 UTC, pelo túnel)**
+
+- 55 020 statements, nenhum erro no loadgen; ≈33 batch requests/s; CPU do
+  RDS 24% em média (pico 29%).
+- `sessions_by_login`: 2 sessões por `loadgen_NN`, mais `usr_exporter`,
+  `usr_dba` e as contas de serviço do RDS (`NT AUTHORITY\SYSTEM`,
+  `NETWORK SERVICE`).
+- `active_queries`: até 14 requests acima de 10 s, `UPDATE` com até 18 s e
+  até 13 sessões bloqueadas — todos na fila do `blocker` (segura a linha
+  quente por 20 s) atrás de `hot_update`; conferido no
+  `sys.dm_exec_requests` (cadeia `LCK_M_X` até a sessão do `blocker`).
+  Transação aberta mais antiga até 36 s.
+- `top_queries`: 1º lugar o `status_report` do loadgen (223 s de CPU em 1 405
+  execuções, ≈159 ms cada; na EC2 ≈58 ms), texto com literais ofuscados; em
+  seguida as queries do próprio exporter em `master`.
+- `index_fragmentation` com 3 bancos (`rdsadmin`, `StressDB`, `LoadTestDB`,
+  este com usuário criado para o `usr_exporter`).
+- Nenhum coletor com `success 0` durante a carga.
+
+**TLS (bastion → RDS, 23:58–23:59 UTC)**
+
+| DSN | Resultado |
+|---|---|
+| sem `encrypt` | conecta (só o login criptografado) |
+| `encrypt=true&certificate=global-bundle.pem` | OK, `encrypt_option` TRUE |
+| `certificate=` com uma CA que não é a da AWS (`.pem`) | `sqlserver_up 0`, `x509: certificate signed by unknown authority` (a validação acontece) |
+| `certificate=/etc/ssl/certs/ca-certificates.crt` | exporter sai na hora: `certificate type .crt is not supported` (o driver só aceita `.pem`/`.der`); systemd reinicia a cada 5 s até corrigir |
+| `encrypt=strict&certificate=global-bundle.pem` | OK, `protocol_version` 0x08000000 (TDS 8.0), 18 coletores com `success 1` |
+
+No RDS, o `encrypt=strict` funciona sem nenhuma configuração no servidor (na
+EC2 foi preciso instalar um certificado na instância). O bastion ficou com
+`encrypt=strict`. README: seção de TLS com o caso do RDS e a restrição de
+extensão do arquivo.
 
