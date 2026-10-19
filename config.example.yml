@@ -42,6 +42,7 @@ collectors:
   # log_shipping: false
   # top_queries: false
   # index_fragmentation: false
+  # query_store: false
 
 # Options of the top_queries collector. They do not enable it: set
 # `top_queries: true` under `collectors:` above.
@@ -56,4 +57,11 @@ collectors:
 # index_fragmentation:
 #   interval: 6h          # minimum 1m
 #   min_page_count: 1000  # skip smaller indexes (8 KB pages)
+#   databases: []         # default: every accessible user database
+
+# Options of the query_store collector. They do not enable it: set
+# `query_store: true` under `collectors:` above.
+# It collects in the background on its own interval, not on every scrape.
+# query_store:
+#   interval: 5m          # minimum 1m
 #   databases: []         # default: every accessible user database

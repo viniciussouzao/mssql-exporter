@@ -151,7 +151,7 @@ func (c *SQLServerIndexFragmentation) refresh(ctx context.Context) {
 	start := c.now()
 	res := &fragmentationResult{}
 
-	databases, err := c.listDatabases(ctx)
+	databases, err := listAccessibleDatabases(ctx, c.db, c.opts.Databases)
 	if err != nil {
 		res.err = err
 	}
@@ -176,44 +176,6 @@ func (c *SQLServerIndexFragmentation) refresh(ctx context.Context) {
 	c.mu.Lock()
 	c.last = res
 	c.mu.Unlock()
-}
-
-// listDatabases returns the online user databases the login can access
-// (HAS_DBACCESS skips databases without a user for the login, mirrors,
-// restoring and non-readable AG secondaries), optionally restricted to
-// opts.Databases.
-func (c *SQLServerIndexFragmentation) listDatabases(ctx context.Context) ([]string, error) {
-	rows, err := c.db.QueryContext(ctx, `
-		SELECT name
-		FROM sys.databases
-		WHERE database_id > 4
-			AND state = 0
-			AND HAS_DBACCESS(name) = 1
-		ORDER BY name
-	`)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list databases: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-
-	wanted := make(map[string]bool, len(c.opts.Databases))
-	for _, name := range c.opts.Databases {
-		wanted[strings.ToLower(name)] = true
-	}
-
-	var names []string
-	var scanErrs []error
-	for rows.Next() {
-		var name string
-		if err := rows.Scan(&name); err != nil {
-			scanErrs = append(scanErrs, fmt.Errorf("failed to scan database row: %w", err))
-			continue
-		}
-		if len(wanted) == 0 || wanted[strings.ToLower(name)] {
-			names = append(names, name)
-		}
-	}
-	return names, errors.Join(append(scanErrs, rows.Err())...)
 }
 
 // collectDatabase reads one database. The catalog views are referenced with

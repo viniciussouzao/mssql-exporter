@@ -507,6 +507,57 @@ func TestLoadIndexFragmentationOptionsValidation(t *testing.T) {
 	}
 }
 
+func TestLoadQueryStoreOptions(t *testing.T) {
+	t.Setenv("SQL_SERVER_DSN", testDSN)
+
+	cfg, err := Load(nil)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.EnabledCollectors["query_store"] {
+		t.Error("query_store enabled by default, want it opt-in")
+	}
+	if want := collector.DefaultOptions().QueryStore; !reflect.DeepEqual(cfg.CollectorOptions.QueryStore, want) {
+		t.Errorf("QueryStore = %+v, want the defaults %+v", cfg.CollectorOptions.QueryStore, want)
+	}
+
+	path := writeConfigFile(t, `
+collectors:
+  query_store: true
+query_store:
+  interval: 15m
+  databases: [AppDB, Sales]
+`)
+	cfg, err = Load([]string{"--config.file", path})
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	want := collector.QueryStoreOptions{Interval: 15 * time.Minute, Databases: []string{"AppDB", "Sales"}}
+	if !reflect.DeepEqual(cfg.CollectorOptions.QueryStore, want) {
+		t.Errorf("QueryStore = %+v, want %+v from the config file", cfg.CollectorOptions.QueryStore, want)
+	}
+	if !cfg.EnabledCollectors["query_store"] {
+		t.Error("query_store disabled, want it enabled by the config file")
+	}
+
+	// Flags win over the file.
+	cfg, err = Load([]string{"--config.file", path, "--collector.query_store.interval=1h", "--collector.query_store.databases=Only"})
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	want = collector.QueryStoreOptions{Interval: time.Hour, Databases: []string{"Only"}}
+	if !reflect.DeepEqual(cfg.CollectorOptions.QueryStore, want) {
+		t.Errorf("QueryStore = %+v, want %+v (flags over file)", cfg.CollectorOptions.QueryStore, want)
+	}
+
+	if _, err := Load([]string{"--collector.query_store.interval=59s"}); err == nil || !strings.Contains(err.Error(), "collector.query_store.interval") {
+		t.Errorf("Load(interval=59s) error = %v, want a collector.query_store.interval range error", err)
+	}
+	if _, err := Load([]string{"--collector.query_store.interval=1m"}); err != nil {
+		t.Errorf("Load(interval=1m) error = %v, want the boundary accepted", err)
+	}
+}
+
 func TestLoadInstanceLabelPrecedence(t *testing.T) {
 	t.Setenv("SQL_SERVER_DSN", "")
 	t.Setenv("SQL_SERVER_INSTANCE_LABEL", "")

@@ -78,6 +78,11 @@ type fileConfig struct {
 		MinPageCount *int           `yaml:"min_page_count"`
 		Databases    []string       `yaml:"databases"`
 	} `yaml:"index_fragmentation"`
+	// QueryStore holds the query_store collector options.
+	QueryStore struct {
+		Interval  *time.Duration `yaml:"interval"`
+		Databases []string       `yaml:"databases"`
+	} `yaml:"query_store"`
 }
 
 // Load parses CLI flags from args (typically os.Args[1:]) and merges them
@@ -102,6 +107,8 @@ func Load(args []string) (*Config, error) {
 	fragInterval := fs.Duration("collector.index_fragmentation.interval", defaultOpts.IndexFragmentation.Interval, "Interval between background collections of the index_fragmentation collector (minimum 1m).")
 	fragMinPageCount := fs.Int("collector.index_fragmentation.min_page_count", defaultOpts.IndexFragmentation.MinPageCount, "Skip indexes with fewer 8 KB pages than this in the index_fragmentation collector.")
 	fragDatabases := fs.StringSlice("collector.index_fragmentation.databases", nil, "Comma-separated databases read by the index_fragmentation collector (default: every accessible user database).")
+	qsInterval := fs.Duration("collector.query_store.interval", defaultOpts.QueryStore.Interval, "Interval between background collections of the query_store collector (minimum 1m).")
+	qsDatabases := fs.StringSlice("collector.query_store.databases", nil, "Comma-separated databases read by the query_store collector (default: every accessible user database).")
 
 	collectorFlags := make(map[string]*bool, len(collector.ScraperNames()))
 	for _, name := range collector.ScraperNames() {
@@ -247,6 +254,23 @@ func Load(args []string) (*Config, error) {
 	}
 	if fo.MinPageCount < 0 {
 		return nil, fmt.Errorf("collector.index_fragmentation.min_page_count must not be negative")
+	}
+
+	qo := &cfg.CollectorOptions.QueryStore
+	if fc.QueryStore.Interval != nil {
+		qo.Interval = *fc.QueryStore.Interval
+	}
+	if fs.Changed("collector.query_store.interval") {
+		qo.Interval = *qsInterval
+	}
+	if fc.QueryStore.Databases != nil {
+		qo.Databases = fc.QueryStore.Databases
+	}
+	if fs.Changed("collector.query_store.databases") {
+		qo.Databases = *qsDatabases
+	}
+	if qo.Interval < collector.QueryStoreMinInterval {
+		return nil, fmt.Errorf("collector.query_store.interval must be at least %s", collector.QueryStoreMinInterval)
 	}
 
 	cfg.InstanceLabel = fc.InstanceLabel

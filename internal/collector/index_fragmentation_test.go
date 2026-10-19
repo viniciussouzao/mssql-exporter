@@ -9,10 +9,10 @@ import (
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
 )
 
-// fragmentationDatabasesQueryRegex pins the database filter: user databases
+// accessibleDatabasesQueryRegex pins the database filter: user databases
 // only, online, and accessible to the login (no 916 on databases without a
 // user, mirrors or non-readable AG secondaries).
-var fragmentationDatabasesQueryRegex = sqlContainsInOrder(
+var accessibleDatabasesQueryRegex = sqlContainsInOrder(
 	"FROM sys.databases",
 	"WHERE database_id > 4",
 	"AND state = 0",
@@ -67,7 +67,7 @@ func TestIndexFragmentationBeforeFirstCollectionEmitsNothing(t *testing.T) {
 func TestIndexFragmentationRefreshAndScrape(t *testing.T) {
 	c, mock := newTestFragmentationCollector(t, DefaultOptions().IndexFragmentation)
 
-	mock.ExpectQuery(fragmentationDatabasesQueryRegex).WillReturnRows(
+	mock.ExpectQuery(accessibleDatabasesQueryRegex).WillReturnRows(
 		sqlmock.NewRows([]string{"name"}).AddRow("AppDB").AddRow("Odd]Name"))
 	mock.ExpectQuery(fragmentationQueryRegex("[AppDB]")).WithArgs("AppDB", 1000).WillReturnRows(
 		sqlmock.NewRows(fragmentationColumns).
@@ -116,7 +116,7 @@ func TestIndexFragmentationDatabasesOption(t *testing.T) {
 	opts.MinPageCount = 50
 	c, mock := newTestFragmentationCollector(t, opts)
 
-	mock.ExpectQuery(fragmentationDatabasesQueryRegex).WillReturnRows(
+	mock.ExpectQuery(accessibleDatabasesQueryRegex).WillReturnRows(
 		sqlmock.NewRows([]string{"name"}).AddRow("AppDB").AddRow("OtherDB"))
 	// Only AppDB (matched case-insensitively against "APPDB"), with the
 	// configured page filter.
@@ -134,7 +134,7 @@ func TestIndexFragmentationDatabasesOption(t *testing.T) {
 func TestIndexFragmentationDatabaseErrorKeepsOthers(t *testing.T) {
 	c, mock := newTestFragmentationCollector(t, DefaultOptions().IndexFragmentation)
 
-	mock.ExpectQuery(fragmentationDatabasesQueryRegex).WillReturnRows(
+	mock.ExpectQuery(accessibleDatabasesQueryRegex).WillReturnRows(
 		sqlmock.NewRows([]string{"name"}).AddRow("BadDB").AddRow("GoodDB"))
 	mock.ExpectQuery(fragmentationQueryRegex("[BadDB]")).WillReturnError(errors.New("lock request time out period exceeded"))
 	mock.ExpectQuery(fragmentationQueryRegex("[GoodDB]")).WillReturnRows(
@@ -160,7 +160,7 @@ func TestIndexFragmentationDatabaseErrorKeepsOthers(t *testing.T) {
 func TestIndexFragmentationListErrorReportsFailure(t *testing.T) {
 	c, mock := newTestFragmentationCollector(t, DefaultOptions().IndexFragmentation)
 
-	mock.ExpectQuery(fragmentationDatabasesQueryRegex).WillReturnError(errors.New("boom"))
+	mock.ExpectQuery(accessibleDatabasesQueryRegex).WillReturnError(errors.New("boom"))
 
 	c.refresh(context.Background())
 	families := gatherScraper(t, c)
@@ -176,12 +176,12 @@ func TestIndexFragmentationListErrorReportsFailure(t *testing.T) {
 func TestIndexFragmentationLatestResultReplacesPrevious(t *testing.T) {
 	c, mock := newTestFragmentationCollector(t, DefaultOptions().IndexFragmentation)
 
-	mock.ExpectQuery(fragmentationDatabasesQueryRegex).WillReturnRows(sqlmock.NewRows([]string{"name"}).AddRow("AppDB"))
+	mock.ExpectQuery(accessibleDatabasesQueryRegex).WillReturnRows(sqlmock.NewRows([]string{"name"}).AddRow("AppDB"))
 	mock.ExpectQuery(fragmentationQueryRegex("[AppDB]")).WillReturnRows(
 		sqlmock.NewRows(fragmentationColumns).AddRow("dbo", "Dropped", "IX", 50.0, 2000))
 	c.refresh(context.Background())
 
-	mock.ExpectQuery(fragmentationDatabasesQueryRegex).WillReturnRows(sqlmock.NewRows([]string{"name"}).AddRow("AppDB"))
+	mock.ExpectQuery(accessibleDatabasesQueryRegex).WillReturnRows(sqlmock.NewRows([]string{"name"}).AddRow("AppDB"))
 	mock.ExpectQuery(fragmentationQueryRegex("[AppDB]")).WillReturnRows(
 		sqlmock.NewRows(fragmentationColumns).AddRow("dbo", "Kept", "IX", 1.0, 2000))
 	c.refresh(context.Background())
@@ -201,7 +201,7 @@ func TestIndexFragmentationScrapeStartsBackgroundCollectionOnce(t *testing.T) {
 	opts.Interval = time.Hour
 	c := NewIndexFragmentationCollector(db, opts)
 
-	mock.ExpectQuery(fragmentationDatabasesQueryRegex).WillReturnRows(sqlmock.NewRows([]string{"name"}))
+	mock.ExpectQuery(accessibleDatabasesQueryRegex).WillReturnRows(sqlmock.NewRows([]string{"name"}))
 
 	// The first scrape only starts the collection; a second one must not
 	// start another (sqlmock would fail on an unexpected second query).
