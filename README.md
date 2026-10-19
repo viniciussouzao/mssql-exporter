@@ -31,6 +31,7 @@ The exporter currently includes these collectors:
 - Log shipping (opt-in): last backup/copy/restore timestamps, restore latency and alert thresholds from the log shipping monitor tables.
 - Top queries (opt-in): top N queries by CPU from the plan cache, per `query_hash`, with optional statement text (literals obfuscated).
 - Index fragmentation (opt-in): logical fragmentation and size per index, collected in the background on its own interval (default 6h).
+- Query Store health (opt-in): actual vs desired state (catches the silent switch to `READ_ONLY` when the store fills up), storage used and forced plans that fail, per database, collected in the background (default 5m).
 
 ## Quick Start
 
@@ -74,12 +75,13 @@ Flags (mirroring the ergonomics of `mysqld_exporter`/`postgres_exporter`):
 --web.listen-address string    Address to listen on for the web interface and metrics. (default ":9187")
 --web.telemetry-path string    Path under which to expose metrics. (default "/metrics")
 --collector.<name>             Enable/disable a SQL Server collector (all default to true
-                               except log_shipping, top_queries and index_fragmentation).
+                               except log_shipping, top_queries, index_fragmentation
+                               and query_store).
                                Names: wait_stats, io_file_stats, sessions, server_info,
                                memory_clerks, backups, tempdb, perf_counters, databases,
                                blocking, active_queries, availability_groups, agent_jobs,
                                volumes, schedulers, database_mirroring, log_shipping,
-                               top_queries, index_fragmentation.
+                               top_queries, index_fragmentation, query_store.
                                Example: --collector.backups=false, --collector.log_shipping
 --collector.top_queries.limit int
                                Queries (by total CPU) exposed by top_queries (default 50, max 1000).
@@ -92,6 +94,10 @@ Flags (mirroring the ergonomics of `mysqld_exporter`/`postgres_exporter`):
 --collector.index_fragmentation.min_page_count int
                                Skip indexes with fewer 8 KB pages (default 1000).
 --collector.index_fragmentation.databases strings
+                               Databases to read, comma-separated (default: all accessible user databases).
+--collector.query_store.interval duration
+                               Interval between background Query Store collections (default 5m, min 1m).
+--collector.query_store.databases strings
                                Databases to read, comma-separated (default: all accessible user databases).
 --collector.os-collectors      Enable OS-level collectors (CPU, memory, disk).
 --config.file string           Path to an optional YAML config file.
@@ -276,10 +282,10 @@ GRANT SELECT ON dbo.log_shipping_monitor_primary TO [your_login];
 GRANT SELECT ON dbo.log_shipping_monitor_secondary TO [your_login];
 ```
 
-The `index_fragmentation` collector is **disabled by default**. It reads
-every online user database the login can access (`HAS_DBACCESS`), and a
-database where the login has no user is silently skipped; to cover all of
-them without creating a user in each:
+The `index_fragmentation` and `query_store` collectors are **disabled by
+default**. They read every online user database the login can access
+(`HAS_DBACCESS`), and a database where the login has no user is silently
+skipped; to cover all of them without creating a user in each:
 
 ```sql
 GRANT CONNECT ANY DATABASE TO [your_login];
@@ -288,8 +294,11 @@ GRANT CONNECT ANY DATABASE TO [your_login];
 `CONNECT ANY DATABASE` exists since SQL Server 2014; on older versions create
 a user for the login in each database. A skipped database is not an error:
 without the grant the collection succeeds with
-`sqlserver_index_fragmentation_last_collection_databases 0`, so compare that
-metric with the number of databases you expect (or alert on `== 0`).
+`sqlserver_index_fragmentation_last_collection_databases 0` (or
+`sqlserver_query_store_last_collection_databases 0`), so compare that
+metric with the number of databases you expect (or alert on `== 0`). Besides
+database access, `query_store` needs no grant beyond `VIEW SERVER STATE`
+(validated on SQL Server 2025).
 
 On **Amazon RDS** the master user cannot grant `CONNECT ANY DATABASE`
 (`Grantor does not have GRANT permission`). Create a user for the login in
@@ -330,6 +339,7 @@ The exporter reads from (among others):
 - `msdb.dbo.log_shipping_monitor_primary` / `log_shipping_monitor_secondary` (log_shipping only)
 - `sys.dm_exec_query_stats`, `sys.dm_exec_plan_attributes`, `sys.dm_exec_sql_text` (top_queries only)
 - `sys.dm_db_index_physical_stats` and each database's `sys.indexes`/`sys.objects`/`sys.schemas` (index_fragmentation only)
+- Each database's `sys.database_query_store_options` and `sys.query_store_plan` (query_store only)
 - `SERVERPROPERTY(...)`
 
 ## Availability & Self-Metrics
@@ -600,6 +610,40 @@ Metric names are stable and follow Prometheus best practices. Selected examples:
   - On SSD/EBS storage, logical fragmentation matters much less than page
     density (`avg_page_space_used_in_percent`), which needs the more
     expensive `SAMPLED` mode and is not collected
+
+- Query Store health (opt-in, `--collector.query_store`)
+  - Query Store is per database and its catalog views get slow on large
+    stores, so like index_fragmentation it **collects in the background**
+    every `--collector.query_store.interval` (default 5m, first run on the
+    first scrape) and scrapes serve the last result. Requires SQL Server
+    2016+ (the views don't exist before; every database fails)
+  - `sqlserver_query_store_actual_state{db_name="AppDB",state="READ_ONLY"} 1`
+    and `sqlserver_query_store_desired_state{db_name="AppDB",state="READ_WRITE"} 1`
+    (`OFF`, `READ_ONLY`, `READ_WRITE`, `ERROR`). Query Store switches itself
+    to `READ_ONLY` when it fills up and silently stops capturing; alert when
+    the actual state differs from the configured one:
+    `sqlserver_query_store_desired_state == 1 unless on (instance, db_name, state) sqlserver_query_store_actual_state == 1`
+  - `sqlserver_query_store_readonly_reason{db_name="AppDB"} 65536`: bitmask
+    of why it is `READ_ONLY` (0 when it isn't). 65536 = max storage size
+    reached, 131072 = statement limit, 262144 = in-memory limit, 524288 =
+    database disk size limit; 1/2/4 = database read-only, single user,
+    emergency; 8 = secondary replica, which is expected on a readable AG
+    secondary (exclude it from the state alert there). To alert only on
+    capture stopped by a limit: `sqlserver_query_store_readonly_reason >= 65536`
+  - `sqlserver_query_store_storage_used_bytes` and
+    `sqlserver_query_store_storage_max_bytes` (`MAX_STORAGE_SIZE_MB`);
+    alert before it fills up, e.g. `used / max > 0.9`
+  - `sqlserver_query_store_forced_plans{db_name="AppDB"} 3` and
+    `sqlserver_query_store_forced_plans_failing{db_name="AppDB"} 1`: forced
+    plans whose forcing has failed (`force_failure_count > 0`, e.g. the
+    forced plan uses an index that was dropped), so the query runs with
+    another plan while everyone believes it is pinned. See
+    `last_force_failure_reason_desc` in `sys.query_store_plan`
+  - `sqlserver_query_store_last_collection_timestamp_seconds`,
+    `_last_collection_duration_seconds`, `_last_collection_databases` and
+    `_last_collection_success`, as in index_fragmentation
+  - No per-query series: the Query Store UI is the tool for analysis (see
+    `ROADMAP.md`)
 
 - Volumes
   - `sqlserver_volume_total_bytes{volume_mount_point="C:\\"} 1962694664192`

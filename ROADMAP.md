@@ -156,7 +156,7 @@ first; implement in this order.
   log backups and that the value is refreshed on truncation attempts
   (checkpoint/log backup), so alert with `for:` and together with
   `sqlserver_database_log_used_percent`
-- [ ] **Query Store health** (new `query_store` collector, per database like
+- [x] **Query Store health** (new `query_store` collector, per database like
   `index_fragmentation`, `HAS_DBACCESS` filter):
   - `sys.database_query_store_options`: `actual_state` vs `desired_state`
     (the silent switch to `READ_ONLY` when the store fills up),
@@ -164,6 +164,15 @@ first; implement in this order.
   - forced plans that fail (`sys.query_store_plan.force_failure_count`,
     `last_force_failure_reason_desc`)
   - no per-query series here (see Later)
+  - Done as the `query_store` collector (opt-in): background loop like
+    index_fragmentation (default every 5m, options
+    `--collector.query_store.interval|databases`), database listing shared
+    with index_fragmentation; one-hot `actual_state`/`desired_state`,
+    `readonly_reason`, storage used/max bytes, forced plans and failing
+    forced plans. Validated on SQL Server 2025: `READ_ONLY` with reason
+    65536 after lowering `MAX_STORAGE_SIZE_MB`, forced plan failing with
+    `NO_INDEX` after dropping its index, `OFF`; needs only database access
+    on top of `VIEW SERVER STATE`
 
 ## Later / ideas (unprioritized)
 
