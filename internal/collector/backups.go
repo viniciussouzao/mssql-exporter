@@ -60,6 +60,13 @@ func (c *SQLServerBackups) Scrape(ctx context.Context, ch chan<- prometheus.Metr
 	// so after a time zone change or a DST fall-back an older backup can
 	// carry a later local date and hide newer ones.
 	//
+	// Backups written to the NUL device are discarded by SQL Server, so they
+	// cannot be restored and must not count as the latest backup: Amazon RDS
+	// takes them of model, msdb and rdsadmin at instance creation, and
+	// BACKUP ... TO DISK = 'NUL' is a common way to cut the log chain. A
+	// striped backup with one NUL stripe is unusable too. The filter runs
+	// before the ROW_NUMBER, so the previous real backup is reported instead.
+	//
 	// The dates are converted to UTC because the metric is a Unix timestamp.
 	// time_zone is the server's UTC offset (15-minute intervals) when the
 	// backup ran, so it stays correct across DST changes; 127 means unknown,
@@ -84,9 +91,15 @@ func (c *SQLServerBackups) Scrape(ctx context.Context, ch chan<- prometheus.Metr
 					PARTITION BY database_name, type
 					ORDER BY backup_set_id DESC
 				) AS rn
-			FROM msdb.dbo.backupset
+			FROM msdb.dbo.backupset b
 			WHERE backup_finish_date IS NOT NULL
 				AND server_name = @@SERVERNAME
+				AND NOT EXISTS (
+					SELECT 1
+					FROM msdb.dbo.backupmediafamily mf
+					WHERE mf.media_set_id = b.media_set_id
+						AND UPPER(RTRIM(mf.physical_device_name)) IN ('NUL', 'NUL:')
+				)
 		) bs
 		CROSS APPLY (
 			SELECT CASE
