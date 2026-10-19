@@ -35,8 +35,8 @@ simulando produção (AWS EC2 Windows/Linux e RDS for SQL Server).
 | HML-025 | Exporter como serviço Linux (systemd) no bastion da fase RDS (validação) | Linux (bastion) | — | resolvido (v0.9.1) |
 | HML-027 | Linha de base no RDS Single-AZ: permissões, coletores, carga e TLS (validação) | RDS (SQL Server 2025 SE) | — | resolvido |
 | HML-028 | Backups no RDS: snapshots e log a cada 5 min aparecem; backups de criação gravados em `NUL` contam como FULL | RDS (SQL Server 2025 SE) | média | resolvido (v0.9.3) |
-| HML-029 | `sqlserver_instance` no RDS: nome genérico do host, muda a cada parada/partida e fica vazio se o exporter sobe antes do banco | RDS (SQL Server 2025 SE) | média | em andamento |
-| HML-030 | Conversão Single-AZ → Multi-AZ do RDS: Always On aparece sem falhas de coleta (validação) | RDS (SQL Server 2025 SE) | — | em andamento |
+| HML-029 | `sqlserver_instance` no RDS: nome genérico do host, muda a cada parada/partida e fica vazio se o exporter sobe antes do banco | RDS (SQL Server 2025 SE) | média | resolvido (v0.10.0) |
+| HML-030 | Conversão Single-AZ → Multi-AZ e failover do RDS: Always On aparece sem falhas de coleta (validação) | RDS (SQL Server 2025 SE) | — | resolvido |
 | HML-026 | `database_log_used_percent` com bancos ocultos e, no RDS, sem os bancos de sistema | RDS (SQL Server 2025 SE) | baixa | resolvido (v0.9.2) |
 
 ## Encerramento da fase EC2 (2026-10-15)
@@ -1829,7 +1829,7 @@ contando: o RDS restaura a partir deles.
 - **Encontrado em:** 2026-10-19
 - **Severidade:** média (séries trocam de nome e o rótulo não identifica a
   instância)
-- **Status:** em andamento
+- **Status:** resolvido (v0.10.0)
 
 **Observado**
 
@@ -1869,15 +1869,21 @@ contando: o RDS restaura a partir deles.
 Testes de precedência (YAML < env < flag, flag vazia volta ao automático) e
 de valor em branco; 5 mutações no `config.go` pegas.
 
+**Validação no RDS (`0.9.4-homolog`, `instance_label: "mssql-exporter-hml"`,
+15:14 UTC):** `sqlserver_instance="mssql-exporter-hml"` em todas as séries,
+`sqlserver_servername` com o host real. No failover do HML-030 o
+`servername` passou de `EC2AMAZ-JFK9UC6` para `EC2AMAZ-94TRL9U` e o rótulo
+continuou `mssql-exporter-hml`: as séries seguiram sem quebra.
+
 ---
 
-## HML-030 — Conversão Single-AZ → Multi-AZ do RDS: Always On aparece sem falhas de coleta (validação)
+## HML-030 — Conversão Single-AZ → Multi-AZ e failover do RDS: Always On aparece sem falhas de coleta (validação)
 
 - **Ambiente:** RDS for SQL Server 2025 SE (`db.t3.xlarge`), exporter
   `0.9.3` no bastion; amostras a cada 30 s
 - **Encontrado em:** 2026-10-19
 - **Severidade:** — (validação)
-- **Status:** em andamento (falta o failover)
+- **Status:** resolvido
 
 **Conversão (`apply` às 14:20 UTC, `available` com Multi-AZ às 15:02)**
 
@@ -1899,4 +1905,29 @@ de valor em branco; 5 mutações no `config.go` pegas.
   `EC2AMAZ-JFK9UC6` e 2 para `EC2AMAZ-94TRL9U` (a nova), `synchronization_health`
   2 nas duas, bancos `SYNCHRONIZED` (2), sem suspensão, fila de redo 0 e fila
   de envio de 60 KB.
+
+**Failover (`aws rds reboot-db-instance --force-failover`, 15:15 UTC)**
+
+Eventos do RDS: reinício 15:15:31, failover iniciado 15:15:35 e concluído
+15:15:40, "DNS propagation may take a few minutes" 15:16:04.
+
+| UTC (scrapes de 15 s) | `sqlserver_up` | Observação |
+|---|---|---|
+| até 15:15:01 | 1 | primária `EC2AMAZ-JFK9UC6` |
+| 15:15:16–15:15:46 | 0 | `connection reset by peer` para o IP antigo (10.0.1.249) nas conexões do pool |
+| a partir de 15:16:01 | 1 | `servername` = `EC2AMAZ-94TRL9U`, conexões novas já no IP novo |
+
+- Indisponível por ≈45 s (3 scrapes); voltou sozinho, sem reiniciar o
+  exporter: conexões novas resolvem o DNS do endpoint de novo.
+- Nenhum coletor com `success 0` com o banco no ar; nos scrapes com
+  `sqlserver_up 0` os coletores são pulados, como projetado.
+- Papéis invertidos nos 3 AGs: `EC2AMAZ-94TRL9U` primária (1),
+  `EC2AMAZ-JFK9UC6` secundária (2), saúde 2 nas duas, os 6 estados de banco
+  `SYNCHRONIZED`.
+- Com `instance_label` (HML-029) o rótulo não mudou; sem ele as séries
+  passariam a ter `sqlserver_instance="EC2AMAZ-94TRL9U"` só depois de um
+  restart do exporter (até lá ficariam com o nome da antiga primária).
+- A API do RDS seguiu mostrando `us-east-1a`/`us-east-1b` como
+  primária/secundária minutos depois do failover (atraso de atualização da
+  própria AWS); o `servername` do exporter é a fonte mais rápida.
 
