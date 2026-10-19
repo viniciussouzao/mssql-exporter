@@ -95,6 +95,9 @@ Flags (mirroring the ergonomics of `mysqld_exporter`/`postgres_exporter`):
                                Databases to read, comma-separated (default: all accessible user databases).
 --collector.os-collectors      Enable OS-level collectors (CPU, memory, disk).
 --config.file string           Path to an optional YAML config file.
+--sqlserver.instance-label string
+                               Fixed value of the sqlserver_instance label (default: @@SERVERNAME).
+                               Env: SQL_SERVER_INSTANCE_LABEL. YAML: instance_label.
 --web.config.file string       Path to an exporter-toolkit web config file enabling TLS and/or basic auth.
 --version                      Print version information and exit.
 ```
@@ -340,11 +343,20 @@ scrape — alert on `sqlserver_up` instead of watching the process:
 
 When `sqlserver_up` is 0, individual collectors are skipped for that scrape.
 
-**Known limitation**: every metric carries a `sqlserver_instance` label
-resolved once at startup (`SELECT @@SERVERNAME`). If SQL Server is unreachable
-at that moment the label stays empty until the exporter restarts — the metrics
-themselves recover automatically, only this label does not. For a stable
-identity prefer the `sqlserver_servername` metric or Prometheus target labels.
+Every metric carries a `sqlserver_instance` label. By default it is
+`@@SERVERNAME`, read once at startup. **Known limitation**: if SQL Server is
+unreachable at that moment the label stays empty until the exporter restarts.
+The metrics themselves recover automatically; only this label does not.
+
+Set `instance_label` (or `--sqlserver.instance-label`, or
+`SQL_SERVER_INSTANCE_LABEL`) to fix the label to a name of your choice. The
+exporter then uses it as is and does not read `@@SERVERNAME`, so the label is
+also set when SQL Server is down at startup. Recommended on **Amazon RDS**:
+there `@@SERVERNAME` is a generic host name (`EC2AMAZ-...`) that says nothing
+about which instance it is, and it changes when the instance is stopped and
+started or fails over. Use the DB instance identifier, e.g.
+`instance_label: "orders-prod"`. The `sqlserver_servername` metric still
+reports the current `@@SERVERNAME`.
 
 ## Exposed Metrics
 

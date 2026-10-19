@@ -85,12 +85,21 @@ func run(ctx context.Context, cfg *config.Config) error {
 	err := conn.PingContext(pingCtx)
 	cancelPing()
 
-	var instanceName string
 	if err != nil {
 		slog.Warn("sql server is unreachable at startup, retrying on every scrape (sqlserver_up will report 0)", slog.Any("error", err))
-		slog.Warn("sqlserver_instance label will stay empty until the exporter restarts with sql server reachable")
 	} else {
 		slog.Info("successfully connected and pinged sql server")
+	}
+
+	// A configured label wins and needs no query: it stays the same when SQL
+	// Server is down at startup or its host name changes (e.g. Amazon RDS).
+	instanceName := cfg.InstanceLabel
+	switch {
+	case instanceName != "":
+		slog.Info("sql server instance label set by configuration", slog.String("instance", instanceName))
+	case err != nil:
+		slog.Warn("sqlserver_instance label will stay empty until the exporter restarts with sql server reachable (set instance_label to avoid it)")
+	default:
 		instanceName = queryServerName(conn)
 		slog.Info("sql server instance", slog.String("instance", instanceName))
 	}

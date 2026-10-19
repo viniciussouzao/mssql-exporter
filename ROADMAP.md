@@ -145,6 +145,10 @@ this order.
 ## Later / ideas (unprioritized)
 
 - Missing indexes (`sys.dm_db_missing_index_*`)
+- Automatic `sqlserver_instance` label resolved on the first successful
+  connection instead of only at startup (today it stays empty until a
+  restart when SQL Server is down at startup; `instance_label` avoids it)
+  (HML-029)
 - Transaction log health from `sys.dm_db_log_stats` (one row per database,
   works on RDS where the `Percent Log Used` counter misses the system
   databases): VLF count, `log_truncation_holdup_reason`, log generated since

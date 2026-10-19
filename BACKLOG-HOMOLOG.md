@@ -35,6 +35,8 @@ simulando produção (AWS EC2 Windows/Linux e RDS for SQL Server).
 | HML-025 | Exporter como serviço Linux (systemd) no bastion da fase RDS (validação) | Linux (bastion) | — | resolvido (v0.9.1) |
 | HML-027 | Linha de base no RDS Single-AZ: permissões, coletores, carga e TLS (validação) | RDS (SQL Server 2025 SE) | — | resolvido |
 | HML-028 | Backups no RDS: snapshots e log a cada 5 min aparecem; backups de criação gravados em `NUL` contam como FULL | RDS (SQL Server 2025 SE) | média | resolvido (v0.9.3) |
+| HML-029 | `sqlserver_instance` no RDS: nome genérico do host, muda a cada parada/partida e fica vazio se o exporter sobe antes do banco | RDS (SQL Server 2025 SE) | média | em andamento |
+| HML-030 | Conversão Single-AZ → Multi-AZ do RDS: Always On aparece sem falhas de coleta (validação) | RDS (SQL Server 2025 SE) | — | em andamento |
 | HML-026 | `database_log_used_percent` com bancos ocultos e, no RDS, sem os bancos de sistema | RDS (SQL Server 2025 SE) | baixa | resolvido (v0.9.2) |
 
 ## Encerramento da fase EC2 (2026-10-15)
@@ -1818,4 +1820,83 @@ contando: o RDS restaura a partir deles.
   séries com os mesmos valores.
 - 4 mutações na query (`EXISTS`, só `'NUL'`, sem `UPPER/RTRIM`, join errado
   com a mídia) pegas pelos testes.
+
+---
+
+## HML-029 — `sqlserver_instance` no RDS: nome genérico do host, muda a cada parada/partida e fica vazio se o exporter sobe antes do banco
+
+- **Ambiente:** RDS for SQL Server 2025 SE, exporter `0.9.2`/`0.9.3` no bastion
+- **Encontrado em:** 2026-10-19
+- **Severidade:** média (séries trocam de nome e o rótulo não identifica a
+  instância)
+- **Status:** em andamento
+
+**Observado**
+
+- O rótulo é o `@@SERVERNAME`, que no RDS é o nome do host Windows por trás
+  da instância: `EC2AMAZ-UU69199` em 2026-10-18 e `EC2AMAZ-JFK9UC6` em
+  2026-10-19, só por parar e ligar o RDS (sem failover). Cada troca quebra a
+  continuidade das séries e dos dashboards, e com várias instâncias RDS o
+  nome não diz qual é qual.
+- O bastion ligou às 13:39 UTC e o RDS só às 13:54: o exporter subiu sem
+  conectar e, como documentado, ficou com `sqlserver_instance=""` até ser
+  reiniciado (14:20).
+
+**Correção** — branch `feat/instance-label`
+
+- Opção `instance_label` (YAML), `--sqlserver.instance-label` (flag) e
+  `SQL_SERVER_INSTANCE_LABEL` (env), com a precedência de sempre. Preenchida,
+  o valor é usado como está e o `@@SERVERNAME` nem é lido: o rótulo fica
+  estável em parada/partida e failover e existe mesmo com o banco fora no
+  startup. Vazia ou ausente, o comportamento automático de antes. Valor só
+  com espaços é recusado na inicialização.
+- Uma opção só (e não `auto_label` + `custom_label`): preenchida significa
+  fixa, sem combinação contraditória para validar.
+- README (com a recomendação de usar o identificador da instância no RDS) e
+  `config.example.yml`.
+- ROADMAP (Later): no modo automático, resolver o nome na primeira conexão
+  bem-sucedida em vez de só no startup.
+
+**Validação local (SQL Server 2025)**
+
+| Cenário | `sqlserver_instance` |
+|---|---|
+| automático, banco no ar | `mssql2025` |
+| `--sqlserver.instance-label=orders-prod`, banco no ar | `orders-prod` (o `sqlserver_servername` segue `mssql2025`) |
+| fixo, banco fora no startup | `orders-prod`, com `sqlserver_up 0` |
+| automático, banco fora no startup | vazio, com o aviso sugerindo `instance_label` |
+
+Testes de precedência (YAML < env < flag, flag vazia volta ao automático) e
+de valor em branco; 5 mutações no `config.go` pegas.
+
+---
+
+## HML-030 — Conversão Single-AZ → Multi-AZ do RDS: Always On aparece sem falhas de coleta (validação)
+
+- **Ambiente:** RDS for SQL Server 2025 SE (`db.t3.xlarge`), exporter
+  `0.9.3` no bastion; amostras a cada 30 s
+- **Encontrado em:** 2026-10-19
+- **Severidade:** — (validação)
+- **Status:** em andamento (falta o failover)
+
+**Conversão (`apply` às 14:20 UTC, `available` com Multi-AZ às 15:02)**
+
+| UTC | RDS | Exporter |
+|---|---|---|
+| 14:20 | `modifying`, Multi-AZ falso | sem séries `sqlserver_hadr_*` |
+| 14:55 | `modifying` | aparece o AG `RDSAG0` (banco `rdsadmin`) |
+| 14:56 | Multi-AZ verdadeiro | — |
+| 14:57–14:58 | `modifying` | aparecem dois AGs com nome GUID, um por banco de usuário (`StressDB`, `LoadTestDB`) |
+| 14:59 | `backing-up` | — |
+| 15:02 | `available`, secundária em `us-east-1b` | 33 séries `sqlserver_hadr_*` |
+
+- `sqlserver_up 1` o tempo todo, nenhum coletor com `success 0`, o rótulo
+  e o `servername` (`EC2AMAZ-JFK9UC6`) não mudaram.
+- O RDS Standard usa **Basic Availability Groups**: um AG por banco, com nome
+  GUID (`762b6dfb-…`, `de928b35-…`), mais o `RDSAG0` para o `rdsadmin`. Nos
+  dashboards o `ag_name` é um GUID; o `db_name` é o que identifica.
+- O primário enxerga as duas réplicas: `replica_role` 1 para
+  `EC2AMAZ-JFK9UC6` e 2 para `EC2AMAZ-94TRL9U` (a nova), `synchronization_health`
+  2 nas duas, bancos `SYNCHRONIZED` (2), sem suspensão, fila de redo 0 e fila
+  de envio de 60 KB.
 
