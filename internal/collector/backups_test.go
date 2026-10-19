@@ -14,15 +14,22 @@ import (
 // fall-back. It also pins the local-to-UTC conversion: backupset dates carry
 // no offset, so emitting them as-is skews the timestamp by the UTC offset.
 // The server_name filter keeps restored backups (log shipping secondary,
-// mirror) from being reported as local ones (HML-012).
+// mirror) from being reported as local ones (HML-012). Backups written to
+// the NUL device are discarded and must be skipped before the latest one is
+// picked, so the previous real backup is reported (HML-028).
 var backupsQueryRegex = sqlContainsInOrder(
 	"DATEADD(MINUTE, -tz.utc_offset_minutes, bs.backup_finish_date)",
 	"DATEADD(MINUTE, -tz.utc_offset_minutes, bs.backup_start_date)",
 	"PARTITION BY database_name, type",
 	"ORDER BY backup_set_id DESC",
-	"FROM msdb.dbo.backupset",
+	"FROM msdb.dbo.backupset b",
 	"WHERE backup_finish_date IS NOT NULL",
 	"AND server_name = @@SERVERNAME",
+	"AND NOT EXISTS (",
+	"FROM msdb.dbo.backupmediafamily mf",
+	"WHERE mf.media_set_id = b.media_set_id",
+	"AND UPPER(RTRIM(mf.physical_device_name)) IN ('NUL', 'NUL:')",
+	") bs",
 	"WHEN bs.time_zone BETWEEN -48 AND 48 THEN bs.time_zone * 15",
 	"ELSE DATEPART(TZOFFSET, SYSDATETIMEOFFSET())",
 	"WHERE bs.rn = 1",

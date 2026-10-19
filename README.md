@@ -17,7 +17,7 @@ The exporter currently includes these collectors:
 - IO file stats: per-database file IO counters and stalls.
 - Wait stats: wait time and counts by wait type.
 - Memory clerks: memory usage by clerk type.
-- Backups: last backup timestamp (UTC, correct for servers in any time zone), duration and size per database, counting only backups taken by the instance itself (restores recorded in `backupset`, e.g. on a log shipping secondary, are ignored).
+- Backups: last backup timestamp (UTC, correct for servers in any time zone), duration and size per database, counting only backups taken by the instance itself (restores recorded in `backupset`, e.g. on a log shipping secondary, are ignored) and skipping backups written to the `NUL` device, which are discarded (Amazon RDS takes such backups at instance creation). On Amazon RDS, automated backups show up as daily snapshot FULL backups (duration ~1s, size = database size) and log backups every 5 minutes.
 - TempDB: space usage and temp table activity.
 - Performance counters: batch requests, compilations, page life expectancy, buffer cache hit ratio, deadlocks, lock waits, user connections and more.
 - Databases: state, recovery model, data/log sizes and log usage per database.
@@ -300,8 +300,9 @@ CREATE USER [your_login] FOR LOGIN [your_login];
 
 Notes:
 
-- The `backups` collector reads `msdb.dbo.backupset`, which is readable by
-  `public` on default installations — no extra grant is usually needed.
+- The `backups` collector reads `msdb.dbo.backupset` and
+  `msdb.dbo.backupmediafamily`, which are readable by `public` on default
+  installations (and on Amazon RDS) — no extra grant is usually needed.
 - On SQL Server 2022+, `VIEW SERVER STATE` implies the more granular
   `VIEW SERVER PERFORMANCE STATE` / `VIEW SERVER SECURITY STATE` permissions
   that Microsoft now documents as the minimum for individual DMVs. You can go
@@ -321,7 +322,7 @@ The exporter reads from (among others):
 - `sys.dm_os_performance_counters`
 - `sys.dm_os_waiting_tasks`
 - `sys.databases`
-- `msdb.dbo.backupset`
+- `msdb.dbo.backupset`, `msdb.dbo.backupmediafamily`
 - `sys.database_mirroring`
 - `msdb.dbo.log_shipping_monitor_primary` / `log_shipping_monitor_secondary` (log_shipping only)
 - `sys.dm_exec_query_stats`, `sys.dm_exec_plan_attributes`, `sys.dm_exec_sql_text` (top_queries only)

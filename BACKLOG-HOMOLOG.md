@@ -34,7 +34,7 @@ simulando produção (AWS EC2 Windows/Linux e RDS for SQL Server).
 | HML-024 | Coletor `index_fragmentation` em background e `CONNECT ANY DATABASE` (validação) | EC2 Windows (01) | — | resolvido |
 | HML-025 | Exporter como serviço Linux (systemd) no bastion da fase RDS (validação) | Linux (bastion) | — | resolvido (v0.9.1) |
 | HML-027 | Linha de base no RDS Single-AZ: permissões, coletores, carga e TLS (validação) | RDS (SQL Server 2025 SE) | — | resolvido |
-| HML-028 | Backups no RDS: snapshots e log a cada 5 min aparecem; backups de criação gravados em `NUL` contam como FULL | RDS (SQL Server 2025 SE) | média | aberto |
+| HML-028 | Backups no RDS: snapshots e log a cada 5 min aparecem; backups de criação gravados em `NUL` contam como FULL | RDS (SQL Server 2025 SE) | média | resolvido (v0.9.3) |
 | HML-026 | `database_log_used_percent` com bancos ocultos e, no RDS, sem os bancos de sistema | RDS (SQL Server 2025 SE) | baixa | resolvido (v0.9.2) |
 
 ## Encerramento da fase EC2 (2026-10-15)
@@ -1745,7 +1745,7 @@ extensão do arquivo.
 - **Encontrado em:** 2026-10-18/19
 - **Severidade:** média (o achado do `NUL` faz uma instância sem backup
   parecer ter backup FULL)
-- **Status:** aberto
+- **Status:** resolvido (v0.9.3)
 
 **1. Snapshot manual com retenção 0 (2026-10-19, 01:16 UTC)**
 
@@ -1794,4 +1794,28 @@ faz `BACKUP ... TO DISK = 'NUL'` (truque comum para cortar a cadeia de log).
 Ignorar no coletor `backups` os registros cujo `physical_device_name` é
 `NUL` (sem diferenciar maiúsculas). Snapshots (`is_snapshot = 1`) continuam
 contando: o RDS restaura a partir deles.
+
+**Correção** — branch `fix/backups-ignore-nul-device`
+
+- O coletor descarta, antes de escolher o último backup por banco/tipo, os
+  backup sets com alguma família em `NUL` ou `NUL:` (`UPPER(RTRIM(...))`; um
+  backup em stripes com uma parte em `NUL` também não restaura). Assim o
+  backup real anterior é o reportado. `/dev/null` nem é aceito pelo SQL
+  Server no Linux (erro 3634).
+- `msdb.dbo.backupmediafamily` tem `SELECT` para `public`, como o
+  `backupset`, localmente e no RDS: nenhum grant novo.
+- README: o filtro, como os backups automáticos do RDS aparecem e a nova
+  tabela lida.
+
+**Validação**
+
+- SQL Server 2025 local, com `BACKUP DATABASE model TO DISK = 'NUL'`
+  (gravado como `NUL`, `nul` e `NUL:`): a versão anterior reportava o FULL
+  em `NUL`; a corrigida não reporta nenhum. Com um backup real às 14:16:56
+  seguido de um em `NUL` às 14:16:58, a anterior reporta 14:16:58 e a
+  corrigida 14:16:56.
+- RDS (backups automáticos ligados): as duas versões emitem as mesmas 11
+  séries com os mesmos valores.
+- 4 mutações na query (`EXISTS`, só `'NUL'`, sem `UPPER/RTRIM`, join errado
+  com a mídia) pegas pelos testes.
 
