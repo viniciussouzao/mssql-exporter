@@ -37,6 +37,7 @@ simulando produção (AWS EC2 Windows/Linux e RDS for SQL Server).
 | HML-028 | Backups no RDS: snapshots e log a cada 5 min aparecem; backups de criação gravados em `NUL` contam como FULL | RDS (SQL Server 2025 SE) | média | resolvido (v0.9.3) |
 | HML-029 | `sqlserver_instance` no RDS: nome genérico do host, muda a cada parada/partida e fica vazio se o exporter sobe antes do banco | RDS (SQL Server 2025 SE) | média | resolvido (v0.10.0) |
 | HML-030 | Conversão Single-AZ → Multi-AZ e failover do RDS: Always On aparece sem falhas de coleta (validação) | RDS (SQL Server 2025 SE) | — | resolvido |
+| HML-031 | Dashboard de demonstração para RDS: exporter + CloudWatch (validação) | RDS (SQL Server 2025 SE) | — | resolvido |
 | HML-026 | `database_log_used_percent` com bancos ocultos e, no RDS, sem os bancos de sistema | RDS (SQL Server 2025 SE) | baixa | resolvido (v0.9.2) |
 
 ## Encerramento da fase EC2 (2026-10-15)
@@ -1957,4 +1958,38 @@ Eventos do RDS: reinício 15:15:31, failover iniciado 15:15:35 e concluído
 - A API do RDS seguiu mostrando `us-east-1a`/`us-east-1b` como
   primária/secundária minutos depois do failover (atraso de atualização da
   própria AWS); o `servername` do exporter é a fonte mais rápida.
+
+---
+
+## HML-031 — Dashboard de demonstração para RDS: exporter + CloudWatch (validação)
+
+- **Ambiente:** Grafana 13.1 local com Prometheus (exporter `0.10.0` no
+  bastion) e CloudWatch (`us-east-1`), RDS `mssql-exporter-hml`
+- **Encontrado em:** 2026-10-19
+- **Severidade:** — (entrega pedida na fase RDS)
+- **Status:** resolvido
+
+**Entrega**
+
+`dashboards/mssql-exporter-rds-cloudwatch-dashboard.json`: CloudWatch
+(`AWS/RDS`) para o host e o exporter para a engine, com painéis que misturam
+as duas fontes (CPU × batch requests, escrita em disco × escrita nos arquivos
+do SQL Server, `DatabaseConnections` × user connections). Variáveis: região,
+instância RDS (dimensão `DBInstanceIdentifier`) e `sqlserver_instance`; com
+`instance_label` igual ao identificador do RDS (HML-029) os dois seletores
+usam o mesmo nome.
+
+**Validação**
+
+- Todas as consultas dos 34 painéis executadas pela API do Grafana para as
+  últimas 6 h: todas com dados, exceto `SwapUsage` (o CloudWatch não publica
+  essa métrica para SQL Server — removida) e os painéis de Always On (vazios
+  em Single-AZ; tinham dados durante o HML-030).
+- Conferido visualmente no navegador: UP, host atual `EC2AMAZ-V7Q122H`, CPU
+  ≈7%, memória livre 12,6 GB, storage livre 17,1 GB, último FULL há ≈30 min.
+- Ajustes depois da primeira visualização: linhas quebradas em lacunas de
+  mais de 10 min (o RDS ficou parado entre 15:35 e 17:58 UTC e as séries do
+  CloudWatch eram ligadas por uma reta) e "Top waits" sem as esperas ociosas
+  (`LAZYWRITER_SLEEP`, `CHECKPOINT_QUEUE`, `HADR_WORK_QUEUE`, …), que
+  dominavam o painel; o exporter só filtra `SLEEP%`, `XE%` e `BROKER_%`.
 

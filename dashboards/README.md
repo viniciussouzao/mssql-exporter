@@ -1,4 +1,8 @@
-# Grafana Dashboard
+# Grafana Dashboards
+
+Two dashboards are included: the general one below, and one for Amazon RDS
+that combines the exporter with CloudWatch (see
+[Amazon RDS dashboard](#amazon-rds-dashboard-exporter--cloudwatch)).
 
 `mssql-exporter-grafana-dashboard.json` is a ready-to-use Grafana dashboard
 covering the metrics exposed by this exporter: instance overview, throughput
@@ -54,6 +58,47 @@ you haven't already, then follow the steps above.
   `databases` collector may be disabled (`--collector.databases=false` or
   `collectors.databases: false` in YAML), or the login is missing
   `VIEW ANY DEFINITION` (see the DMV reference table in the root README).
+
+## Amazon RDS dashboard (exporter + CloudWatch)
+
+`mssql-exporter-rds-cloudwatch-dashboard.json` is meant for SQL Server on
+Amazon RDS, where there is no access to the host: CloudWatch (`AWS/RDS`)
+covers the host side and the exporter covers the engine.
+
+- **Overview:** SQL Server up, the current host behind the endpoint (it
+  changes on stop/start and Multi-AZ failover), CPU, freeable memory, free
+  storage, batch requests, blocked sessions and the age of the oldest last
+  FULL backup.
+- **Host — CloudWatch:** CPU and CPU credits (burstable classes), freeable
+  memory, IOPS, latency, throughput, disk queue depth, free storage and
+  network.
+- **Engine vs host — correlation:** panels mixing both sources: CPU vs batch
+  requests, disk writes vs SQL Server file writes, and CloudWatch
+  `DatabaseConnections` vs the exporter's user connections.
+- **Engine — SQL Server:** throughput, page life expectancy, buffer cache,
+  top waits (idle/background waits excluded), sessions by login, blocking,
+  long-running requests and open transactions.
+- **Workload:** top queries and index fragmentation (opt-in collectors).
+- **Backups & high availability:** time since the last backup per database
+  and type, log used, and the Multi-AZ (Always On) replicas and databases.
+  These show "No data" on Single-AZ instances.
+
+Requirements and import:
+
+1. A **CloudWatch** data source with read access to the `AWS/RDS` metrics
+   (`cloudwatch:GetMetricData`, `cloudwatch:ListMetrics` and
+   `ec2:DescribeRegions`), in addition to the Prometheus data source.
+2. Import the JSON as above and map both inputs: `DS_PROMETHEUS` and
+   `DS_CLOUDWATCH`.
+3. Pick the region (`default` uses the data source's default region), the
+   **RDS instance** (CloudWatch `DBInstanceIdentifier`) and the
+   **sqlserver_instance** (exporter label).
+
+Set `instance_label` in the exporter to the DB instance identifier (see the
+root README): both selectors then use the same name, and the series do not
+change when RDS moves the instance to another host. CloudWatch does not
+publish `SwapUsage` for SQL Server, and RDS needs Enhanced Monitoring (not
+used here) for OS process metrics.
 
 ## Updating
 

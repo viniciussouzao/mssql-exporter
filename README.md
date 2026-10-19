@@ -623,7 +623,9 @@ defaults the timeout to that interval: a scrape that waits on SQL Server for
 the full 5s (e.g. while the instance is starting up) then fails as a whole
 (`up 0`, no samples) instead of returning the metrics that were collected.
 
-A ready-to-use dashboard is included in [`dashboards/`](dashboards/) — see
+Ready-to-use dashboards are included in [`dashboards/`](dashboards/): a
+general one and one for **Amazon RDS** that shows the exporter's engine
+metrics next to the host metrics from CloudWatch. See
 [`dashboards/README.md`](dashboards/README.md) for import instructions.
 
 ## Security
