@@ -7,6 +7,12 @@ import (
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
 )
 
+// statesQueryRegex pins the column order scanned by collectStates.
+var statesQueryRegex = sqlContainsInOrder(
+	"SELECT name, state_desc, recovery_model_desc, log_reuse_wait_desc",
+	"FROM sys.databases",
+)
+
 // logUsageQueryRegex pins the join with sys.databases: the counter also has
 // instances for hidden databases (mssqlsystemresource, model_msdb,
 // model_replicatedmaster) and _Total, which must not become series.
@@ -21,9 +27,9 @@ var logUsageQueryRegex = sqlContainsInOrder(
 func TestDatabasesScrapeHappyPath(t *testing.T) {
 	db, mock := newSQLMock(t)
 
-	mock.ExpectQuery("FROM sys.databases").WillReturnRows(
-		sqlmock.NewRows([]string{"name", "state_desc", "recovery_model_desc"}).
-			AddRow("AppDB", "ONLINE", "FULL"))
+	mock.ExpectQuery(statesQueryRegex).WillReturnRows(
+		sqlmock.NewRows([]string{"name", "state_desc", "recovery_model_desc", "log_reuse_wait_desc"}).
+			AddRow("AppDB", "ONLINE", "FULL", "LOG_BACKUP"))
 	mock.ExpectQuery("FROM sys.master_files").WillReturnRows(
 		sqlmock.NewRows([]string{"db_name", "type", "size_bytes"}).
 			AddRow("AppDB", 0, 1_000_000.0).
@@ -41,6 +47,9 @@ func TestDatabasesScrapeHappyPath(t *testing.T) {
 	if v, ok := metricValue(families, "sqlserver_database_recovery_model", map[string]string{"db_name": "AppDB", "recovery_model": "FULL"}); !ok || v != 1 {
 		t.Errorf("database_recovery_model = %v (found=%v), want 1", v, ok)
 	}
+	if v, ok := metricValue(families, "sqlserver_database_log_reuse_wait", map[string]string{"db_name": "AppDB", "reason": "LOG_BACKUP"}); !ok || v != 1 {
+		t.Errorf("database_log_reuse_wait = %v (found=%v), want 1", v, ok)
+	}
 	if v, ok := metricValue(families, "sqlserver_database_data_size_bytes", map[string]string{"db_name": "AppDB"}); !ok || v != 1_000_000 {
 		t.Errorf("database_data_size_bytes = %v (found=%v), want 1000000", v, ok)
 	}
@@ -56,7 +65,7 @@ func TestDatabasesScrapeFileSizeSkipsNullDBName(t *testing.T) {
 	db, mock := newSQLMock(t)
 
 	mock.ExpectQuery("FROM sys.databases").WillReturnRows(
-		sqlmock.NewRows([]string{"name", "state_desc", "recovery_model_desc"}))
+		sqlmock.NewRows([]string{"name", "state_desc", "recovery_model_desc", "log_reuse_wait_desc"}))
 	mock.ExpectQuery("FROM sys.master_files").WillReturnRows(
 		sqlmock.NewRows([]string{"db_name", "type", "size_bytes"}).
 			AddRow(nil, 0, 1_000_000.0))
@@ -101,9 +110,9 @@ func TestDatabasesScrapeStatesRowIterationError(t *testing.T) {
 
 	rowErr := errors.New("row iteration failed")
 	mock.ExpectQuery("FROM sys.databases").WillReturnRows(
-		sqlmock.NewRows([]string{"name", "state_desc", "recovery_model_desc"}).
-			AddRow("AppDB", "ONLINE", "FULL").
-			AddRow("OtherDB", "ONLINE", "FULL").
+		sqlmock.NewRows([]string{"name", "state_desc", "recovery_model_desc", "log_reuse_wait_desc"}).
+			AddRow("AppDB", "ONLINE", "FULL", "LOG_BACKUP").
+			AddRow("OtherDB", "ONLINE", "FULL", "NOTHING").
 			RowError(1, rowErr))
 	mock.ExpectQuery("FROM sys.master_files").WillReturnRows(
 		sqlmock.NewRows([]string{"db_name", "type", "size_bytes"}))
