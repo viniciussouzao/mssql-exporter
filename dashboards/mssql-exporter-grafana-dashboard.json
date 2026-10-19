@@ -3889,12 +3889,1070 @@
       ]
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "id": 85,
+      "type": "table",
+      "title": "Log Reuse Wait",
+      "description": "Why each database's transaction log cannot be truncated (sys.databases.log_reuse_wait_desc). LOG_BACKUP is normal for FULL recovery between log backups. AVAILABILITY_REPLICA = a lagging AG secondary, REPLICATION = CDC or replication, ACTIVE_TRANSACTION = a long-open transaction. Refreshed by SQL Server on truncation attempts (checkpoint / log backup), so it can lag a few minutes and stay stale on idle databases: read it together with Log Used (%).",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 132
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "noValue": "No data (databases collector)"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Reason"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "NOTHING": {
+                        "text": "NOTHING",
+                        "index": 0,
+                        "color": "green"
+                      },
+                      "LOG_BACKUP": {
+                        "text": "LOG_BACKUP",
+                        "index": 1,
+                        "color": "blue"
+                      },
+                      "CHECKPOINT": {
+                        "text": "CHECKPOINT",
+                        "index": 2,
+                        "color": "blue"
+                      }
+                    }
+                  },
+                  {
+                    "type": "regex",
+                    "options": {
+                      "pattern": ".*",
+                      "result": {
+                        "color": "orange",
+                        "index": 3
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "basic"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Log Used"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 60
+                    },
+                    {
+                      "color": "red",
+                      "value": 80
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "cellHeight": "sm",
+        "showHeader": true,
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "max by (db_name, reason) (sqlserver_database_log_reuse_wait{sqlserver_instance=~\"$sqlserver_instance\",db_name=~\"$database\"} == 1)",
+          "legendFormat": "__auto",
+          "refId": "A",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "max by (db_name) (sqlserver_database_log_used_percent{sqlserver_instance=~\"$sqlserver_instance\",db_name=~\"$database\"})",
+          "legendFormat": "__auto",
+          "refId": "B",
+          "format": "table",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "filterByValue",
+          "options": {
+            "filters": [
+              {
+                "fieldName": "reason",
+                "config": {
+                  "id": "isNull",
+                  "options": {}
+                }
+              }
+            ],
+            "type": "exclude",
+            "match": "any"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "includeByName": {
+              "db_name": true,
+              "reason": true,
+              "Value #B": true
+            },
+            "indexByName": {
+              "db_name": 0,
+              "reason": 1,
+              "Value #B": 2
+            },
+            "renameByName": {
+              "db_name": "Database",
+              "reason": "Reason",
+              "Value #B": "Log Used"
+            }
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "sort": [
+              {
+                "field": "Log Used",
+                "desc": true
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "id": 86,
+      "type": "state-timeline",
+      "title": "Log Held (non-routine reasons)",
+      "description": "Periods when a database's log could not be truncated for a reason other than NOTHING, LOG_BACKUP or CHECKPOINT (e.g. AVAILABILITY_REPLICA, REPLICATION, ACTIVE_TRANSACTION). Alert on it together with Log Used (%), see the README.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 132
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "fillOpacity": 80,
+            "lineWidth": 0,
+            "insertNulls": 60000
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "orange",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "1": {
+                  "text": "held",
+                  "index": 0,
+                  "color": "orange"
+                }
+              }
+            }
+          ],
+          "noValue": "No log held by a non-routine reason"
+        },
+        "overrides": []
+      },
+      "options": {
+        "showValue": "never",
+        "mergeValues": true,
+        "alignValue": "left",
+        "rowHeight": 0.85,
+        "legend": {
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "max by (db_name, reason) (sqlserver_database_log_reuse_wait{sqlserver_instance=~\"$sqlserver_instance\",db_name=~\"$database\",reason!~\"NOTHING|LOG_BACKUP|CHECKPOINT\"} == 1)",
+          "legendFormat": "{{db_name}}: {{reason}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 132
+        "y": 140
+      },
+      "id": 87,
+      "panels": [],
+      "title": "Query Store",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "id": 88,
+      "type": "stat",
+      "title": "State Differs From Configured",
+      "description": "Databases whose Query Store actual state differs from the configured one, typically READ_ONLY after it filled up: it silently stops capturing. On a readable AG secondary READ_ONLY (reason 8) is expected. Requires the opt-in query_store collector (--collector.query_store).",
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 141
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "noValue": "query_store collector disabled or not collected yet",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "count((sqlserver_query_store_desired_state{sqlserver_instance=~\"$sqlserver_instance\"} == 1) unless on (sqlserver_instance, db_name, state) (sqlserver_query_store_actual_state{sqlserver_instance=~\"$sqlserver_instance\"} == 1)) or (0 * count(sqlserver_query_store_last_collection_success{sqlserver_instance=~\"$sqlserver_instance\"}))",
+          "legendFormat": "__auto",
+          "refId": "A",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "id": 89,
+      "type": "stat",
+      "title": "Capture Stopped by a Limit",
+      "description": "Databases whose Query Store is READ_ONLY because it reached a limit (readonly_reason >= 65536: max storage size, statement count, in-memory or database size limit). Raise MAX_STORAGE_SIZE_MB or tune the cleanup policy, then set it back to READ_WRITE.",
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 141
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "noValue": "query_store collector disabled or not collected yet",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "count(sqlserver_query_store_readonly_reason{sqlserver_instance=~\"$sqlserver_instance\"} >= 65536) or (0 * count(sqlserver_query_store_last_collection_success{sqlserver_instance=~\"$sqlserver_instance\"}))",
+          "legendFormat": "__auto",
+          "refId": "A",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "id": 90,
+      "type": "stat",
+      "title": "Failing Forced Plans",
+      "description": "Forced plans whose forcing has failed (force_failure_count > 0, e.g. the plan uses an index that was dropped): the query runs with another plan. See last_force_failure_reason_desc in sys.query_store_plan.",
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 141
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "noValue": "query_store collector disabled or not collected yet",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sum(sqlserver_query_store_forced_plans_failing{sqlserver_instance=~\"$sqlserver_instance\"})",
+          "legendFormat": "__auto",
+          "refId": "A",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "id": 91,
+      "type": "stat",
+      "title": "Last Collection",
+      "description": "Age and result of the last background Query Store collection (default every 5m). FAILED means at least one database failed; the error is in the exporter log.",
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 141
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "noValue": "query_store collector disabled or not collected yet",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 900
+              },
+              {
+                "color": "red",
+                "value": 1800
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "none"
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "0": {
+                        "text": "FAILED",
+                        "index": 0,
+                        "color": "red"
+                      },
+                      "1": {
+                        "text": "OK",
+                        "index": 1,
+                        "color": "green"
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value_and_name"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "time() - max(sqlserver_query_store_last_collection_timestamp_seconds{sqlserver_instance=~\"$sqlserver_instance\"})",
+          "legendFormat": "age",
+          "refId": "A",
+          "instant": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "min(sqlserver_query_store_last_collection_success{sqlserver_instance=~\"$sqlserver_instance\"})",
+          "legendFormat": "result",
+          "refId": "B",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "id": 92,
+      "type": "table",
+      "title": "Query Store by Database",
+      "description": "Query Store health per database. Requires the opt-in query_store collector; databases the login cannot access are skipped (see the README permissions).",
+      "gridPos": {
+        "h": 8,
+        "w": 16,
+        "x": 0,
+        "y": 145
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "noValue": "query_store collector disabled or not collected yet"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Actual State"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "READ_WRITE": {
+                        "text": "READ_WRITE",
+                        "index": 0,
+                        "color": "green"
+                      },
+                      "READ_ONLY": {
+                        "text": "READ_ONLY",
+                        "index": 1,
+                        "color": "red"
+                      },
+                      "ERROR": {
+                        "text": "ERROR",
+                        "index": 2,
+                        "color": "red"
+                      },
+                      "OFF": {
+                        "text": "OFF",
+                        "index": 3,
+                        "color": "transparent"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "basic"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Read-only Reason"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "0": {
+                        "text": "-",
+                        "index": 0
+                      },
+                      "1": {
+                        "text": "database read-only",
+                        "index": 1
+                      },
+                      "2": {
+                        "text": "single user",
+                        "index": 2
+                      },
+                      "4": {
+                        "text": "emergency",
+                        "index": 3
+                      },
+                      "8": {
+                        "text": "secondary replica",
+                        "index": 4
+                      },
+                      "65536": {
+                        "text": "max storage size",
+                        "index": 5,
+                        "color": "red"
+                      },
+                      "131072": {
+                        "text": "statement limit",
+                        "index": 6,
+                        "color": "red"
+                      },
+                      "262144": {
+                        "text": "in-memory limit",
+                        "index": 7,
+                        "color": "red"
+                      },
+                      "524288": {
+                        "text": "database size limit",
+                        "index": 8,
+                        "color": "red"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "Used|Max"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "bytes"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Used %"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 80
+                    },
+                    {
+                      "color": "red",
+                      "value": 90
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Failing Forced"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 1
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "cellHeight": "sm",
+        "showHeader": true,
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "max by (db_name, actual_state) (label_replace(sqlserver_query_store_actual_state{sqlserver_instance=~\"$sqlserver_instance\",db_name=~\"$database\"} == 1, \"actual_state\", \"$1\", \"state\", \"(.*)\"))",
+          "legendFormat": "__auto",
+          "refId": "A",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "max by (db_name, desired_state) (label_replace(sqlserver_query_store_desired_state{sqlserver_instance=~\"$sqlserver_instance\",db_name=~\"$database\"} == 1, \"desired_state\", \"$1\", \"state\", \"(.*)\"))",
+          "legendFormat": "__auto",
+          "refId": "B",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "max by (db_name) (sqlserver_query_store_readonly_reason{sqlserver_instance=~\"$sqlserver_instance\",db_name=~\"$database\"})",
+          "legendFormat": "__auto",
+          "refId": "C",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "max by (db_name) (sqlserver_query_store_storage_used_bytes{sqlserver_instance=~\"$sqlserver_instance\",db_name=~\"$database\"})",
+          "legendFormat": "__auto",
+          "refId": "D",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "max by (db_name) (sqlserver_query_store_storage_max_bytes{sqlserver_instance=~\"$sqlserver_instance\",db_name=~\"$database\"})",
+          "legendFormat": "__auto",
+          "refId": "E",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "100 * max by (db_name) (sqlserver_query_store_storage_used_bytes{sqlserver_instance=~\"$sqlserver_instance\",db_name=~\"$database\"}) / max by (db_name) (sqlserver_query_store_storage_max_bytes{sqlserver_instance=~\"$sqlserver_instance\",db_name=~\"$database\"})",
+          "legendFormat": "__auto",
+          "refId": "F",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "max by (db_name) (sqlserver_query_store_forced_plans{sqlserver_instance=~\"$sqlserver_instance\",db_name=~\"$database\"})",
+          "legendFormat": "__auto",
+          "refId": "G",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "max by (db_name) (sqlserver_query_store_forced_plans_failing{sqlserver_instance=~\"$sqlserver_instance\",db_name=~\"$database\"})",
+          "legendFormat": "__auto",
+          "refId": "H",
+          "format": "table",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "includeByName": {
+              "db_name": true,
+              "actual_state": true,
+              "desired_state": true,
+              "Value #C": true,
+              "Value #D": true,
+              "Value #E": true,
+              "Value #F": true,
+              "Value #G": true,
+              "Value #H": true
+            },
+            "indexByName": {
+              "db_name": 0,
+              "actual_state": 1,
+              "desired_state": 2,
+              "Value #C": 3,
+              "Value #D": 4,
+              "Value #E": 5,
+              "Value #F": 6,
+              "Value #G": 7,
+              "Value #H": 8
+            },
+            "renameByName": {
+              "db_name": "Database",
+              "actual_state": "Actual State",
+              "desired_state": "Configured",
+              "Value #C": "Read-only Reason",
+              "Value #D": "Used",
+              "Value #E": "Max",
+              "Value #F": "Used %",
+              "Value #G": "Forced Plans",
+              "Value #H": "Failing Forced"
+            }
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "sort": [
+              {
+                "field": "Used %",
+                "desc": true
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "id": 93,
+      "type": "bargauge",
+      "title": "Query Store Storage Used (%)",
+      "description": "Space used by Query Store relative to MAX_STORAGE_SIZE_MB. At 100% it switches to READ_ONLY and stops capturing.",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 145
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "min": 0,
+          "max": 100,
+          "unit": "percent",
+          "decimals": 1,
+          "noValue": "query_store collector disabled or not collected yet",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 80
+              },
+              {
+                "color": "red",
+                "value": 90
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "horizontal",
+        "showUnfilled": true,
+        "valueMode": "color",
+        "namePlacement": "auto",
+        "sizing": "auto",
+        "minVizHeight": 16,
+        "minVizWidth": 8,
+        "maxVizHeight": 300,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "100 * max by (db_name) (sqlserver_query_store_storage_used_bytes{sqlserver_instance=~\"$sqlserver_instance\",db_name=~\"$database\"}) / max by (db_name) (sqlserver_query_store_storage_max_bytes{sqlserver_instance=~\"$sqlserver_instance\",db_name=~\"$database\"})",
+          "legendFormat": "{{db_name}}",
+          "refId": "A",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 153
       },
       "id": 44,
       "panels": [],
@@ -3929,7 +4987,7 @@
         "h": 4,
         "w": 6,
         "x": 0,
-        "y": 133
+        "y": 154
       },
       "id": 45,
       "options": {
@@ -3990,7 +5048,7 @@
         "h": 4,
         "w": 6,
         "x": 6,
-        "y": 133
+        "y": 154
       },
       "id": 46,
       "options": {
@@ -4051,7 +5109,7 @@
         "h": 4,
         "w": 6,
         "x": 12,
-        "y": 133
+        "y": 154
       },
       "id": 47,
       "options": {
@@ -4112,7 +5170,7 @@
         "h": 4,
         "w": 6,
         "x": 18,
-        "y": 133
+        "y": 154
       },
       "id": 48,
       "options": {
@@ -4208,7 +5266,7 @@
         "h": 8,
         "w": 16,
         "x": 0,
-        "y": 137
+        "y": 158
       },
       "id": 49,
       "options": {
@@ -4331,7 +5389,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 137
+        "y": 158
       },
       "id": 50,
       "options": {
@@ -4370,7 +5428,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 145
+        "y": 166
       },
       "id": 51,
       "panels": [],
@@ -4413,7 +5471,7 @@
         "h": 6,
         "w": 12,
         "x": 0,
-        "y": 146
+        "y": 167
       },
       "id": 52,
       "options": {
@@ -4510,7 +5568,7 @@
         "h": 6,
         "w": 12,
         "x": 12,
-        "y": 146
+        "y": 167
       },
       "id": 53,
       "options": {
@@ -4553,7 +5611,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 152
+        "y": 173
       }
     },
     {
@@ -4569,7 +5627,7 @@
         "h": 8,
         "w": 10,
         "x": 0,
-        "y": 153
+        "y": 174
       },
       "fieldConfig": {
         "defaults": {
@@ -4738,7 +5796,7 @@
         "h": 8,
         "w": 14,
         "x": 10,
-        "y": 153
+        "y": 174
       },
       "fieldConfig": {
         "defaults": {
@@ -5056,7 +6114,7 @@
         "h": 7,
         "w": 12,
         "x": 0,
-        "y": 161
+        "y": 182
       },
       "fieldConfig": {
         "defaults": {
@@ -5253,7 +6311,7 @@
         "h": 7,
         "w": 12,
         "x": 12,
-        "y": 161
+        "y": 182
       },
       "id": 61,
       "options": {
@@ -5351,7 +6409,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 168
+        "y": 189
       },
       "id": 62,
       "options": {
@@ -5449,7 +6507,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 168
+        "y": 189
       },
       "id": 63,
       "options": {
@@ -5547,7 +6605,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 168
+        "y": 189
       },
       "id": 64,
       "options": {
@@ -5587,7 +6645,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 176
+        "y": 197
       },
       "id": 65,
       "panels": [],
@@ -5607,7 +6665,7 @@
         "h": 7,
         "w": 12,
         "x": 0,
-        "y": 177
+        "y": 198
       },
       "fieldConfig": {
         "defaults": {
@@ -5919,7 +6977,7 @@
         "h": 7,
         "w": 12,
         "x": 12,
-        "y": 177
+        "y": 198
       },
       "fieldConfig": {
         "defaults": {
@@ -6122,7 +7180,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 184
+        "y": 205
       },
       "id": 68,
       "options": {
@@ -6220,7 +7278,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 184
+        "y": 205
       },
       "id": 69,
       "options": {
@@ -6318,7 +7376,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 184
+        "y": 205
       },
       "id": 70,
       "options": {
@@ -6416,7 +7474,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 192
+        "y": 213
       },
       "id": 71,
       "options": {
@@ -6532,7 +7590,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 192
+        "y": 213
       },
       "id": 72,
       "options": {
@@ -6572,7 +7630,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 201
+        "y": 222
       },
       "id": 73,
       "panels": [],
@@ -6592,7 +7650,7 @@
         "h": 7,
         "w": 10,
         "x": 0,
-        "y": 202
+        "y": 223
       },
       "fieldConfig": {
         "defaults": {
@@ -6760,7 +7818,7 @@
         "h": 7,
         "w": 14,
         "x": 10,
-        "y": 202
+        "y": 223
       },
       "fieldConfig": {
         "defaults": {
@@ -7060,7 +8118,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 209
+        "y": 230
       },
       "id": 76,
       "options": {
@@ -7193,7 +8251,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 209
+        "y": 230
       },
       "id": 77,
       "options": {
@@ -7300,7 +8358,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 209
+        "y": 230
       },
       "id": 78,
       "options": {
@@ -7340,7 +8398,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 218
+        "y": 239
       },
       "id": 54,
       "panels": [],
@@ -7385,7 +8443,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 219
+        "y": 240
       },
       "id": 55,
       "options": {
@@ -7461,7 +8519,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 219
+        "y": 240
       },
       "id": 56,
       "options": {
@@ -7581,7 +8639,7 @@
   "timezone": "browser",
   "title": "SQL Server Exporter (Go) - Overview",
   "uid": "sqlserver-go-exporter",
-  "version": 4,
+  "version": 5,
   "__inputs": [
     {
       "name": "DS_PROMETHEUS",
