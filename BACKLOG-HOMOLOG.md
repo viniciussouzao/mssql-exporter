@@ -34,6 +34,7 @@ simulando produção (AWS EC2 Windows/Linux e RDS for SQL Server).
 | HML-024 | Coletor `index_fragmentation` em background e `CONNECT ANY DATABASE` (validação) | EC2 Windows (01) | — | resolvido |
 | HML-025 | Exporter como serviço Linux (systemd) no bastion da fase RDS (validação) | Linux (bastion) | — | resolvido (v0.9.1) |
 | HML-027 | Linha de base no RDS Single-AZ: permissões, coletores, carga e TLS (validação) | RDS (SQL Server 2025 SE) | — | resolvido |
+| HML-028 | Backups no RDS: snapshots e log a cada 5 min aparecem; backups de criação gravados em `NUL` contam como FULL | RDS (SQL Server 2025 SE) | média | aberto |
 | HML-026 | `database_log_used_percent` com bancos ocultos e, no RDS, sem os bancos de sistema | RDS (SQL Server 2025 SE) | baixa | resolvido (v0.9.2) |
 
 ## Encerramento da fase EC2 (2026-10-15)
@@ -1734,4 +1735,63 @@ No RDS, o `encrypt=strict` funciona sem nenhuma configuração no servidor (na
 EC2 foi preciso instalar um certificado na instância). O bastion ficou com
 `encrypt=strict`. README: seção de TLS com o caso do RDS e a restrição de
 extensão do arquivo.
+
+---
+
+## HML-028 — Backups no RDS: snapshots e log a cada 5 min aparecem; backups de criação gravados em `NUL` contam como FULL
+
+- **Ambiente:** RDS for SQL Server 2025 SE (`mssql-exporter-hml`), fuso UTC-3,
+  exporter `0.9.2`
+- **Encontrado em:** 2026-10-18/19
+- **Severidade:** média (o achado do `NUL` faz uma instância sem backup
+  parecer ter backup FULL)
+- **Status:** aberto
+
+**1. Snapshot manual com retenção 0 (2026-10-19, 01:16 UTC)**
+
+`aws rds create-db-snapshot` registrou no `msdb.backupset` um FULL de cada um
+dos 6 bancos com `is_snapshot = 1`, `copy_only = 0` e dispositivo virtual
+(`device_type` 7), além de FULL comuns de `model`/`msdb` logo antes. O
+coletor passou a mostrar `backup_type="full"` às 01:16:47 UTC para todos — fuso
+convertido certo (HML-010 vale no RDS). A suspensão de I/O do snapshot
+Single-AZ não afetou nenhum coletor.
+
+- `backup_last_duration_seconds` = 1 s (o snapshot é instantâneo).
+- `backup_last_size_bytes` = tamanho do banco (`StressDB` 2,3 GB), não o que
+  o snapshot ocupa no S3.
+
+**2. Retenção 0 → 1 (2026-10-19, `apply` às 13:57 UTC, sem reinício)**
+
+Eventos do RDS: `Enabled automated backups` 13:57:25, snapshot terminado
+14:01:37, `Emergent Snapshot Request` (o RDS forçou `model`, `msdb` e
+`rdsadmin` de volta para FULL e tirou outro snapshot) terminado 14:03:48.
+
+- `databases`: modelo de recuperação dos bancos de usuário de `SIMPLE` para
+  `FULL` (com retenção 0 o RDS os mantém em `SIMPLE`; `master` continua
+  `SIMPLE`).
+- `msdb.backupset`: FULL de `master` em disco local
+  (`D:\rdsdbdata\BACKUP`), dois snapshots (10:59 e 11:02 locais), um FULL de
+  verdade de `StressDB` (41 s) e `LoadTestDB` para iniciar a cadeia de log e,
+  depois, **BACKUP LOG a cada 5 min** (dispositivo virtual) para todos os
+  bancos em FULL.
+- Coletor: `backup_type="full"` às 14:02:56 UTC (o último snapshot) e
+  `backup_type="log"` às 14:07:01 e 14:12:02 UTC — o intervalo de 5 min
+  aparece como esperado. Alertas de "sem backup de log há mais de N minutos"
+  funcionam no RDS (sem log para `master`, em `SIMPLE`).
+
+**3. Backups de criação em `NUL`**
+
+Na criação da instância (retenção 0) o RDS faz `BACKUP DATABASE ... TO DISK =
+'nul'` de `model`, `msdb` e `rdsadmin` (só para iniciar a cadeia; o backup é
+descartado). O coletor reporta esses registros como último FULL. Com a
+retenção em 0 eles seriam os únicos backups da instância para sempre: um
+painel mostraria backups que não existem e um alerta de "sem FULL há mais de
+25 h" ficaria silencioso no primeiro dia. O mesmo vale fora do RDS para quem
+faz `BACKUP ... TO DISK = 'NUL'` (truque comum para cortar a cadeia de log).
+
+**Proposta**
+
+Ignorar no coletor `backups` os registros cujo `physical_device_name` é
+`NUL` (sem diferenciar maiúsculas). Snapshots (`is_snapshot = 1`) continuam
+contando: o RDS restaura a partir deles.
 
