@@ -506,3 +506,70 @@ func TestLoadIndexFragmentationOptionsValidation(t *testing.T) {
 		}
 	}
 }
+
+func TestLoadInstanceLabelPrecedence(t *testing.T) {
+	t.Setenv("SQL_SERVER_DSN", "")
+	t.Setenv("SQL_SERVER_INSTANCE_LABEL", "")
+
+	path := writeConfigFile(t, `
+dsn: "`+testDSN+`"
+instance_label: "from-yaml"
+`)
+
+	cfg, err := Load([]string{"--config.file", path})
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.InstanceLabel != "from-yaml" {
+		t.Errorf("InstanceLabel = %q, want yaml value", cfg.InstanceLabel)
+	}
+
+	t.Setenv("SQL_SERVER_INSTANCE_LABEL", "from-env")
+	cfg, err = Load([]string{"--config.file", path})
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.InstanceLabel != "from-env" {
+		t.Errorf("InstanceLabel = %q, want env to override yaml", cfg.InstanceLabel)
+	}
+
+	cfg, err = Load([]string{"--config.file", path, "--sqlserver.instance-label", "from-flag"})
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.InstanceLabel != "from-flag" {
+		t.Errorf("InstanceLabel = %q, want flag to override env and yaml", cfg.InstanceLabel)
+	}
+
+	// An explicitly empty flag goes back to the automatic @@SERVERNAME label.
+	cfg, err = Load([]string{"--config.file", path, "--sqlserver.instance-label="})
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.InstanceLabel != "" {
+		t.Errorf("InstanceLabel = %q, want empty (automatic) from an empty flag", cfg.InstanceLabel)
+	}
+}
+
+func TestLoadInstanceLabelDefaultsToAutomatic(t *testing.T) {
+	t.Setenv("SQL_SERVER_DSN", testDSN)
+	t.Setenv("SQL_SERVER_INSTANCE_LABEL", "")
+
+	cfg, err := Load(nil)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.InstanceLabel != "" {
+		t.Errorf("InstanceLabel = %q, want empty (automatic) by default", cfg.InstanceLabel)
+	}
+}
+
+func TestLoadInstanceLabelRejectsBlank(t *testing.T) {
+	t.Setenv("SQL_SERVER_DSN", testDSN)
+	t.Setenv("SQL_SERVER_INSTANCE_LABEL", "")
+
+	_, err := Load([]string{"--sqlserver.instance-label", "   "})
+	if err == nil || !strings.Contains(err.Error(), "instance-label") {
+		t.Fatalf("Load() error = %v, want a blank instance label error", err)
+	}
+}

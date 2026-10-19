@@ -40,6 +40,10 @@ type Config struct {
 	EnableOSCollectors bool
 	ConfigFile         string
 
+	// InstanceLabel is the value of the sqlserver_instance label on every
+	// metric. Empty means automatic: @@SERVERNAME, read once at startup.
+	InstanceLabel string
+
 	// EnabledCollectors maps each SQL Server collector name (see
 	// collector.ScraperNames) to whether it should run. Defaults come from
 	// collector.ScraperEnabledByDefault.
@@ -56,6 +60,8 @@ type fileConfig struct {
 		TelemetryPath string `yaml:"telemetry_path"`
 		ConfigFile    string `yaml:"config_file"`
 	} `yaml:"web"`
+	// InstanceLabel fixes the sqlserver_instance label; empty = @@SERVERNAME.
+	InstanceLabel string `yaml:"instance_label"`
 	// Collectors toggles collectors by name; `os_collectors` toggles the
 	// OS-level collectors, every other key must match a SQL Server collector.
 	Collectors map[string]bool `yaml:"collectors"`
@@ -86,6 +92,7 @@ func Load(args []string) (*Config, error) {
 	webConfigFile := fs.String("web.config.file", "", "Path to a exporter-toolkit web config file enabling TLS and/or basic auth (see https://github.com/prometheus/exporter-toolkit/blob/master/docs/web-configuration.md).")
 	enableOSCollectors := fs.Bool("collector.os-collectors", false, "Enable OS-level collectors (CPU, memory, disk).")
 	configFile := fs.String("config.file", "", "Path to an optional YAML config file.")
+	instanceLabel := fs.String("sqlserver.instance-label", "", "Fixed value of the sqlserver_instance label (default: @@SERVERNAME, read at startup). Useful on Amazon RDS, whose server name is a generic host name that changes.")
 	showVersion := fs.Bool("version", false, "Print version information and exit.")
 
 	defaultOpts := collector.DefaultOptions()
@@ -240,6 +247,17 @@ func Load(args []string) (*Config, error) {
 	}
 	if fo.MinPageCount < 0 {
 		return nil, fmt.Errorf("collector.index_fragmentation.min_page_count must not be negative")
+	}
+
+	cfg.InstanceLabel = fc.InstanceLabel
+	if v := os.Getenv("SQL_SERVER_INSTANCE_LABEL"); v != "" {
+		cfg.InstanceLabel = v
+	}
+	if fs.Changed("sqlserver.instance-label") {
+		cfg.InstanceLabel = *instanceLabel
+	}
+	if cfg.InstanceLabel != "" && strings.TrimSpace(cfg.InstanceLabel) == "" {
+		return nil, fmt.Errorf("sqlserver.instance-label must not be blank (leave it empty to use @@SERVERNAME)")
 	}
 
 	cfg.DSN = fc.DSN

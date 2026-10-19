@@ -7,6 +7,11 @@
 
 dsn: "sqlserver://sa:MyStrongP%40ss@localhost:1433?database=master&app+name=mssql-exporter"
 
+# Fixed value of the sqlserver_instance label on every metric. Empty or
+# missing = @@SERVERNAME, read at startup. Recommended on Amazon RDS, where
+# @@SERVERNAME is a generic host name that changes on stop/start and failover.
+# instance_label: "orders-prod"
+
 web:
   listen_address: ":9187"
   telemetry_path: "/metrics"
