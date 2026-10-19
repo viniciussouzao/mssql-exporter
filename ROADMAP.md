@@ -142,6 +142,29 @@ this order.
 - Validated on EC2 with SQL Server 2025 (HML-021 to HML-024); repeat in the
   RDS phase
 
+## Phase 7 — Transaction log & Query Store health
+
+Decided 2026-10-19 after a production incident: a lagging AG secondary kept
+the primary's log from truncating (`AVAILABILITY_REPLICA`); the same happens
+with CDC/replication (`REPLICATION`). Alert-friendly, low-cardinality signals
+first; implement in this order.
+
+- [x] **Log reuse wait** (`sys.databases.log_reuse_wait_desc`) in the
+  `databases` collector: `sqlserver_database_log_reuse_wait{db_name,reason}`
+  (1 for the current reason). Works on every version and on RDS with no new
+  permission. Document that `LOG_BACKUP` is normal for FULL recovery between
+  log backups and that the value is refreshed on truncation attempts
+  (checkpoint/log backup), so alert with `for:` and together with
+  `sqlserver_database_log_used_percent`
+- [ ] **Query Store health** (new `query_store` collector, per database like
+  `index_fragmentation`, `HAS_DBACCESS` filter):
+  - `sys.database_query_store_options`: `actual_state` vs `desired_state`
+    (the silent switch to `READ_ONLY` when the store fills up),
+    `readonly_reason`, `current_storage_size_mb` / `max_storage_size_mb`
+  - forced plans that fail (`sys.query_store_plan.force_failure_count`,
+    `last_force_failure_reason_desc`)
+  - no per-query series here (see Later)
+
 ## Later / ideas (unprioritized)
 
 - Missing indexes (`sys.dm_db_missing_index_*`)
@@ -157,8 +180,15 @@ this order.
   (HML-029)
 - Transaction log health from `sys.dm_db_log_stats` (one row per database,
   works on RDS where the `Percent Log Used` counter misses the system
-  databases): VLF count, `log_truncation_holdup_reason`, log generated since
-  the last log backup (HML-026)
+  databases): VLF count and log generated since the last log backup
+  (HML-026). The truncation reason is already covered by
+  `sqlserver_database_log_reuse_wait` (Phase 7)
+- Per-query statistics from Query Store (`sys.query_store_runtime_stats`):
+  history that survives restarts and plan cache eviction, plan changes, waits
+  per query (2017+). Deferred: data is aggregated in intervals (60 min by
+  default) and cleanup purges old intervals, so totals can decrease and break
+  `rate()`; per-database scans are expensive and series churn is the same as
+  `top_queries`. The Query Store UI remains the better tool for analysis
 - `volumes`: skip databases changing state (`sys.databases.state` filter) to
   narrow the window where `sys.dm_os_volume_stats` waits and the query times
   out (HML-019; low impact, the next scrape succeeds)

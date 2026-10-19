@@ -409,6 +409,17 @@ Metric names are stable and follow Prometheus best practices. Selected examples:
 - Databases
   - `sqlserver_database_state{db_name="master",state="ONLINE"} 1`
   - `sqlserver_database_recovery_model{db_name="master",recovery_model="SIMPLE"} 1`
+  - `sqlserver_database_log_reuse_wait{db_name="AppDB",reason="AVAILABILITY_REPLICA"} 1`:
+    why the transaction log cannot be truncated (`log_reuse_wait_desc` in
+    `sys.databases`; `NOTHING` when it can). `LOG_BACKUP` is the normal value
+    of a FULL recovery database between log backups. SQL Server refreshes it
+    when it tries to truncate the log (checkpoint or log backup), so it can
+    lag a few minutes; alert with `for:` and together with the log usage, e.g.
+    `sqlserver_database_log_reuse_wait{reason!~"NOTHING|LOG_BACKUP|CHECKPOINT"} == 1
+    and on (instance, db_name) sqlserver_database_log_used_percent > 60`.
+    `AVAILABILITY_REPLICA` points to a lagging AG secondary (see the
+    `sqlserver_hadr_*` queues), `REPLICATION` to CDC or transactional
+    replication, `ACTIVE_TRANSACTION` to a long-open transaction
   - `sqlserver_database_data_size_bytes{db_name="master"} 4915200`
   - `sqlserver_database_log_size_bytes{db_name="master"} 2097152`
   - `sqlserver_database_log_used_percent{db_name="master"} 71`: the `Percent

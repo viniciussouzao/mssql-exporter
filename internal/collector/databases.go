@@ -13,6 +13,7 @@ type SQLServerDatabases struct {
 	db             *sql.DB
 	state          *prometheus.Desc
 	recoveryModel  *prometheus.Desc
+	logReuseWait   *prometheus.Desc
 	dataSizeBytes  *prometheus.Desc
 	logSizeBytes   *prometheus.Desc
 	logUsedPercent *prometheus.Desc
@@ -30,6 +31,11 @@ func NewDatabasesCollector(db *sql.DB) *SQLServerDatabases {
 			"sqlserver_database_recovery_model",
 			"Recovery model of the database (1 for the current model, labeled by recovery_model)",
 			[]string{"db_name", "recovery_model"}, nil,
+		),
+		logReuseWait: prometheus.NewDesc(
+			"sqlserver_database_log_reuse_wait",
+			"Reason the transaction log cannot be truncated (1 for the current reason, labeled by reason; NOTHING when it can be reused)",
+			[]string{"db_name", "reason"}, nil,
 		),
 		dataSizeBytes: prometheus.NewDesc(
 			"sqlserver_database_data_size_bytes",
@@ -56,6 +62,7 @@ func (c *SQLServerDatabases) Name() string {
 func (c *SQLServerDatabases) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.state
 	ch <- c.recoveryModel
+	ch <- c.logReuseWait
 	ch <- c.dataSizeBytes
 	ch <- c.logSizeBytes
 	ch <- c.logUsedPercent
@@ -69,9 +76,14 @@ func (c *SQLServerDatabases) Scrape(ctx context.Context, ch chan<- prometheus.Me
 	)
 }
 
+// collectStates also reports log_reuse_wait_desc, which SQL Server updates when
+// it tries to truncate the log (checkpoint or log backup), so it can lag the
+// real cause by a few minutes. LOG_BACKUP is the normal value of a FULL recovery
+// database between log backups; alert on the other reasons, combined with
+// sqlserver_database_log_used_percent.
 func (c *SQLServerDatabases) collectStates(ctx context.Context, ch chan<- prometheus.Metric) error {
 	rows, err := c.db.QueryContext(ctx, `
-		SELECT name, state_desc, recovery_model_desc
+		SELECT name, state_desc, recovery_model_desc, log_reuse_wait_desc
 		FROM sys.databases
 	`)
 	if err != nil {
@@ -81,14 +93,15 @@ func (c *SQLServerDatabases) collectStates(ctx context.Context, ch chan<- promet
 
 	var scanErrs []error
 	for rows.Next() {
-		var name, stateDesc, recoveryModelDesc string
-		if err := rows.Scan(&name, &stateDesc, &recoveryModelDesc); err != nil {
+		var name, stateDesc, recoveryModelDesc, logReuseWaitDesc string
+		if err := rows.Scan(&name, &stateDesc, &recoveryModelDesc, &logReuseWaitDesc); err != nil {
 			scanErrs = append(scanErrs, fmt.Errorf("failed to scan sys.databases row: %w", err))
 			continue
 		}
 
 		ch <- prometheus.MustNewConstMetric(c.state, prometheus.GaugeValue, 1, name, stateDesc)
 		ch <- prometheus.MustNewConstMetric(c.recoveryModel, prometheus.GaugeValue, 1, name, recoveryModelDesc)
+		ch <- prometheus.MustNewConstMetric(c.logReuseWait, prometheus.GaugeValue, 1, name, logReuseWaitDesc)
 	}
 
 	return errors.Join(append(scanErrs, rows.Err())...)
