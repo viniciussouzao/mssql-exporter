@@ -37,6 +37,7 @@ simulando produção (AWS EC2 Windows/Linux e RDS for SQL Server).
 | HML-028 | Backups no RDS: snapshots e log a cada 5 min aparecem; backups de criação gravados em `NUL` contam como FULL | RDS (SQL Server 2025 SE) | média | resolvido (v0.9.3) |
 | HML-029 | `sqlserver_instance` no RDS: nome genérico do host, muda a cada parada/partida e fica vazio se o exporter sobe antes do banco | RDS (SQL Server 2025 SE) | média | resolvido (v0.10.0) |
 | HML-030 | Conversão Single-AZ → Multi-AZ e failover do RDS: Always On aparece sem falhas de coleta (validação) | RDS (SQL Server 2025 SE) | — | resolvido |
+| HML-031 | Dashboard de demonstração para RDS: exporter + CloudWatch (validação) | RDS (SQL Server 2025 SE) | — | resolvido |
 | HML-026 | `database_log_used_percent` com bancos ocultos e, no RDS, sem os bancos de sistema | RDS (SQL Server 2025 SE) | baixa | resolvido (v0.9.2) |
 
 ## Encerramento da fase EC2 (2026-10-15)
@@ -1797,6 +1798,33 @@ Ignorar no coletor `backups` os registros cujo `physical_device_name` é
 `NUL` (sem diferenciar maiúsculas). Snapshots (`is_snapshot = 1`) continuam
 contando: o RDS restaura a partir deles.
 
+**4. Backup nativo pelas procs do RDS (2026-10-19, ≈18:14 UTC)**
+
+Option group com `SQLSERVER_BACKUP_RESTORE` e IAM role
+`rds-backup-restore-role`; `msdb.dbo.rds_backup_database` para o S3
+(retenção de backup automático em 0 nesse momento — o `apply` das 18:03
+desligou os backups automáticos e o RDS voltou todos os bancos para
+`SIMPLE`).
+
+| Tarefa | Banco | Tipo | S3 | `msdb` / coletor |
+|---|---|---|---|---|
+| 1 | `LoadTestDB` | FULL | 56,6 MB | `full` 18:14:53 UTC, 1 s |
+| 2 | `StressDB` | FULL | 2,1 GB | `full` 18:17:28 UTC, **36 s**, 2,3 GB |
+| 3 | `LoadTestDB` | DIFFERENTIAL | 537 KB | `differential` 18:16:52 UTC |
+
+- As três tarefas rodaram em paralelo, todas `SUCCESS`. A tarefa espera na
+  fila do RDS antes de começar (criada 18:13:55, iniciada 18:14:52).
+- Ao contrário do snapshot, duração e tamanho são reais: alertas de duração
+  de backup fazem sentido para o backup nativo.
+- No `msdb` o backup nativo é igual ao FULL que o RDS faz por conta própria:
+  dispositivo virtual (`device_type` 7) com um GUID no `physical_device_name`,
+  não o caminho do S3. Não dá para separar um do outro — e não precisa: os
+  dois são restauráveis.
+- `rds_backup_database` **não** é `COPY_ONLY`: um FULL nativo vira a nova base
+  dos diferenciais.
+- Com isso os três tipos ficam validados no RDS: FULL (snapshot, automático e
+  nativo), DIFFERENTIAL (nativo) e LOG (automático, a cada 5 min).
+
 **Correção** — branch `fix/backups-ignore-nul-device`
 
 - O coletor descarta, antes de escolher o último backup por banco/tipo, os
@@ -1930,4 +1958,38 @@ Eventos do RDS: reinício 15:15:31, failover iniciado 15:15:35 e concluído
 - A API do RDS seguiu mostrando `us-east-1a`/`us-east-1b` como
   primária/secundária minutos depois do failover (atraso de atualização da
   própria AWS); o `servername` do exporter é a fonte mais rápida.
+
+---
+
+## HML-031 — Dashboard de demonstração para RDS: exporter + CloudWatch (validação)
+
+- **Ambiente:** Grafana 13.1 local com Prometheus (exporter `0.10.0` no
+  bastion) e CloudWatch (`us-east-1`), RDS `mssql-exporter-hml`
+- **Encontrado em:** 2026-10-19
+- **Severidade:** — (entrega pedida na fase RDS)
+- **Status:** resolvido
+
+**Entrega**
+
+`dashboards/mssql-exporter-rds-cloudwatch-dashboard.json`: CloudWatch
+(`AWS/RDS`) para o host e o exporter para a engine, com painéis que misturam
+as duas fontes (CPU × batch requests, escrita em disco × escrita nos arquivos
+do SQL Server, `DatabaseConnections` × user connections). Variáveis: região,
+instância RDS (dimensão `DBInstanceIdentifier`) e `sqlserver_instance`; com
+`instance_label` igual ao identificador do RDS (HML-029) os dois seletores
+usam o mesmo nome.
+
+**Validação**
+
+- Todas as consultas dos 34 painéis executadas pela API do Grafana para as
+  últimas 6 h: todas com dados, exceto `SwapUsage` (o CloudWatch não publica
+  essa métrica para SQL Server — removida) e os painéis de Always On (vazios
+  em Single-AZ; tinham dados durante o HML-030).
+- Conferido visualmente no navegador: UP, host atual `EC2AMAZ-V7Q122H`, CPU
+  ≈7%, memória livre 12,6 GB, storage livre 17,1 GB, último FULL há ≈30 min.
+- Ajustes depois da primeira visualização: linhas quebradas em lacunas de
+  mais de 10 min (o RDS ficou parado entre 15:35 e 17:58 UTC e as séries do
+  CloudWatch eram ligadas por uma reta) e "Top waits" sem as esperas ociosas
+  (`LAZYWRITER_SLEEP`, `CHECKPOINT_QUEUE`, `HADR_WORK_QUEUE`, …), que
+  dominavam o painel; o exporter só filtra `SLEEP%`, `XE%` e `BROKER_%`.
 
