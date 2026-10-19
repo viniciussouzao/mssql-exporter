@@ -68,6 +68,50 @@ Fica para depois:
 
 ---
 
+## Encerramento da fase RDS (2026-10-19)
+
+Fase RDS for SQL Server encerrada com a v0.10.0 rodando no bastion Linux.
+Ambiente: RDS SQL Server 2025 Standard (`17.0.5005.3`, RTM-CU9),
+`db.t3.xlarge`, subnets privadas, fuso UTC-3; exporter no bastion Ubuntu
+26.04 via systemd, lido pelo Prometheus local por túnel SSH. Coberto:
+
+- **Instalação Linux:** unit systemd com sandbox entregue na release
+  (v0.9.1); instalação, atualização só trocando o binário, reinício do host
+  antes do banco (HML-025).
+- **Permissões:** os mesmos grants da EC2 funcionam dados pelo usuário
+  master, inclusive os do `msdb` (HML-002); `CONNECT ANY DATABASE` não pode
+  ser concedido no RDS — usuário por banco no lugar (HML-024, README).
+- **Coletores:** os 18 com `success 1` desde a primeira coleta, sob carga do
+  `hack/loadgen` e durante snapshot, conversão Multi-AZ e failover
+  (HML-027, HML-030).
+- **Correções que saíram do RDS:** `log_used_percent` sem bancos ocultos
+  (v0.9.2, HML-026), backups em `NUL` ignorados (v0.9.3, HML-028) e
+  `instance_label` para fixar o rótulo `sqlserver_instance` (v0.10.0,
+  HML-029).
+- **Conexão:** `encrypt=true` e `encrypt=strict` (TDS 8.0) com o bundle de CA
+  da AWS, sem configuração no servidor; CA errada recusada (HML-027).
+- **Backups:** snapshot manual e automático (FULL), LOG a cada 5 min com a
+  retenção ligada, backup nativo pelas procs (FULL e DIFFERENTIAL), tudo em
+  UTC correto com o servidor em UTC-3 (HML-028).
+- **Alta disponibilidade:** conversão para Multi-AZ (Basic AGs, um por banco)
+  e failover com ≈45 s de `sqlserver_up 0` e volta sozinho; rótulo estável
+  com `instance_label` (HML-029, HML-030).
+- **Grafana:** dashboard de demonstração exporter + CloudWatch para RDS
+  (HML-031).
+
+Fica para depois:
+
+- **ROADMAP (Later):** métricas do `sys.dm_db_log_stats` (HML-026), rótulo
+  automático resolvido na primeira conexão (HML-029) e filtro de esperas
+  ociosas no `wait_stats` (HML-031).
+- **Repositório privado:** o roteiro de instalação do README baixa a release
+  do GitHub; enquanto o repositório for privado, os binários vão pelo S3
+  (HML-025).
+- **Não testado:** RDS Enterprise/Express/Web, réplicas de leitura,
+  `rds.force_ssl = 1` e Enhanced Monitoring/Database Insights.
+
+---
+
 ## HML-001 — Log `ERROR` quando `.env` não existe
 
 - **Ambiente:** EC2 Windows, release v0.1.0 (`mssql-exporter_0.1.0_windows_amd64.zip`)
