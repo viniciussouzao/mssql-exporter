@@ -1797,6 +1797,33 @@ Ignorar no coletor `backups` os registros cujo `physical_device_name` é
 `NUL` (sem diferenciar maiúsculas). Snapshots (`is_snapshot = 1`) continuam
 contando: o RDS restaura a partir deles.
 
+**4. Backup nativo pelas procs do RDS (2026-10-19, ≈18:14 UTC)**
+
+Option group com `SQLSERVER_BACKUP_RESTORE` e IAM role
+`rds-backup-restore-role`; `msdb.dbo.rds_backup_database` para o S3
+(retenção de backup automático em 0 nesse momento — o `apply` das 18:03
+desligou os backups automáticos e o RDS voltou todos os bancos para
+`SIMPLE`).
+
+| Tarefa | Banco | Tipo | S3 | `msdb` / coletor |
+|---|---|---|---|---|
+| 1 | `LoadTestDB` | FULL | 56,6 MB | `full` 18:14:53 UTC, 1 s |
+| 2 | `StressDB` | FULL | 2,1 GB | `full` 18:17:28 UTC, **36 s**, 2,3 GB |
+| 3 | `LoadTestDB` | DIFFERENTIAL | 537 KB | `differential` 18:16:52 UTC |
+
+- As três tarefas rodaram em paralelo, todas `SUCCESS`. A tarefa espera na
+  fila do RDS antes de começar (criada 18:13:55, iniciada 18:14:52).
+- Ao contrário do snapshot, duração e tamanho são reais: alertas de duração
+  de backup fazem sentido para o backup nativo.
+- No `msdb` o backup nativo é igual ao FULL que o RDS faz por conta própria:
+  dispositivo virtual (`device_type` 7) com um GUID no `physical_device_name`,
+  não o caminho do S3. Não dá para separar um do outro — e não precisa: os
+  dois são restauráveis.
+- `rds_backup_database` **não** é `COPY_ONLY`: um FULL nativo vira a nova base
+  dos diferenciais.
+- Com isso os três tipos ficam validados no RDS: FULL (snapshot, automático e
+  nativo), DIFFERENTIAL (nativo) e LOG (automático, a cada 5 min).
+
 **Correção** — branch `fix/backups-ignore-nul-device`
 
 - O coletor descarta, antes de escolher o último backup por banco/tipo, os
