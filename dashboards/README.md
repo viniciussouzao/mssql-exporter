@@ -1,8 +1,10 @@
 # Grafana Dashboards
 
-Two dashboards are included: the general one below, and one for Amazon RDS
+Three dashboards are included: the general one below, one for Amazon RDS
 that combines the exporter with CloudWatch (see
-[Amazon RDS dashboard](#amazon-rds-dashboard-exporter--cloudwatch)).
+[Amazon RDS dashboard](#amazon-rds-dashboard-exporter--cloudwatch)) and one
+for Google Cloud SQL that combines it with Cloud Monitoring (see
+[Google Cloud SQL dashboard](#google-cloud-sql-dashboard-exporter--cloud-monitoring)).
 
 `mssql-exporter-grafana-dashboard.json` is a ready-to-use Grafana dashboard
 covering the metrics exposed by this exporter: instance overview, throughput
@@ -101,6 +103,49 @@ root README): both selectors then use the same name, and the series do not
 change when RDS moves the instance to another host. CloudWatch does not
 publish `SwapUsage` for SQL Server, and RDS needs Enhanced Monitoring (not
 used here) for OS process metrics.
+
+## Google Cloud SQL dashboard (exporter + Cloud Monitoring)
+
+`mssql-exporter-cloudsql-dashboard.json` is the same idea for Cloud SQL for
+SQL Server: Google Cloud Monitoring (`cloudsql.googleapis.com`) covers the
+host side and the exporter covers the engine.
+
+- **Overview:** SQL Server up, the current host (a generated name; SQL
+  Server runs on Linux), CPU, memory and disk utilization, batch requests,
+  blocked sessions and the age of the oldest last FULL backup.
+- **Host — Cloud Monitoring:** CPU, memory used vs quota, IOPS, throughput,
+  disk used vs provisioned, network and the instance `up` metric. Cloud
+  Monitoring has no disk latency or queue depth for Cloud SQL; the exporter's
+  `io_file_stats` stalls cover latency.
+- **Engine vs host — correlation:** CPU vs batch requests, disk writes vs
+  SQL Server file writes, and connections vs user connections.
+- **Engine — exporter vs Cloud Monitoring:** Cloud SQL publishes some SQL
+  Server counters itself (batch requests, page life expectancy, deadlocks);
+  each panel shows both sources, which should overlap.
+- **Engine, workload, backups & high availability:** as in the RDS
+  dashboard. The Always On tables only fill with read replicas (read-scale
+  availability groups); the high-availability standby is a regional disk.
+- **Transaction log & Query Store:** log reuse wait and Query Store health,
+  as in the general dashboard.
+
+Requirements and import:
+
+1. A **Google Cloud Monitoring** data source whose identity has
+   `roles/monitoring.viewer` on the project, in addition to the Prometheus
+   data source. Without a JSON key (organizations block key creation by
+   default), impersonate a service account: create Application Default
+   Credentials with
+   `gcloud auth application-default login --impersonate-service-account=<sa>`
+   (the user needs `roles/iam.serviceAccountTokenCreator` on it), make the
+   file available to the Grafana process and choose the **GCE Default
+   Service Account** authentication.
+2. Import the JSON as above and map both inputs: `DS_PROMETHEUS` and
+   `DS_CLOUD_MONITORING`.
+3. Pick the **GCP project**, the **Cloud SQL instance** (`database_id`, as
+   `<project>:<instance>`) and the **sqlserver_instance** (exporter label).
+
+Set `instance_label` in the exporter (see the root README): the host name
+behind a Cloud SQL instance is generated and not meaningful as a label.
 
 ## Updating
 
