@@ -207,10 +207,10 @@ first; implement in this order.
   deadline exceeded` behind an HTTP 200 (HML-034). Let simultaneous scrapes
   wait for the collection in flight and share its result (singleflight), and
   make the pool size configurable
-- `volumes`: Cloud SQL (SQL Server on Linux) returns NULL mount point, name
-  and file system from `sys.dm_os_volume_stats`, so the series has an empty
-  `volume_mount_point`; fall back to a label derived from the file path
-  (HML-032)
+- `volumes`: SQL Server on Linux (Cloud SQL and the Docker images) returns
+  NULL mount point, name and file system from `sys.dm_os_volume_stats`, so
+  the series has an empty `volume_mount_point`; fall back to a label derived
+  from the file path (HML-032, HML-038)
 - Windows OS collector: `os_disk_read_queue_length` / `os_disk_write_queue_length`
   are exposed as gauges over raw cumulative WMI counters; fixing needs a new
   name/type aligned with Linux (pending from HML-003)
