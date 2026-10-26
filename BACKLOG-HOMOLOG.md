@@ -40,6 +40,10 @@ de 2026-10-20, em outras nuvens (Google Cloud SQL e Azure).
 | HML-030 | Conversão Single-AZ → Multi-AZ e failover do RDS: Always On aparece sem falhas de coleta (validação) | RDS (SQL Server 2025 SE) | — | resolvido |
 | HML-031 | Dashboard de demonstração para RDS: exporter + CloudWatch (validação) | RDS (SQL Server 2025 SE) | — | resolvido |
 | HML-026 | `database_log_used_percent` com bancos ocultos e, no RDS, sem os bancos de sistema | RDS (SQL Server 2025 SE) | baixa | resolvido (v0.9.2) |
+| HML-032 | Linha de base no Cloud SQL: permissões, coletores e carga (validação) | Cloud SQL (SQL Server 2022 SE) | — | resolvido |
+| HML-033 | TLS no Cloud SQL: `encrypt=true` com a CA da instância; `encrypt=strict` não é aceito | Cloud SQL (SQL Server 2022 SE) | baixa | resolvido (README) |
+| HML-034 | Scrapes concorrentes saturam o pool de 5 conexões: coletores falham com `context deadline exceeded` | Cloud SQL (SQL Server 2022 SE) | média | adiado (ROADMAP) |
+| HML-035 | Dashboard para Cloud SQL: exporter + Cloud Monitoring (validação) | Cloud SQL (SQL Server 2022 SE) | — | resolvido |
 
 ## Encerramento da fase EC2 (2026-10-15)
 
@@ -2111,3 +2115,178 @@ usam o mesmo nome.
   (`LAZYWRITER_SLEEP`, `CHECKPOINT_QUEUE`, `HADR_WORK_QUEUE`, …), que
   dominavam o painel; o exporter só filtra `SLEEP%`, `XE%` e `BROKER_%`.
 
+---
+
+## HML-032 — Linha de base no Cloud SQL: permissões, coletores e carga (validação)
+
+- **Ambiente:** Cloud SQL for SQL Server 2022 Standard (`16.0.4262.2`,
+  RTM-CU25-GDR) **em Linux** (Ubuntu 22.04), `db-custom-2-7680` (2 vCPUs,
+  7,5 GB) zonal em `us-central1-a`, só IP privado (Private Service Access),
+  `ssl_mode = ENCRYPTED_ONLY`, fuso UTC-3 (`E. South America Standard Time`);
+  exporter `0.12.0` via systemd na bastion Ubuntu 26.04 (`e2-small`, sem IP
+  público, SSH pelo IAP), lido pelo Prometheus local por túnel. Recursos em
+  Terraform, fora do repositório
+- **Encontrado em:** 2026-10-26
+- **Severidade:** — (validação)
+- **Status:** resolvido (README: permissões no Cloud SQL)
+
+**Permissões**
+
+Não existe `sysadmin`. O usuário `sqlserver` é membro da
+`CustomerDbRootRole`, que tem `VIEW SERVER STATE` e `VIEW ANY DEFINITION`
+`WITH GRANT OPTION`. Testes feitos como `sqlserver`, cada um numa transação
+desfeita com `ROLLBACK`:
+
+| Comando | Resultado |
+|---|---|
+| `GRANT VIEW SERVER STATE TO [usr_exporter]` | erro 4613: `Grantor does not have GRANT permission` |
+| `GRANT VIEW SERVER STATE … AS [CustomerDbRootRole]` (em `master`) | OK |
+| `GRANT VIEW ANY DEFINITION … AS [CustomerDbRootRole]` | OK |
+| `ALTER SERVER ROLE [##MS_ServerStateReader##]` / `##MS_DefinitionReader##` / `##MS_DatabaseConnector##` `ADD MEMBER` | erro 15151: as roles existem, mas não aceitam membros |
+| `GRANT CONNECT ANY DATABASE … AS [CustomerDbRootRole]` | erro 4613: usuário por banco, como no RDS (HML-024) |
+| `CREATE USER` no `msdb` | erro 15247: o `msdb` é protegido |
+
+- `backups` funciona sem grant: `guest` habilitado no `msdb` e `SELECT` em
+  `backupset`/`backupmediafamily` para `public`.
+- `agent_jobs`: `SELECT` em `sysjobs`/`sysjobhistory` só para o próprio
+  `sqlserver`; o login mínimo recebe o erro 229 (`success 0`). Desligado no
+  config. Logins criados pela API do Cloud SQL entram na `CustomerDbRootRole`
+  (documentação do Google, não testado) e leriam os jobs, mas com privilégio
+  demais (`ALTER ANY LOGIN`, `CREATE ANY DATABASE`). O Cloud SQL publica
+  `sqlserver/sql_agent/jobs` no Cloud Monitoring.
+- O `setup.sql` do `hack/loadgen` roda como `sqlserver` sem ajuste
+  (`CREATE ANY DATABASE` e `ALTER ANY LOGIN`).
+
+**Coletores**
+
+- Primeira coleta: 16 dos 17 coletores padrão com `success 1`, só o
+  `agent_jobs` com `success 0`; scrape de 0,78 s e 4 708 amostras.
+- Primeiro ambiente da homologação com SQL Server em **Linux**: nenhuma query
+  precisou de mudança.
+- `@@SERVERNAME` = `MachineName` = `3da04acc8e845da`, nome gerado do host:
+  `instance_label` recomendado, como no RDS (HML-029).
+- `volumes`: `sys.dm_os_volume_stats` devolve `NULL` em
+  `volume_mount_point`, `logical_volume_name` e `file_system_type`; os bytes
+  vêm certos (disco de 20 GB), mas a série sai com `volume_mount_point=""`.
+  Ponto a considerar: rótulo de fallback no coletor.
+- Banco interno `gcloud_cloudsqladmin` em `databases`, `backups` e
+  `log_used_percent`, como o `rdsadmin` no RDS. Em `sessions_by_login`
+  aparecem as contas do Cloud SQL: `CloudDbSqlRoot`, `CloudDbSqlRoot_2`,
+  `CloudDbSqlAgent` e `NT AUTHORITY\NETWORK SERVICE`.
+- `backups`: FULL dos bancos de usuário e LOG a cada 5 min com o PITR ligado
+  (gravados em `/var/opt/mssql/data/pitr/tmptlog/…`); com o servidor em UTC-3
+  o LOG mais recente aparecia com 8 s de idade (HML-010 OK).
+- `index_fragmentation` e `query_store` (opt-in) com usuário por banco:
+  `success 1` em 2 bancos (`LoadTestDB` e `StressDB`), Query Store em
+  `READ_WRITE` com limite de 1 GB.
+
+**Carga (`hack/loadgen` na bastion, 10 logins × 2 workers, 19:25–19:44 UTC)**
+
+- ≈56 700 statements sem erro no loadgen; ≈61 batch requests/s em média,
+  pico de ≈101/s.
+- Até 14 sessões bloqueadas (espera máxima de 28 s), 10 requests acima de
+  10 s e transação aberta mais antiga de 29 s, todas na fila do `blocker`.
+- Mediana do `perf_counters` em 0,64 s sob carga (0,13 s no RDS). A CPU da
+  instância chegou a ≈98% (Cloud Monitoring, HML-035) com o loadgen e o teste
+  do HML-034 juntos.
+
+---
+
+## HML-033 — TLS no Cloud SQL: `encrypt=true` com a CA da instância; `encrypt=strict` não é aceito
+
+- **Ambiente:** o do HML-032; testes pelo túnel (Mac → bastion → Cloud SQL)
+  com `hostnameincertificate` no lugar do host do túnel
+- **Encontrado em:** 2026-10-26
+- **Severidade:** baixa (limitação da plataforma; `encrypt=true` cobre o caso)
+- **Status:** resolvido (README: seção de TLS)
+
+Certificado do servidor: `CN=<projeto>:<instância>`, emitido pela
+`Cloud SQL Server CA` da instância (validade de 10 anos), com o IP privado e
+`<uuid>.us-central1.sql.goog` no SAN. A preocupação de o IP não estar no
+certificado não se confirma no IP privado.
+
+| DSN | Resultado |
+|---|---|
+| `encrypt=true&certificate=<CA>` pelo IP ou pelo nome `sql.goog` | OK, `encrypt_option` TRUE, TDS 7.4 |
+| `encrypt=true&certificate=<CA>&hostnameincertificate=wrong.example.com` | recusado (`x509: certificate is valid for …`) |
+| `encrypt=true` sem a CA (CAs do sistema) | recusado |
+| `encrypt=strict` com a CA, com o nome ou com `trustservercertificate=true` | **falha** no handshake com `EOF` |
+| `encrypt=disable` | recusado (`ENCRYPTED_ONLY`) |
+
+O RDS aceitava `encrypt=strict` sem configuração (HML-027); o Cloud SQL não
+aceita TDS 8.0. Exporter da bastion com `encrypt=true` e a CA em
+`/etc/mssql-exporter/cloudsql-server-ca.pem`.
+
+---
+
+## HML-034 — Scrapes concorrentes saturam o pool de 5 conexões: coletores falham com `context deadline exceeded`
+
+- **Ambiente:** o do HML-032, durante a carga do loadgen; `hey` na bastion
+  contra o `/metrics` local, com o Prometheus raspando a cada 15 s
+- **Encontrado em:** 2026-10-26
+- **Severidade:** média (dados parciais e silenciosos: HTTP 200 com coletores
+  faltando)
+- **Status:** adiado (ROADMAP)
+
+Cada scrape roda todos os coletores em paralelo sobre o pool fixo de 5
+conexões, com um timeout único de 5 s (pendência da revisão de 2026-10-20).
+Escada de concorrência, 100 requests por nível:
+
+| Concorrência | p50 | p90 | p99 | Coletas com falha (Prometheus) |
+|---|---|---|---|---|
+| 1 | 0,55 s | 1,79 s | 2,18 s | 0 de 85 |
+| 2 | 1,12 s | 2,22 s | 3,39 s | 0 de 68 |
+| 5 | 4,57 s | 5,06 s | 5,22 s | 2 de 85 |
+| 10 | 5,03 s | 5,07 s | 5,43 s | 14 de 68 (21%) |
+
+- Até 2 scrapes simultâneos (um Prometheus ou um par em HA) não há falha.
+- A partir de 5 os coletores esperam conexão, a mediana encosta nos 5 s e os
+  coletores falham com `context deadline exceeded`; todas as respostas são
+  HTTP 200 (`ContinueOnError`), só o `scrape_collector_success` mostra.
+- A instância de 2 vCPUs estava com CPU em ≈98% no período, então parte da
+  espera é do próprio SQL Server.
+
+Correções candidatas (ROADMAP, Later): scrapes simultâneos aguardam a coleta
+em andamento e recebem o mesmo resultado (singleflight), e tamanho do pool
+configurável.
+
+---
+
+## HML-035 — Dashboard para Cloud SQL: exporter + Cloud Monitoring (validação)
+
+- **Ambiente:** Grafana 13.1 local com Prometheus (exporter `0.12.0` na
+  bastion) e o datasource Google Cloud Monitoring
+- **Encontrado em:** 2026-10-26
+- **Severidade:** — (entrega)
+- **Status:** resolvido (PR #35)
+
+**Entrega**
+
+`dashboards/mssql-exporter-cloudsql-dashboard.json`, a versão Cloud SQL do
+HML-031: Cloud Monitoring (`cloudsql.googleapis.com`) para o host, o exporter
+para a engine, painéis de correlação e uma linha com os contadores que o
+Cloud SQL também publica (batch requests, page life expectancy e deadlocks)
+nas duas fontes; mais os painéis de log e Query Store da Fase 7.
+
+**Autenticação sem chave**
+
+A organização do projeto aplica `iam.disableServiceAccountKeyCreation`
+(padrão do Google em organizações novas). O datasource usa uma service
+account só com `roles/monitoring.viewer`, por impersonação: ADC gerado com
+`gcloud auth application-default login --impersonate-service-account=…`
+numa pasta separada do gcloud e disponível para o processo do Grafana, com a
+autenticação "GCE Default Service Account". O botão de teste do datasource
+responde `400` (procura o metadata server do GCE), mas as consultas
+funcionam.
+
+**Validação**
+
+- Todas as consultas executadas pela API do Grafana na janela da carga
+  (19:20–19:50 UTC): todas com dados, exceto Top queries (`top_queries`
+  desligado) e as tabelas de Always On (sem réplicas de leitura).
+- As duas fontes batem entre 19:27 e 19:42 UTC: batch requests com média de
+  75,3/s no exporter (`rate[5m]`) e 81,4/s no Cloud Monitoring (alinhamento
+  de 1 min); PLE de 4 888 s e 4 909 s.
+- Conferido no navegador: variáveis resolvidas e painéis renderizados. Uma aba
+  do Grafana aberta antes da criação do datasource mostra
+  `Datasource … was not found` até ser recarregada.
