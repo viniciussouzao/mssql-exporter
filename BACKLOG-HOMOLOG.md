@@ -1,7 +1,8 @@
 # Backlog de Homologação
 
 Pontos encontrados durante a homologação do mssql-exporter em ambientes
-simulando produção (AWS EC2 Windows/Linux e RDS for SQL Server).
+simulando produção (AWS EC2 Windows/Linux e RDS for SQL Server) e, a partir
+de 2026-10-20, em outras nuvens (Google Cloud SQL e Azure).
 
 **Status:** `aberto` · `em andamento` · `resolvido` · `adiado` (virou item do ROADMAP) · `não será feito`
 **Severidade:** `alta` (bloqueia uso) · `média` (atrapalha operação) · `baixa` (cosmético/ruído)
@@ -109,6 +110,79 @@ Fica para depois:
   (HML-025).
 - **Não testado:** RDS Enterprise/Express/Web, réplicas de leitura,
   `rds.force_ssl = 1` e Enhanced Monitoring/Database Insights.
+
+---
+
+## Abertura da fase GCP — Cloud SQL for SQL Server (2026-10-20)
+
+Segunda nuvem gerenciada, com o mesmo roteiro da linha de base do RDS
+(HML-027). O objetivo principal é a documentação de permissões por
+plataforma; o Cloud SQL difere do RDS porque não há `sysadmin` e todo `GRANT`
+exige `AS CustomerDbRootRole`. Depois do GCP vem a Azure (abaixo).
+
+**Ambiente planejado**
+
+- Projeto no free trial do GCP (crédito válido até 2027-01-13). Recursos
+  criados e destruídos com `gcloud`, com os comandos registrados nos HML;
+  alerta de orçamento antes do primeiro recurso.
+- Região `us-central1`. Cloud SQL for SQL Server 2022 Standard (com Agent) e
+  uma passada curta no Express. IP privado, fuso UTC-3 definido na criação.
+- Bastion Linux na mesma VPC com o exporter via systemd, lido pelo Prometheus
+  local por túnel SSH, como no RDS.
+- Cloud SQL parado entre as sessões de teste (só o disco é cobrado).
+
+**Roteiro** (cada item vira um HML ao ser executado)
+
+1. Linha de base: login mínimo com `VIEW SERVER STATE` e `VIEW ANY DEFINITION`
+   concedidos `AS CustomerDbRootRole`, e a alternativa com
+   `##MS_ServerStateReader##` / `##MS_DefinitionReader##`; coletores padrão
+   com `success 1` sob carga do `hack/loadgen`.
+2. `msdb`: `backups` e `agent_jobs` com o login mínimo. O `msdb` é protegido
+   e só usuários criados pelo console recebem a `CustomerDbRootRole`;
+   documentar a receita ou o limite.
+3. Coletores por banco (`index_fragmentation`, `query_store`):
+   `CONNECT ANY DATABASE` ou `##MS_DatabaseConnector##` no lugar do usuário
+   por banco.
+4. TLS: `encrypt=true` e `encrypt=strict` com a CA do servidor do Cloud SQL;
+   o certificado não tem o IP no SAN (`hostNameInCertificate`).
+5. Plataforma: `@@SERVERNAME`, `sys.dm_os_host_info`, `volumes`, fuso UTC-3
+   nos timestamps (HML-010) e `instance_label`.
+6. HA regional e failover: `sqlserver_up` e retorno sozinho, como no RDS
+   (HML-030); conferir que nenhum AG aparece, pois o HA é por disco regional.
+7. Backups automáticos e PITR do Cloud SQL no coletor `backups`.
+8. Express: `msdb` sem Agent, sem custo de licença.
+9. Concorrência do pool (pendência da revisão): `hey -c 5` contra o
+   `/metrics` da bastion, acompanhando `scrape_collector_duration_seconds`.
+
+**Fora do escopo**
+
+- Réplicas de leitura (Read Scale AG, só na edição Enterprise): custo de
+  licença; fica como não testado, com o risco de o coletor de AG mostrar um
+  AG que o usuário não administra.
+- Exporter no GKE com Helm chart: depois da release pública (ROADMAP).
+
+**Próxima: Azure**
+
+- SQL Managed Instance pelo free offer (General Purpose, 12 meses, endpoint
+  público): permissões, storage remoto em `volumes`/`io_file_stats`, fuso
+  escolhido na criação (UTC-3 para repetir o HML-010).
+- SQL Database pelo free offer, só como reconhecimento: um exporter por
+  banco, coletores incompatíveis desligados, para dimensionar o modo novo
+  (ROADMAP).
+
+**Pendências da revisão pós-homologação (2026-10-20)**
+
+- `volumes`: filtro `sys.databases.state IN (0, 1)` (HML-019, ROADMAP).
+  Só `ONLINE` faria sumir o volume das secundárias em `RESTORING`.
+- Mirroring com witness: segue como limitação do laboratório.
+- Antes da release pública: varrer o histórico com `gitleaks`; atualizar o
+  `CLAUDE.md` versionado; revisar o `prometheus.yml` versionado; trocar a
+  porta 9187 (alocada ao postgres_exporter) e registrar a nova na lista de
+  portas do Prometheus depois de o repositório ficar público; CHANGELOG
+  opcional.
+- Já atendidos: `ContinueOnError` no `/metrics` (HML-004, v0.1.1), testes de
+  todos os coletores por um registry pedante e dashboards com
+  `${DS_PROMETHEUS}` / `${DS_CLOUDWATCH}`.
 
 ---
 

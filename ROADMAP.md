@@ -198,15 +198,26 @@ first; implement in this order.
   default) and cleanup purges old intervals, so totals can decrease and break
   `rate()`; per-database scans are expensive and series churn is the same as
   `top_queries`. The Query Store UI remains the better tool for analysis
-- `volumes`: skip databases changing state (`sys.databases.state` filter) to
-  narrow the window where `sys.dm_os_volume_stats` waits and the query times
-  out (HML-019; low impact, the next scrape succeeds)
+- `volumes`: skip databases changing state (`sys.databases.state IN (0, 1)`,
+  keeping `RESTORING` secondaries) to narrow the window where
+  `sys.dm_os_volume_stats` waits and the query times out (HML-019; low
+  impact, the next scrape succeeds)
 - Windows OS collector: `os_disk_read_queue_length` / `os_disk_write_queue_length`
   are exposed as gauges over raw cumulative WMI counters; fixing needs a new
   name/type aligned with Linux (pending from HML-003)
 - Replication status
 - Unit tests for collectors (mock `*sql.DB`), integration tests with
   SQL Server in Docker
+- Microsoft Entra ID authentication (Azure SQL Managed Instance and SQL
+  Database): `go-mssqldb/azuread` and the `azuresql` driver when the DSN has
+  `fedauth=` (managed identity, service principal, default credential)
+- Azure SQL Database mode: one connection per database (the unit is the
+  database, no cross-database queries), `sys.dm_db_resource_stats`, elastic
+  pools and geo-replication instead of AGs; detect it with
+  `SERVERPROPERTY('EngineEdition') = 5`. Size it after the reconnaissance
+  pass of the Azure homologation phase
+- Helm chart and a homologation of the exporter on GKE, after the first
+  public release
 
 ## Done
 
