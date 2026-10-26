@@ -46,6 +46,7 @@ de 2026-10-20, em outras nuvens (Google Cloud SQL e Azure).
 | HML-035 | Dashboard para Cloud SQL: exporter + Cloud Monitoring (validação) | Cloud SQL (SQL Server 2022 SE) | — | resolvido |
 | HML-036 | Conversão para HA regional e failover do Cloud SQL (validação) | Cloud SQL (SQL Server 2022 SE) | — | resolvido |
 | HML-037 | Scrape inteiro perdido quando o servidor para de responder sem fechar a conexão | Cloud SQL (SQL Server 2022 SE) | média | resolvido (v0.12.1) |
+| HML-038 | SQL Server Express sem Agent (validação local) | Docker local (SQL Server 2025 Express) | — | resolvido |
 
 ## Encerramento da fase EC2 (2026-10-15)
 
@@ -189,6 +190,49 @@ exige `AS CustomerDbRootRole`. Depois do GCP vem a Azure (abaixo).
 - Já atendidos: `ContinueOnError` no `/metrics` (HML-004, v0.1.1), testes de
   todos os coletores por um registry pedante e dashboards com
   `${DS_PROMETHEUS}` / `${DS_CLOUDWATCH}`.
+
+---
+
+## Encerramento da fase GCP (2026-10-26)
+
+Fase Google Cloud SQL for SQL Server encerrada com a v0.12.1 rodando na
+bastion. Ambiente: Cloud SQL SQL Server 2022 Standard (`16.0.4262.2`) em
+Linux, `db-custom-2-7680`, só IP privado, `ENCRYPTED_ONLY`, fuso UTC-3, depois
+regional (HA); exporter na bastion Ubuntu 26.04 via systemd, SSH pelo IAP,
+lido pelo Prometheus local por túnel. Recursos em Terraform, fora do
+repositório. Coberto:
+
+- **Permissões:** sem `sysadmin`; `VIEW SERVER STATE` e `VIEW ANY
+  DEFINITION` só com `AS [CustomerDbRootRole]`; roles `##MS_...##`,
+  `CONNECT ANY DATABASE` e usuários no `msdb` não são permitidos; `backups`
+  funciona sem grant e `agent_jobs` fica desligado (HML-032, README).
+- **Coletores:** 16 de 17 padrão e os opt-in `index_fragmentation` e
+  `query_store` com `success 1`, sob carga do `hack/loadgen`; primeiro
+  ambiente com SQL Server em Linux, sem mudança de query (HML-032).
+- **Conexão:** `encrypt=true` com a CA da instância (IP privado no SAN);
+  `encrypt=strict` não é aceito pelo Cloud SQL (HML-033, README).
+- **Alta disponibilidade:** conversão para regional (≈5 min 45 s fora do ar)
+  e dois failovers com carga (≈77 s e ≈60 s de `sqlserver_up 0`);
+  `@@SERVERNAME` estável entre zonas (HML-036).
+- **Correção que saiu do GCP:** scrape inteiro perdido quando o servidor para
+  de responder sem fechar a conexão — o exporter agora responde dentro do
+  prazo (v0.12.1, HML-037).
+- **Concorrência:** até 2 scrapes simultâneos sem falha; 5 ou mais saturam o
+  pool (HML-034).
+- **Grafana:** dashboard exporter + Cloud Monitoring, com autenticação sem
+  chave por impersonação (HML-035).
+- **Express:** validado localmente em Docker, não no Cloud SQL (HML-038).
+
+Fica para depois:
+
+- **ROADMAP (Later):** singleflight para scrapes simultâneos e pool
+  configurável (HML-034); rótulo de fallback no `volumes` para SQL Server em
+  Linux (HML-032, HML-038).
+- **Não testado:** Cloud SQL Enterprise/Web, réplicas de leitura (read-scale
+  AG), restore por PITR, Cloud SQL Auth Proxy e logins criados pela API do
+  Cloud SQL lendo os jobs do Agent.
+- **Próxima fase:** Azure (SQL Managed Instance e reconhecimento do SQL
+  Database), como planejado na abertura.
 
 ---
 
@@ -2374,3 +2418,36 @@ que ignoram o contexto; teste de mutação: sem o limite, os dois falham.
 
 Nas duas versões o exporter volta sozinho ≈50 s depois de o tráfego ser
 liberado, quando o driver descarta as conexões presas.
+
+---
+
+## HML-038 — SQL Server Express sem Agent (validação local)
+
+- **Ambiente:** SQL Server 2025 Express (`17.0.4025.3`) em Docker no Mac
+  (container `mssql-2025-express`, imagem amd64 emulada), exporter `0.12.1`
+  local, Prometheus local
+- **Encontrado em:** 2026-10-26
+- **Severidade:** — (validação)
+- **Status:** resolvido
+
+Feito localmente em vez do Cloud SQL: as diferenças do Express (sem Agent,
+limites de CPU, memória e tamanho) são da edição, não da plataforma, e o
+exporter não tem lógica por edição.
+
+- Login com os grants do README (`VIEW SERVER STATE`, `VIEW ANY DEFINITION`,
+  `CONNECT ANY DATABASE`, `SELECT` em `sysjobs`/`sysjobhistory`).
+- Os 19 coletores (padrão + `top_queries`, `index_fragmentation` e
+  `query_store`) com `success 1` desde a primeira coleta; nenhum `ERROR` ou
+  `WARN` no log do exporter.
+- `agent_jobs`: `SQL Server Agent` em `Stopped` e `msdb.dbo.sysjobs` vazio;
+  o coletor reporta `success 1` sem séries.
+- `sqlserver_edition{edition="Express Edition (64-bit)"}`;
+  `schedulers_online` = 4 com 8 CPUs no container (limite de 4 núcleos do
+  Express).
+- `volumes`: `volume_mount_point=""` também aqui — o `NULL` do
+  `sys.dm_os_volume_stats` é do SQL Server em Linux, não do Cloud SQL
+  (HML-032).
+- Carga do `hack/loadgen` (10 logins × 2 workers, 10 min): ≈45 200 statements
+  sem erro, média de 78 batch requests/s (pico 118), até 16 sessões
+  bloqueadas e 16 requests acima de 10 s; scrape máximo de 0,23 s, nenhum
+  coletor com `success 0`; `top_queries` com 50 queries.
