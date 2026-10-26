@@ -3,8 +3,8 @@ package collector
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"log/slog"
-	"sync"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -104,12 +104,21 @@ type pinger interface {
 	PingContext(ctx context.Context) error
 }
 
+// deadlineGrace is how long Collect waits past the scrape deadline for the
+// ping or a scraper to return before giving up on it. The driver can block
+// well past a cancelled context (e.g. waiting for the server to confirm the
+// cancellation while an instance fails over), and without this bound the
+// whole scrape outlives Prometheus' scrape_timeout and is lost (HML-037).
+const deadlineGrace = 500 * time.Millisecond
+
 // Exporter is the top-level prometheus.Collector. It pings SQL Server on
 // every scrape (exposed as sqlserver_up), runs the enabled scrapers and
 // exposes per-scraper duration and success metrics.
 type Exporter struct {
 	db       pinger
 	scrapers []Scraper
+	// timeout overrides db.CurrentOptions().ConnTimeout when set (tests).
+	timeout time.Duration
 
 	up             *prometheus.Desc
 	scrapeDuration *prometheus.Desc
@@ -169,39 +178,103 @@ func (e *Exporter) Describe(ch chan<- *prometheus.Desc) {
 	}
 }
 
+// scrapeResult is what a scraper goroutine reports once Scrape returns.
+type scrapeResult struct {
+	name     string
+	duration float64
+	err      error
+}
+
 // Collect pings SQL Server and, when reachable, runs every enabled scraper
 // concurrently under a single shared deadline (ConnTimeout), so the total
 // scrape time is bounded by one timeout instead of the sum of all scrapers.
+// Collect returns by the deadline plus deadlineGrace even when the driver
+// ignores the cancelled context: a ping that has not returned reports
+// sqlserver_up 0, and a scraper that has not returned reports success 0.
 func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
-	ctx, cancel := context.WithTimeout(context.Background(), db.CurrentOptions().ConnTimeout)
+	timeout := e.timeout
+	if timeout <= 0 {
+		timeout = db.CurrentOptions().ConnTimeout
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
+	giveUp := time.NewTimer(timeout + deadlineGrace)
+	defer giveUp.Stop()
 
-	if err := e.db.PingContext(ctx); err != nil {
-		slog.Error("sql server is unreachable", slog.Any("error", err))
+	// Buffered so an abandoned ping can still deliver its result and exit.
+	pingErr := make(chan error, 1)
+	go func() { pingErr <- e.db.PingContext(ctx) }()
+	select {
+	case err := <-pingErr:
+		if err != nil {
+			slog.Error("sql server is unreachable", slog.Any("error", err))
+			ch <- prometheus.MustNewConstMetric(e.up, prometheus.GaugeValue, 0)
+			return
+		}
+	case <-giveUp.C:
+		slog.Error("sql server is unreachable", slog.Any("error", errors.New("ping did not return before the scrape deadline")))
 		ch <- prometheus.MustNewConstMetric(e.up, prometheus.GaugeValue, 0)
 		return
 	}
 	ch <- prometheus.MustNewConstMetric(e.up, prometheus.GaugeValue, 1)
 
-	var wg sync.WaitGroup
+	// Scrapers send to metrics instead of ch: once Collect returns, the
+	// registry stops reading ch, so a scraper still running past the deadline
+	// must not write to it. results is buffered so no scraper ever blocks on it.
+	metrics := make(chan prometheus.Metric)
+	results := make(chan scrapeResult, len(e.scrapers))
+	start := time.Now()
 	for _, s := range e.scrapers {
-		wg.Add(1)
 		go func(s Scraper) {
-			defer wg.Done()
-
-			start := time.Now()
-			err := s.Scrape(ctx, ch)
-			duration := time.Since(start).Seconds()
-
-			success := 1.0
-			if err != nil {
-				success = 0
-				slog.Error("collector scrape failed", slog.String("collector", s.Name()), slog.Any("error", err))
-			}
-
-			ch <- prometheus.MustNewConstMetric(e.scrapeDuration, prometheus.GaugeValue, duration, s.Name())
-			ch <- prometheus.MustNewConstMetric(e.scrapeSuccess, prometheus.GaugeValue, success, s.Name())
+			begin := time.Now()
+			err := s.Scrape(ctx, metrics)
+			results <- scrapeResult{name: s.Name(), duration: time.Since(begin).Seconds(), err: err}
 		}(s)
 	}
-	wg.Wait()
+
+	pending := make(map[string]bool, len(e.scrapers))
+	for _, s := range e.scrapers {
+		pending[s.Name()] = true
+	}
+	for len(pending) > 0 {
+		select {
+		case m := <-metrics:
+			ch <- m
+		case r := <-results:
+			delete(pending, r.name)
+			e.reportScrape(ch, r)
+		case <-giveUp.C:
+			for name := range pending {
+				e.reportScrape(ch, scrapeResult{
+					name:     name,
+					duration: time.Since(start).Seconds(),
+					err:      errors.New("collector did not return before the scrape deadline"),
+				})
+			}
+			go drain(metrics, results, len(pending))
+			return
+		}
+	}
+}
+
+// reportScrape emits the duration and success metrics of one scraper.
+func (e *Exporter) reportScrape(ch chan<- prometheus.Metric, r scrapeResult) {
+	success := 1.0
+	if r.err != nil {
+		success = 0
+		slog.Error("collector scrape failed", slog.String("collector", r.name), slog.Any("error", r.err))
+	}
+	ch <- prometheus.MustNewConstMetric(e.scrapeDuration, prometheus.GaugeValue, r.duration, r.name)
+	ch <- prometheus.MustNewConstMetric(e.scrapeSuccess, prometheus.GaugeValue, success, r.name)
+}
+
+// drain discards what abandoned scrapers still send, until all of them return.
+func drain(metrics <-chan prometheus.Metric, results <-chan scrapeResult, remaining int) {
+	for remaining > 0 {
+		select {
+		case <-metrics:
+		case <-results:
+			remaining--
+		}
+	}
 }
