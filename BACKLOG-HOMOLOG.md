@@ -44,6 +44,8 @@ de 2026-10-20, em outras nuvens (Google Cloud SQL e Azure).
 | HML-033 | TLS no Cloud SQL: `encrypt=true` com a CA da instância; `encrypt=strict` não é aceito | Cloud SQL (SQL Server 2022 SE) | baixa | resolvido (README) |
 | HML-034 | Scrapes concorrentes saturam o pool de 5 conexões: coletores falham com `context deadline exceeded` | Cloud SQL (SQL Server 2022 SE) | média | adiado (ROADMAP) |
 | HML-035 | Dashboard para Cloud SQL: exporter + Cloud Monitoring (validação) | Cloud SQL (SQL Server 2022 SE) | — | resolvido |
+| HML-036 | Conversão para HA regional e failover do Cloud SQL (validação) | Cloud SQL (SQL Server 2022 SE) | — | resolvido |
+| HML-037 | Scrape inteiro perdido quando o servidor para de responder sem fechar a conexão | Cloud SQL (SQL Server 2022 SE) | média | resolvido (v0.12.1) |
 
 ## Encerramento da fase EC2 (2026-10-15)
 
@@ -2245,6 +2247,8 @@ Escada de concorrência, 100 requests por nível:
   HTTP 200 (`ContinueOnError`), só o `scrape_collector_success` mostra.
 - A instância de 2 vCPUs estava com CPU em ≈98% no período, então parte da
   espera é do próprio SQL Server.
+- O Cloud SQL também fez um `BACKUP_VOLUME` das 19:31 às 19:34 UTC, no início
+  da escada, o que pode ter pesado nos primeiros níveis.
 
 Correções candidatas (ROADMAP, Later): scrapes simultâneos aguardam a coleta
 em andamento e recebem o mesmo resultado (singleflight), e tamanho do pool
@@ -2290,3 +2294,83 @@ funcionam.
 - Conferido no navegador: variáveis resolvidas e painéis renderizados. Uma aba
   do Grafana aberta antes da criação do datasource mostra
   `Datasource … was not found` até ser recarregada.
+
+---
+
+## HML-036 — Conversão para HA regional e failover do Cloud SQL (validação)
+
+- **Ambiente:** o do HML-032, com `availability_type` `ZONAL` → `REGIONAL`
+  pelo Terraform; carga do `hack/loadgen` durante os failovers
+- **Encontrado em:** 2026-10-26
+- **Severidade:** — (validação)
+- **Status:** resolvido
+
+**Conversão para regional (22:13–22:23 UTC)**
+
+A instância fica indisponível por ≈5 min 45 s (22:15:48–22:21:30): `Read:
+EOF`, depois `i/o timeout` e `connection refused` no IP privado. Primária em
+`us-central1-a`, standby em `us-central1-f`. Diferente do RDS, em que a
+conversão para Multi-AZ não derrubou a instância (HML-030). O exporter não
+reiniciou e voltou sozinho; o `query_store` registrou `WARN` e voltou na
+coleta seguinte.
+
+**Failovers (`gcloud sql instances failover`, com carga)**
+
+| Failover | Comando | `sqlserver_up 0` | Observação |
+|---|---|---|---|
+| 1 (a → f) | 22:39:41–22:41:01 | ≈77 s (22:39:58–22:41:15) | servidor parou de responder sem fechar as conexões: 2 scrapes perdidos (HML-037) |
+| 2 (f → a) | 22:51:24–22:52:45 | ≈60 s (22:52:04–22:53:15) | conexões derrubadas com `connection reset by peer`; nenhum scrape perdido |
+
+- `@@SERVERNAME` continua `3da04acc8e845da` nas duas zonas: no Cloud SQL o
+  nome acompanha a instância, não a VM (no RDS muda a cada failover,
+  HML-029). `instance_label` segue recomendado, porque o nome é gerado.
+- Nenhum AG aparece: o HA do Cloud SQL é por disco regional.
+- O loadgen recebe `Neither the database "LoadTestDB" … could be opened`
+  enquanto o banco faz recovery na nova primária (168 erros no 1º failover,
+  1 284 no 2º) e continua depois sem intervenção.
+
+---
+
+## HML-037 — Scrape inteiro perdido quando o servidor para de responder sem fechar a conexão
+
+- **Ambiente:** o do HML-036, no 1º failover; reproduzido na bastion com
+  `iptables` descartando o tráfego para a porta 1433 por 45 s
+- **Encontrado em:** 2026-10-26
+- **Severidade:** média (a janela de indisponibilidade some: nem
+  `sqlserver_up 0` é exposto)
+- **Status:** resolvido (v0.12.1)
+
+**Observado**
+
+No 1º failover, dois scrapes seguidos estouraram o `scrape_timeout` de 10 s
+(`up` 0, nenhuma amostra) e o exporter registrou:
+
+```
+sql server is unreachable error="Invalid TDS stream: did not get cancellation confirmation from the server (current response: context deadline exceeded)"
+```
+
+**Causa**
+
+O ping estoura o prazo de 5 s, o driver envia o cancelamento e continua
+esperando a confirmação de um servidor que não responde mais, sem respeitar o
+contexto. O `Collect` esperava o ping (e os coletores) sem limite próprio,
+então a resposta passava dos 10 s do Prometheus. Um alerta em
+`sqlserver_up == 0` não dispara nessa janela; só um em `up == 0`.
+
+**Correção** — branch `fix/scrape-deadline`, build de teste `0.12.1-homolog`
+
+O `Collect` espera o ping e cada coletor só até o prazo mais 500 ms: um ping
+que não voltou expõe `sqlserver_up 0`; um coletor que não voltou expõe
+`success 0` e os demais continuam expostos; o que ele enviar depois vai para
+um dreno, não para o canal do registry (já fechado). Testes com ping e coletor
+que ignoram o contexto; teste de mutação: sem o limite, os dois falham.
+
+**Validação (A/B na bastion, carga do loadgen, 45 s sem resposta do servidor)**
+
+| Versão | Scrapes no bloqueio | `up` | Log |
+|---|---|---|---|
+| `0.12.0` | 10 s (timeout), 0 amostras, 2 seguidos | 0 | `did not get cancellation confirmation…` |
+| `0.12.1-homolog` | 5,7 s, 50 amostras | 1 (`sqlserver_up 0`) | `ping did not return before the scrape deadline` |
+
+Nas duas versões o exporter volta sozinho ≈50 s depois de o tráfego ser
+liberado, quando o driver descarta as conexões presas.
