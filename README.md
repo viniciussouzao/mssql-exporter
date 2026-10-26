@@ -167,6 +167,14 @@ sqlserver://user:pass@NODE1:1433?database=master&encrypt=strict&certificate=C:/m
   `encrypt=strict`. Both are validated on RDS for SQL Server 2025, and no
   server-side change is needed:
   `sqlserver://user:pass@mydb.xxxx.us-east-1.rds.amazonaws.com:1433?database=master&encrypt=strict&certificate=/etc/mssql-exporter/global-bundle.pem`
+- **Google Cloud SQL:** use `encrypt=true` with the instance's server CA
+  (`gcloud sql instances describe <instance> --format="value(serverCaCert.cert)"`,
+  saved as `.pem`). The server certificate lists the private IP and the
+  instance DNS name (`<id>.<region>.sql.goog`), so connecting by IP needs no
+  `hostnameincertificate`. Cloud SQL does **not** accept `encrypt=strict`: the
+  handshake fails with `EOF`, even with `trustservercertificate=true`
+  (validated on Cloud SQL for SQL Server 2022):
+  `sqlserver://user:pass@10.0.0.3:1433?database=master&encrypt=true&certificate=/etc/mssql-exporter/cloudsql-server-ca.pem`
 
 ### Running as a Windows service
 
@@ -310,6 +318,27 @@ USE [your_database];
 CREATE USER [your_login] FOR LOGIN [your_login];
 ```
 
+On **Google Cloud SQL** there is no `sysadmin`. The built-in `sqlserver` user
+grants server permissions on behalf of its role, `CustomerDbRootRole`, which
+must be named as the grantor (without `AS` the grant fails with
+`Grantor does not have GRANT permission`); run it from `master`:
+
+```sql
+USE master;
+GRANT VIEW SERVER STATE TO [your_login] AS [CustomerDbRootRole];
+GRANT VIEW ANY DEFINITION TO [your_login] AS [CustomerDbRootRole];
+```
+
+- `CONNECT ANY DATABASE` cannot be granted and the `##MS_...##` server roles
+  do not accept new members: create a user per database, as on RDS.
+- `msdb` is protected: no user can be created there for your login, so
+  `msdb.dbo.sysjobs` is not readable and `agent_jobs` fails. Disable it
+  (`--collector.agent_jobs=false`). Logins created through Cloud SQL (console
+  or API) get `CustomerDbRootRole` and can read the jobs, but that role can
+  also manage logins and create databases. Cloud SQL publishes job outcomes
+  itself in Cloud Monitoring (`sqlserver/sql_agent/jobs`).
+- `backups` works with no grant (`public` can read `backupset`).
+
 Notes:
 
 - The `backups` collector reads `msdb.dbo.backupset` and
@@ -365,8 +394,9 @@ also set when SQL Server is down at startup. Recommended on **Amazon RDS**:
 there `@@SERVERNAME` is a generic host name (`EC2AMAZ-...`) that says nothing
 about which instance it is, and it changes when the instance is stopped and
 started or fails over. Use the DB instance identifier, e.g.
-`instance_label: "orders-prod"`. The `sqlserver_servername` metric still
-reports the current `@@SERVERNAME`.
+`instance_label: "orders-prod"`. On **Google Cloud SQL** `@@SERVERNAME` is a
+generated host name as well; use the instance name. The
+`sqlserver_servername` metric still reports the current `@@SERVERNAME`.
 
 ## Exposed Metrics
 
