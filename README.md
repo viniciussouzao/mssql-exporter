@@ -707,10 +707,16 @@ example uses 10s). With a global `scrape_interval` below 10s, Prometheus
 defaults the timeout to that interval: a scrape that waits on SQL Server for
 the full 5s (e.g. while the instance is starting up) then fails as a whole
 (`up 0`, no samples) instead of returning the metrics that were collected.
+The exporter itself always answers within the query timeout plus 0.5s, even
+when the driver hangs on a connection the server stopped answering (seen
+during a Cloud SQL failover): a ping that does not return reports
+`sqlserver_up 0`, and a collector that does not return reports
+`sqlserver_scrape_collector_success 0`.
 
 Ready-to-use dashboards are included in [`dashboards/`](dashboards/): a
-general one and one for **Amazon RDS** that shows the exporter's engine
-metrics next to the host metrics from CloudWatch. See
+general one, one for **Amazon RDS** that shows the exporter's engine
+metrics next to the host metrics from CloudWatch, and one for **Google Cloud
+SQL** that does the same with Cloud Monitoring. See
 [`dashboards/README.md`](dashboards/README.md) for import instructions.
 
 ## Security

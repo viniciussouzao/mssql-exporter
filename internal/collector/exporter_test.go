@@ -11,10 +11,14 @@ import (
 )
 
 type fakePinger struct {
-	err error
+	err   error
+	delay time.Duration // ignores the context, like a driver stuck on a dead connection
 }
 
 func (p fakePinger) PingContext(_ context.Context) error {
+	if p.delay > 0 {
+		time.Sleep(p.delay)
+	}
 	return p.err
 }
 
@@ -153,4 +157,65 @@ func TestExporterScrapersRunConcurrently(t *testing.T) {
 	if elapsed >= 3*delay {
 		t.Errorf("Collect took %v, want < %v (scrapers must run concurrently)", elapsed, 3*delay)
 	}
+}
+
+// A ping stuck past the deadline (the driver waiting for a cancellation
+// that never comes during a failover) must still yield sqlserver_up 0 in
+// time, instead of a scrape that outlives Prometheus' scrape_timeout.
+func TestExporterPingStuckPastDeadline(t *testing.T) {
+	e := newExporter(fakePinger{delay: 2 * time.Second}, []Scraper{newFakeScraper("ok", 0, nil)})
+	e.timeout = 50 * time.Millisecond
+
+	start := time.Now()
+	families := gather(t, e)
+	elapsed := time.Since(start)
+
+	if limit := e.timeout + deadlineGrace + 300*time.Millisecond; elapsed > limit {
+		t.Errorf("Collect took %v, want <= %v", elapsed, limit)
+	}
+	if v, ok := metricValue(families, "sqlserver_up", nil); !ok || v != 0 {
+		t.Errorf("sqlserver_up = %v (found=%v), want 0", v, ok)
+	}
+	if _, ok := metricValue(families, "sqlserver_scrape_collector_success", map[string]string{"collector": "ok"}); ok {
+		t.Error("scrape_collector_success present, want scrapers skipped when the ping does not return")
+	}
+}
+
+// A scraper stuck past the deadline is reported as failed and the others
+// are still exposed; what it sends after Collect returns must be discarded
+// (the registry no longer reads the channel by then).
+func TestExporterAbandonsScraperStuckPastDeadline(t *testing.T) {
+	const stuck = time.Second
+	e := newExporter(fakePinger{}, []Scraper{
+		newFakeScraper("fast", 0, nil),
+		newFakeScraper("stuck", stuck, nil),
+	})
+	e.timeout = 50 * time.Millisecond
+
+	start := time.Now()
+	families := gather(t, e)
+	elapsed := time.Since(start)
+
+	if limit := e.timeout + deadlineGrace + 300*time.Millisecond; elapsed > limit {
+		t.Errorf("Collect took %v, want <= %v", elapsed, limit)
+	}
+	if v, ok := metricValue(families, "sqlserver_up", nil); !ok || v != 1 {
+		t.Errorf("sqlserver_up = %v (found=%v), want 1", v, ok)
+	}
+	if v, ok := metricValue(families, "sqlserver_scrape_collector_success", map[string]string{"collector": "fast"}); !ok || v != 1 {
+		t.Errorf("success{fast} = %v (found=%v), want 1", v, ok)
+	}
+	if v, ok := metricValue(families, "sqlserver_scrape_collector_success", map[string]string{"collector": "stuck"}); !ok || v != 0 {
+		t.Errorf("success{stuck} = %v (found=%v), want 0", v, ok)
+	}
+	if _, ok := metricValue(families, "sqlserver_fake_fast", nil); !ok {
+		t.Error("sqlserver_fake_fast missing, want metrics of scrapers that finished in time")
+	}
+	if _, ok := metricValue(families, "sqlserver_fake_stuck", nil); ok {
+		t.Error("sqlserver_fake_stuck present, want the abandoned scraper's late metric discarded")
+	}
+
+	// Let the stuck scraper send its metric after Collect returned: a send
+	// on the registry's channel would panic or block here.
+	time.Sleep(stuck - elapsed + 100*time.Millisecond)
 }
