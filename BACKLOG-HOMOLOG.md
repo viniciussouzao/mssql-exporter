@@ -57,6 +57,9 @@ de 2026-10-20, em outras nuvens (Google Cloud SQL e Azure).
 | HML-046 | `requests_long_running` sempre com 1 em todas as faixas no MI: sessão de telemetria `TdService` | Azure SQL Managed Instance (GP) | baixa | resolvido (v0.13.2) |
 | HML-047 | Coletor de SO loga `ERROR` de swap a cada scrape no Windows sem arquivo de paginação | Windows 11 (notebook doméstico, SQL Server 2025 Developer) | média | resolvido (v0.13.3) |
 | HML-048 | `icacls` do README falha em Windows não inglês (`Administrators` não existe em pt-BR) | Windows 11 (notebook doméstico, SQL Server 2025 Developer) | baixa | resolvido (README) |
+| HML-049 | Coletores por banco no MI com `CONNECT ANY DATABASE` (validação) | Azure SQL Managed Instance (GP) | — | resolvido |
+| HML-050 | TLS no MI: `encrypt=true` e `encrypt=strict` com CA pública, sem arquivo de certificado (validação) | Azure SQL Managed Instance (GP) | — | resolvido (README) |
+| HML-051 | Failover gerenciado do MI com carga: ≈80 s de `sqlserver_up 0`, nenhum scrape perdido (validação) | Azure SQL Managed Instance (GP) | — | resolvido |
 
 ## Encerramento da fase EC2 (2026-10-15)
 
@@ -275,7 +278,8 @@ e nomes físicos diferentes dos de um SQL Server instalado.
 3. Coletores por banco (`index_fragmentation`, `query_store`) com
    `CONNECT ANY DATABASE`.
 4. TLS: `encrypt=true` (em uso) e `encrypt=strict`.
-5. Autenticação Microsoft Entra ID no lugar do login SQL.
+5. Autenticação Microsoft Entra ID no lugar do login SQL: o exporter não
+   suporta; ficou no ROADMAP (Later), sem prioridade.
 6. Failover gerenciado do MI (`az sql mi failover`): `sqlserver_up` e volta
    sozinho, como no RDS (HML-030) e no Cloud SQL (HML-036).
 7. Dashboard exporter + Azure Monitor.
@@ -2819,3 +2823,87 @@ identificações de segurança`, sem alterar nada. O mesmo acontece com o
 
 **Correção:** o README usa os SIDs fixos (`*S-1-5-18` para SYSTEM e
 `*S-1-5-32-544` para Administrators), que funcionam em qualquer idioma.
+
+---
+
+## HML-049 — Coletores por banco no MI com `CONNECT ANY DATABASE` (validação)
+
+- **Ambiente:** o do HML-039, exporter `0.13.2` com `top_queries`,
+  `index_fragmentation` e `query_store` ligados
+- **Encontrado em:** 2026-10-27
+- **Severidade:** — (validação)
+- **Status:** resolvido
+
+- **Sem o grant:** `index_fragmentation` e `query_store` com `success 1` e
+  `last_collection_databases 0`. O `LoadTestDB`, sem usuário para o login, é
+  pulado sem erro, como documentado.
+- **Com `GRANT CONNECT ANY DATABASE TO [usr_exporter]`** (dado pelo
+  `sqladmin`, que é `sysadmin`), depois de reiniciar o exporter (o
+  `index_fragmentation` coleta a cada 6 h): os dois coletam o `LoadTestDB`.
+  - `index_fragmentation`: `PK_Orders` com 95,6% de fragmentação depois da
+    carga do loadgen.
+  - `query_store`: `READ_WRITE` (ligado por padrão no MI), limite de 100 MB.
+- `top_queries`: 50 queries só com `VIEW SERVER STATE`.
+
+Diferente do RDS (HML-024) e do Cloud SQL (HML-032), onde o grant não pode
+ser dado e é preciso um usuário por banco.
+
+---
+
+## HML-050 — TLS no MI: `encrypt=true` e `encrypt=strict` com CA pública, sem arquivo de certificado (validação)
+
+- **Ambiente:** o do HML-039; um exporter temporário por DSN na bastion, com
+  `app name` próprio, conferido em `sys.dm_exec_connections`
+- **Encontrado em:** 2026-10-27
+- **Severidade:** — (validação)
+- **Status:** resolvido (README: seção de TLS)
+
+Certificado do servidor: `CN=65cf56cd264a.database.windows.net` (a zona DNS
+da instância), com `*.<zona>.database.windows.net` no SAN, emitido pela
+`Microsoft TLS G2 RSA CA OCSP 10`, uma CA pública presente nas CAs do
+sistema.
+
+| DSN | Resultado |
+|---|---|
+| `encrypt=true` (o do serviço) | OK, `encrypt_option` TRUE, TDS 7.4 (`0x74000004`) |
+| `encrypt=strict` | OK, TDS 8.0 (`0x08000000`) |
+| `encrypt=strict&hostnameincertificate=wrong.example.com` | recusado (`x509: certificate is valid for *.65cf56cd264a.database.windows.net, …`) |
+| `encrypt=disable` | recusado (`EOF` no handshake): o MI exige TLS |
+
+Nenhum arquivo de CA e nenhuma configuração no servidor. Segundo ambiente
+gerenciado a aceitar TDS 8.0, depois do RDS (HML-027); o Cloud SQL não aceita
+(HML-033).
+
+---
+
+## HML-051 — Failover gerenciado do MI com carga: ≈80 s de `sqlserver_up 0`, nenhum scrape perdido (validação)
+
+- **Ambiente:** o do HML-039, exporter `0.13.2`, carga do `hack/loadgen`
+  (10 logins × 2 workers) e um monitor de `sqlserver_up` a cada 2 s na
+  bastion; `az sql mi failover --replica-type Primary`
+- **Encontrado em:** 2026-10-27
+- **Severidade:** — (validação)
+- **Status:** resolvido
+
+| Hora (UTC) | Evento |
+|---|---|
+| 19:39:59 | failover pedido (o `az` respondeu em 1 min 36 s) |
+| 19:40:01 | conexões derrubadas (`connection reset by peer`); `tempdb`, `perf_counters` e `database_mirroring` com `success 0` nesse scrape |
+| 19:40:03 – 19:41:18 | `sqlserver_up 0`: `i/o timeout` para o nó e depois `Database 'master' … is not currently available` |
+| 19:41:18 | `sqlserver_start_time` novo (10:53 → 16:41 no horário local) |
+| ≈19:41:24 | `sqlserver_up 1`, 19 coletores com `success 1`; nenhum erro desde 19:41:30 |
+
+- O Prometheus local viu `up 1` o tempo todo: durante a queda cada scrape
+  levou ≈5,2 s e respondeu dentro do prazo (correção do HML-037). O
+  `sqlserver_up` ficou em 0 por 6 pontos de 15 s, então um alerta em
+  `sqlserver_up == 0` dispara.
+- `@@SERVERNAME` e `instance_label` iguais antes e depois. O nó do
+  redirecionamento manteve o IP (`10.20.1.12`): no General Purpose o failover
+  reiniciou o processo do SQL Server.
+- O `query_store` (em background) registrou um `WARN` na queda e coletou
+  normalmente na rodada seguinte.
+- Loadgen: 285 statements com erro entre 19:40:16 e 19:41:23; continuou sem
+  intervenção.
+
+Comparação: RDS Multi-AZ ≈45 s (HML-030), Cloud SQL HA ≈60–77 s (HML-036),
+MI General Purpose ≈80 s.
