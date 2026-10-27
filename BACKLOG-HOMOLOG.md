@@ -53,8 +53,8 @@ de 2026-10-20, em outras nuvens (Google Cloud SQL e Azure).
 | HML-042 | `server_info` falha inteiro com `MachineName` NULL no MI | Azure SQL Managed Instance (GP) | média | resolvido (v0.12.2) |
 | HML-043 | `volumes` no MI: `total_bytes` é o tamanho dos arquivos, não do volume (disponível acima de 100%) | Azure SQL Managed Instance (GP) | média | resolvido (v0.13.0) |
 | HML-044 | `database_log_used_percent` sem os bancos de usuário no MI (contador pelo nome físico) | Azure SQL Managed Instance (GP) | baixa | resolvido (v0.13.1) |
-| HML-045 | `backups` sem nenhuma série no MI: `server_name` NULL no `backupset` | Azure SQL Managed Instance (GP) | média | aberto |
-| HML-046 | `requests_long_running` sempre com 1 em todas as faixas no MI: sessão de telemetria `TdService` | Azure SQL Managed Instance (GP) | baixa | aberto |
+| HML-045 | `backups` sem nenhuma série no MI: `server_name` NULL no `backupset` | Azure SQL Managed Instance (GP) | média | resolvido (v0.13.2) |
+| HML-046 | `requests_long_running` sempre com 1 em todas as faixas no MI: sessão de telemetria `TdService` | Azure SQL Managed Instance (GP) | baixa | resolvido (v0.13.2) |
 
 ## Encerramento da fase EC2 (2026-10-15)
 
@@ -2713,7 +2713,7 @@ Validado no MI (`LoadTestDB` 1, `master` 44, `model` 19) e no SQL Server
 - **Encontrado em:** 2026-10-27
 - **Severidade:** média (sem `sqlserver_backup_*` não há alerta de backup
   atrasado no MI)
-- **Status:** aberto
+- **Status:** resolvido (v0.13.2)
 
 Os backups automáticos do MI aparecem no `msdb.dbo.backupset` (FULL do
 `LoadTestDB` na criação e LOG a cada ≈5 min durante a carga, depois a cada
@@ -2724,8 +2724,10 @@ restaurados de outro servidor (HML-012), então descarta todas as linhas e
 fica com `success 1` sem séries. Os bancos de sistema não têm histórico no
 `msdb`.
 
-Correção candidata: só no MI (`EngineEdition` 8), aceitar `server_name` NULL,
-como nas correções do HML-043 e do HML-044.
+**Correção:** só no MI (`EngineEdition` 8), `server_name` NULL conta como a
+própria instância; nas outras plataformas o filtro não muda. Validado no MI
+(FULL e LOG do `LoadTestDB`, com o FULL das 11:59:01 locais em 14:59:01 UTC)
+e no SQL Server 2025 em Docker (séries de backup iguais às do `0.13.1`).
 
 ---
 
@@ -2736,7 +2738,7 @@ como nas correções do HML-043 e do HML-044.
 - **Severidade:** baixa (um alerta em
   `sqlserver_requests_long_running{over_seconds="1800"} > 0` dispararia para
   sempre no MI)
-- **Status:** aberto
+- **Status:** resolvido (v0.13.2)
 
 O `active_queries` já exclui as sessões de sistema (`is_user_process = 0`,
 98 requests no MI). Sobra uma sessão do serviço marcada como de usuário:
@@ -2745,5 +2747,10 @@ O `active_queries` já exclui as sessões de sistema (`is_user_process = 0`,
 de Extended Events), aberto desde a subida da instância (15 292 s na
 consulta). Ela conta 1 nas faixas de 10, 60, 300 e 1 800 s o tempo todo.
 
-Correção candidata: só no MI, ignorar essa sessão (`program_name =
-'TdService'` ou espera `XE_LIVE_TARGET_TVF`).
+**Correção:** só no MI, o `active_queries` ignora as requests com
+`program_name` `TdService` e login `NT AUTHORITY\SYSTEM` (a espera não entra
+no filtro, para a sessão não voltar a contar quando estiver executando). Isso
+também tira o `SELECT` de 15 mil segundos de
+`sqlserver_request_max_elapsed_seconds`. Validado no MI: as faixas foram
+para 0 e um `WAITFOR` de 40 s do `sqladmin` apareceu em `over_seconds="10"`
+e em `request_max_elapsed_seconds{command="WAITFOR"}`.

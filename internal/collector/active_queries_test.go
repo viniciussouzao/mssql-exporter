@@ -19,6 +19,9 @@ var activeRequestsQueryRegex = sqlContainsInOrder(
 	"FROM sys.dm_exec_requests r",
 	"WHERE s.is_user_process = 1",
 	"AND r.session_id <> @@SPID",
+	"CAST(SERVERPROPERTY('EngineEdition') AS int) = 8",
+	"AND ISNULL(s.program_name, N'') = N'TdService'",
+	"AND s.login_name = N'NT AUTHORITY\\SYSTEM'",
 	"GROUP BY r.command",
 )
 
