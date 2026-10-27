@@ -701,6 +701,13 @@ Metric names are stable and follow Prometheus best practices. Selected examples:
 - Volumes
   - `sqlserver_volume_total_bytes{volume_mount_point="C:\\"} 1962694664192`
   - `sqlserver_volume_available_bytes{volume_mount_point="C:\\"} 1846100799488`
+  - SQL Server on Linux (Google Cloud SQL, the Docker images) reports no
+    mount point, so the label is the directory of the database files, e.g.
+    `volume_mount_point="/var/opt/mssql/data/"`. Directories on the same
+    file system show up as separate series with the same values.
+  - Only databases that are `ONLINE` or `RESTORING` (AG and log shipping
+    secondaries) count: a database changing state could hold the query
+    until the scrape timeout.
   - Azure SQL Managed Instance (`sqlserver_engine_edition 8`): no volume
     series. There `dm_os_volume_stats` reports in `total_bytes` the size of
     the files on the volume, not its capacity (smaller than

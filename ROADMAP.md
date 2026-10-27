@@ -205,25 +205,17 @@ first; implement in this order.
   default) and cleanup purges old intervals, so totals can decrease and break
   `rate()`; per-database scans are expensive and series churn is the same as
   `top_queries`. The Query Store UI remains the better tool for analysis
-- `volumes`: skip databases changing state (`sys.databases.state IN (0, 1)`,
-  keeping `RESTORING` secondaries) to narrow the window where
-  `sys.dm_os_volume_stats` waits and the query times out (HML-019; low
-  impact, the next scrape succeeds)
 - Concurrent scrapes: with 5 or more simultaneous `/metrics` requests the
   fixed pool of 5 connections saturates and collectors fail with `context
   deadline exceeded` behind an HTTP 200 (HML-034). Let simultaneous scrapes
   wait for the collection in flight and share its result (singleflight), and
   make the pool size configurable
-- `volumes`: SQL Server on Linux (Cloud SQL and the Docker images) returns
-  NULL mount point, name and file system from `sys.dm_os_volume_stats`, so
-  the series has an empty `volume_mount_point`; fall back to a label derived
-  from the file path (HML-032, HML-038)
 - Windows OS collector: `os_disk_read_queue_length` / `os_disk_write_queue_length`
   are exposed as gauges over raw cumulative WMI counters; fixing needs a new
   name/type aligned with Linux (pending from HML-003)
 - Replication status
-- Unit tests for collectors (mock `*sql.DB`), integration tests with
-  SQL Server in Docker
+- Integration tests with SQL Server in Docker (every collector already has
+  `go-sqlmock` unit tests)
 - Azure SQL Database mode: one exporter per database (the unit is the
   database, no cross-database queries); detect it with
   `SERVERPROPERTY('EngineEdition') = 5`. The reconnaissance (HML-053) sized
@@ -264,3 +256,9 @@ first; implement in this order.
   `sys.server_resource_stats` instead of `dm_os_volume_stats`, whose
   `total_bytes` is the size of the files there, not the volume capacity
   (Azure homologation phase)
+- [x] `volumes`: databases changing state are skipped (`sys.databases.state
+  IN (0, 1)`, keeping `RESTORING` secondaries), narrowing the window where
+  `sys.dm_os_volume_stats` waits and the query times out (HML-019)
+- [x] `volumes` on SQL Server on Linux: the label falls back to the
+  directory of the database files when `sys.dm_os_volume_stats` returns no
+  mount point (HML-032, HML-038)
