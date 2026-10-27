@@ -42,7 +42,7 @@ de 2026-10-20, em outras nuvens (Google Cloud SQL e Azure).
 | HML-026 | `database_log_used_percent` com bancos ocultos e, no RDS, sem os bancos de sistema | RDS (SQL Server 2025 SE) | baixa | resolvido (v0.9.2) |
 | HML-032 | Linha de base no Cloud SQL: permissões, coletores e carga (validação) | Cloud SQL (SQL Server 2022 SE) | — | resolvido |
 | HML-033 | TLS no Cloud SQL: `encrypt=true` com a CA da instância; `encrypt=strict` não é aceito | Cloud SQL (SQL Server 2022 SE) | baixa | resolvido (README) |
-| HML-034 | Scrapes concorrentes saturam o pool de 5 conexões: coletores falham com `context deadline exceeded` | Cloud SQL (SQL Server 2022 SE) | média | adiado (ROADMAP) |
+| HML-034 | Scrapes concorrentes saturam o pool de 5 conexões: coletores falham com `context deadline exceeded` | Cloud SQL (SQL Server 2022 SE) | média | resolvido (v0.14.0) |
 | HML-035 | Dashboard para Cloud SQL: exporter + Cloud Monitoring (validação) | Cloud SQL (SQL Server 2022 SE) | — | resolvido |
 | HML-036 | Conversão para HA regional e failover do Cloud SQL (validação) | Cloud SQL (SQL Server 2022 SE) | — | resolvido |
 | HML-037 | Scrape inteiro perdido quando o servidor para de responder sem fechar a conexão | Cloud SQL (SQL Server 2022 SE) | média | resolvido (v0.12.1) |
@@ -2425,6 +2425,36 @@ Escada de concorrência, 100 requests por nível:
 Correções candidatas (ROADMAP, Later): scrapes simultâneos aguardam a coleta
 em andamento e recebem o mesmo resultado (singleflight), e tamanho do pool
 configurável.
+
+**Correção (2026-10-27)** — branch `feat/scrape-singleflight`:
+
+- `Exporter.Collect`: um scrape que chega enquanto outro está coletando
+  espera essa coleta e expõe as mesmas métricas (const metrics, imutáveis),
+  em vez de rodar todos os coletores de novo. Scrapes que não se sobrepõem
+  coletam normalmente; não há cache.
+- `--sqlserver.max-connections` (env `SQL_SERVER_MAX_CONNECTIONS`, YAML
+  `max_connections`, padrão 5, de 1 a 100) define o tamanho do pool.
+
+**Validação** — binário da `v0.13.4` (antes) contra o da branch (depois),
+rodando no Mac contra o SQL Server 2025 Developer do notebook doméstico, 16
+coletores padrão; ferramenta de carga que conta as respostas com algum
+`scrape_collector_success 0`:
+
+| Simultâneos | Antes: p50 / p99 | Antes: respostas com falha | Depois: p50 / p99 | Depois: respostas com falha |
+|---|---|---|---|---|
+| 1 | 0,13 s / 0,16 s | 0 de 40 | 0,13 s / 0,16 s | 0 de 40 |
+| 5 | 0,49 s / 0,78 s | 0 de 40 | 0,13 s / 0,15 s | 0 de 40 |
+| 20 | 1,73 s / 2,98 s | 0 de 40 | 0,13 s / 0,13 s | 0 de 40 |
+| 60 | 5,02 s / 5,04 s | 112 de 120 (471 coletores) | 0,16 s / 0,19 s | 0 de 120 |
+
+- Antes, a latência cresce com a concorrência até encostar no timeout de
+  5 s; com SQL Server ocioso a falha só aparece com 60 simultâneos (no Cloud
+  SQL sob carga, a partir de 5). Depois, a latência fica igual à de um
+  scrape só.
+- Um scrape sozinho com `max-connections` 1, 5 e 20: p50 de 0,34 s, 0,13 s e
+  0,13 s. O pool padrão já basta para os 16 coletores padrão nessa máquina;
+  o valor configurável serve para instâncias com mais coletores ou rede
+  mais lenta, ou para limitar as sessões abertas.
 
 ---
 

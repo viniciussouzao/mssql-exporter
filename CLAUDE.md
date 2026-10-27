@@ -110,7 +110,8 @@ Exporter, using `go-sqlmock`; shared helpers in `testutil_test.go`), `internal/c
 
 - `connection.go`: Provides a package-level `*sql.DB` instance via `Connect()` and `DB()` functions
 - `options.go`: Defines connection pool settings (max connections, timeouts, lifetimes)
-- Default settings in `DefaultOptions()`: 5 max connections, 5s query timeout, 5min connection lifetime
+- Default settings in `DefaultOptions()`: 5 max connections, 5s query timeout, 5min connection lifetime;
+  `main.go` overrides max open/idle connections with `--sqlserver.max-connections`
 
 **Key Functions**:
 ```go
@@ -132,6 +133,11 @@ and each scraper at most until the scrape deadline plus `deadlineGrace`
 (500 ms) and then answers with what it has: the driver can block past a
 cancelled context during a failover, and without that bound the whole
 scrape outlived Prometheus' `scrape_timeout` and was lost (HML-037, v0.12.1).
+Simultaneous scrapes share one collection (singleflight in `Collect`): a
+scrape that arrives while another one is collecting waits for it and
+exposes the same const metrics, so several Prometheus servers do not
+compete for the connection pool (HML-034, v0.14.0). There is no cache:
+scrapes that do not overlap collect again.
 
 ```go
 type Scraper interface {
@@ -248,6 +254,9 @@ Resolved in `internal/config.Load()`. Precedence per field, highest first:
 --sqlserver.instance-label string
                                Fixed sqlserver_instance label (env SQL_SERVER_INSTANCE_LABEL,
                                YAML instance_label; default @@SERVERNAME).
+--sqlserver.max-connections int
+                               Connection pool size, 1-100 (env SQL_SERVER_MAX_CONNECTIONS,
+                               YAML max_connections; default 5).
 --collector.os-collectors      Enable OS-level collectors (CPU, memory, disk).
 --config.file string           Path to an optional YAML config file.
 --version                      Print version information and exit.
@@ -535,7 +544,7 @@ and README):
 ### Current State
 - Unit tests for `internal/config` (flag/env/YAML precedence, validation), `internal/db`,
   the Exporter and every collector (`go-sqlmock`) — run with `make test`
-  (169 test functions, 211 runs counting subtests)
+  (174 test functions, 216 runs counting subtests)
 - CI (`.github/workflows/ci.yml`) runs vet, golangci-lint, tests and build on every PR
 - No integration tests against a real SQL Server yet
 - Manual homologation recorded in `BACKLOG-HOMOLOG.md` (HML-001..053), all
@@ -598,10 +607,8 @@ and README):
 ## Known Issues & Future Work
 
 ### Current Limitations
-- Connection pool settings not configurable at runtime; with 5 or more
-  concurrent `/metrics` requests the 5-connection pool saturates and
-  collectors fail with `context deadline exceeded` (HML-034, ROADMAP Later:
-  singleflight + configurable pool)
+- Query timeout (5s) and connection lifetimes are not configurable; only the
+  pool size is (`--sqlserver.max-connections`)
 - No integration tests against a real SQL Server (manual homologation is tracked in `BACKLOG-HOMOLOG.md`)
 - Azure SQL Database is not supported (see "Managed platforms")
 - availability_groups was validated against a real 2-replica Always On AG on EC2 (SQL Server 2019, 2026-10-12).
@@ -710,8 +717,8 @@ make test
 - For high-cardinality metrics, consider longer intervals
 
 ### Connection Pooling
-- Default: 5 max connections, 5 idle
-- Adjust in `internal/db/options.go` if needed
+- Default: 5 max connections, 5 idle; `--sqlserver.max-connections` sets both
+- Every enabled collector of a scrape runs at the same time on this pool
 - Monitor connection usage with `db.Stats()`
 
 ## Security Best Practices

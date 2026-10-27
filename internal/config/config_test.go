@@ -624,3 +624,72 @@ func TestLoadInstanceLabelRejectsBlank(t *testing.T) {
 		t.Fatalf("Load() error = %v, want a blank instance label error", err)
 	}
 }
+
+func TestLoadMaxConnectionsPrecedence(t *testing.T) {
+	t.Setenv("SQL_SERVER_DSN", "")
+	t.Setenv("SQL_SERVER_MAX_CONNECTIONS", "")
+
+	path := writeConfigFile(t, `
+dsn: "`+testDSN+`"
+max_connections: 8
+`)
+
+	cfg, err := Load([]string{"--config.file", path})
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.MaxConnections != 8 {
+		t.Errorf("MaxConnections = %d, want yaml value 8", cfg.MaxConnections)
+	}
+
+	t.Setenv("SQL_SERVER_MAX_CONNECTIONS", "12")
+	cfg, err = Load([]string{"--config.file", path})
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.MaxConnections != 12 {
+		t.Errorf("MaxConnections = %d, want env to override yaml", cfg.MaxConnections)
+	}
+
+	cfg, err = Load([]string{"--config.file", path, "--sqlserver.max-connections", "20"})
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.MaxConnections != 20 {
+		t.Errorf("MaxConnections = %d, want flag to override env and yaml", cfg.MaxConnections)
+	}
+}
+
+func TestLoadMaxConnectionsDefault(t *testing.T) {
+	t.Setenv("SQL_SERVER_DSN", testDSN)
+	t.Setenv("SQL_SERVER_MAX_CONNECTIONS", "")
+
+	cfg, err := Load(nil)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if want := 5; cfg.MaxConnections != want {
+		t.Errorf("MaxConnections = %d, want default %d", cfg.MaxConnections, want)
+	}
+}
+
+func TestLoadMaxConnectionsValidation(t *testing.T) {
+	t.Setenv("SQL_SERVER_DSN", testDSN)
+	t.Setenv("SQL_SERVER_MAX_CONNECTIONS", "")
+
+	for _, v := range []string{"0", "-1", "101"} {
+		if _, err := Load([]string{"--sqlserver.max-connections", v}); err == nil || !strings.Contains(err.Error(), "max-connections") {
+			t.Errorf("Load(max-connections=%s) error = %v, want a range error", v, err)
+		}
+	}
+	for _, v := range []string{"1", "100"} {
+		if _, err := Load([]string{"--sqlserver.max-connections", v}); err != nil {
+			t.Errorf("Load(max-connections=%s) error = %v, want the boundary accepted", v, err)
+		}
+	}
+
+	t.Setenv("SQL_SERVER_MAX_CONNECTIONS", "ten")
+	if _, err := Load(nil); err == nil || !strings.Contains(err.Error(), "SQL_SERVER_MAX_CONNECTIONS") {
+		t.Errorf("Load(SQL_SERVER_MAX_CONNECTIONS=ten) error = %v, want a parse error", err)
+	}
+}

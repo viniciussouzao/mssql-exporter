@@ -3,6 +3,8 @@ package collector
 import (
 	"context"
 	"errors"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -27,6 +29,7 @@ type fakeScraper struct {
 	delay time.Duration
 	err   error
 	desc  *prometheus.Desc
+	calls atomic.Int32
 }
 
 func newFakeScraper(name string, delay time.Duration, err error) *fakeScraper {
@@ -43,6 +46,7 @@ func (s *fakeScraper) Name() string { return s.name }
 func (s *fakeScraper) Describe(ch chan<- *prometheus.Desc) { ch <- s.desc }
 
 func (s *fakeScraper) Scrape(_ context.Context, ch chan<- prometheus.Metric) error {
+	s.calls.Add(1)
 	if s.delay > 0 {
 		time.Sleep(s.delay)
 	}
@@ -156,6 +160,50 @@ func TestExporterScrapersRunConcurrently(t *testing.T) {
 	// execution is bounded by the slowest scraper plus overhead.
 	if elapsed >= 3*delay {
 		t.Errorf("Collect took %v, want < %v (scrapers must run concurrently)", elapsed, 3*delay)
+	}
+}
+
+// Scrapes that arrive while a collection is in flight wait for it and expose
+// the same result instead of running every scraper again (HML-034).
+func TestExporterConcurrentCollectsShareOneRun(t *testing.T) {
+	const scrapes = 5
+	s := newFakeScraper("shared", 200*time.Millisecond, nil)
+	e := newExporter(fakePinger{}, []Scraper{s})
+
+	var wg sync.WaitGroup
+	results := make([][]*dto.MetricFamily, scrapes)
+	for i := range scrapes {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			results[i] = gather(t, e)
+		}()
+	}
+	wg.Wait()
+
+	if got := s.calls.Load(); got != 1 {
+		t.Errorf("scraper ran %d times for %d simultaneous scrapes, want 1", got, scrapes)
+	}
+	for i, families := range results {
+		if v, ok := metricValue(families, "sqlserver_scrape_collector_success", map[string]string{"collector": "shared"}); !ok || v != 1 {
+			t.Errorf("scrape %d: success{shared} = %v (found=%v), want 1", i, v, ok)
+		}
+		if _, ok := metricValue(families, "sqlserver_fake_shared", nil); !ok {
+			t.Errorf("scrape %d: sqlserver_fake_shared missing, want the shared result exposed to every scrape", i)
+		}
+	}
+}
+
+// Sharing only covers scrapes that overlap: the next scrape collects again.
+func TestExporterSequentialCollectsRunAgain(t *testing.T) {
+	s := newFakeScraper("again", 0, nil)
+	e := newExporter(fakePinger{}, []Scraper{s})
+
+	gather(t, e)
+	gather(t, e)
+
+	if got := s.calls.Load(); got != 2 {
+		t.Errorf("scraper ran %d times for 2 sequential scrapes, want 2", got)
 	}
 }
 

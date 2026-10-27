@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -120,6 +121,11 @@ type Exporter struct {
 	// timeout overrides db.CurrentOptions().ConnTimeout when set (tests).
 	timeout time.Duration
 
+	// mu guards inflight, the collection that concurrent Collect calls join
+	// instead of starting their own (see Collect).
+	mu       sync.Mutex
+	inflight *collection
+
 	up             *prometheus.Desc
 	scrapeDuration *prometheus.Desc
 	scrapeSuccess  *prometheus.Desc
@@ -185,13 +191,76 @@ type scrapeResult struct {
 	err      error
 }
 
-// Collect pings SQL Server and, when reachable, runs every enabled scraper
+// collection is one run of collect, shared by every Collect call that
+// arrives while it is in flight. metrics is written before done is closed
+// and only read after.
+type collection struct {
+	done    chan struct{}
+	metrics []prometheus.Metric
+}
+
+// Collect exposes the result of one collection. A Collect call that arrives
+// while another one is collecting waits for it and exposes the same metrics
+// instead of running every scraper again: with several simultaneous scrapes
+// (more than one Prometheus, a dashboard, curl) each would otherwise compete
+// for the same connection pool, and collectors would fail on the shared
+// deadline while waiting for a connection (HML-034). The metrics are
+// immutable const metrics, so sharing them between scrapes is safe.
+func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
+	e.mu.Lock()
+	c := e.inflight
+	if c == nil {
+		c = &collection{done: make(chan struct{})}
+		e.inflight = c
+		e.mu.Unlock()
+		e.runCollection(c)
+	} else {
+		e.mu.Unlock()
+		<-c.done
+	}
+
+	for _, m := range c.metrics {
+		ch <- m
+	}
+}
+
+// runCollection fills c and releases the Collect calls waiting on it; the
+// deferred release also runs if collecting panics, so later scrapes never
+// wait on a collection that will not finish.
+func (e *Exporter) runCollection(c *collection) {
+	defer func() {
+		e.mu.Lock()
+		e.inflight = nil
+		e.mu.Unlock()
+		close(c.done)
+	}()
+	c.metrics = e.collectAll()
+}
+
+// collectAll runs collect and returns what it emitted.
+func (e *Exporter) collectAll() []prometheus.Metric {
+	out := make(chan prometheus.Metric)
+	var metrics []prometheus.Metric
+	done := make(chan struct{})
+	go func() {
+		for m := range out {
+			metrics = append(metrics, m)
+		}
+		close(done)
+	}()
+	e.collect(out)
+	close(out)
+	<-done
+	return metrics
+}
+
+// collect pings SQL Server and, when reachable, runs every enabled scraper
 // concurrently under a single shared deadline (ConnTimeout), so the total
 // scrape time is bounded by one timeout instead of the sum of all scrapers.
-// Collect returns by the deadline plus deadlineGrace even when the driver
+// collect returns by the deadline plus deadlineGrace even when the driver
 // ignores the cancelled context: a ping that has not returned reports
 // sqlserver_up 0, and a scraper that has not returned reports success 0.
-func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
+func (e *Exporter) collect(ch chan<- prometheus.Metric) {
 	timeout := e.timeout
 	if timeout <= 0 {
 		timeout = db.CurrentOptions().ConnTimeout

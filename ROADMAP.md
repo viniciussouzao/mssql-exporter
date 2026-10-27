@@ -205,11 +205,6 @@ first; implement in this order.
   default) and cleanup purges old intervals, so totals can decrease and break
   `rate()`; per-database scans are expensive and series churn is the same as
   `top_queries`. The Query Store UI remains the better tool for analysis
-- Concurrent scrapes: with 5 or more simultaneous `/metrics` requests the
-  fixed pool of 5 connections saturates and collectors fail with `context
-  deadline exceeded` behind an HTTP 200 (HML-034). Let simultaneous scrapes
-  wait for the collection in flight and share its result (singleflight), and
-  make the pool size configurable
 - Windows OS collector: `os_disk_read_queue_length` / `os_disk_write_queue_length`
   are exposed as gauges over raw cumulative WMI counters; fixing needs a new
   name/type aligned with Linux (pending from HML-003)
@@ -262,3 +257,6 @@ first; implement in this order.
 - [x] `volumes` on SQL Server on Linux: the label falls back to the
   directory of the database files when `sys.dm_os_volume_stats` returns no
   mount point (HML-032, HML-038)
+- [x] Concurrent scrapes: a scrape that arrives while another one is
+  collecting waits for it and shares its result (singleflight), and the pool
+  size is configurable with `--sqlserver.max-connections` (HML-034)
