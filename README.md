@@ -470,7 +470,9 @@ Metric names are stable and follow Prometheus best practices. Selected examples:
     `sys.databases` (the counter also has instances for hidden databases such
     as `mssqlsystemresource`). On Amazon RDS the counter has no instance for
     `master`, `model`, `msdb` and `rdsadmin`, so they have no series there;
-    user databases are reported normally
+    user databases are reported normally. On Azure SQL Managed Instance the
+    counter instance of a user database is its `physical_database_name` (a
+    GUID); the series still carries the database name
 
 - Blocking
   - `sqlserver_blocked_sessions 0` (from `sys.dm_os_waiting_tasks`; a parallel
