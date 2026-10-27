@@ -181,7 +181,9 @@ first; implement in this order.
   `SLEEP%`, `XE%` and `BROKER_%` are skipped), e.g. `LAZYWRITER_SLEEP`,
   `CHECKPOINT_QUEUE`, `HADR_WORK_QUEUE`, `DIRTY_PAGE_POLL`, keeping waits
   that slow queries such as `HADR_SYNC_COMMIT`; the RDS dashboard applies
-  the same list in PromQL meanwhile (HML-031). Changes the series exposed:
+  the same list in PromQL meanwhile (HML-031). On Azure SQL Managed Instance
+  the top waits are all background ones: `SOS_WORK_DISPATCHER`,
+  `HADR_WORK_QUEUE`, `DISPATCHER_QUEUE_SEMAPHORE`, `LOGMGR_QUEUE` (HML-039). Changes the series exposed:
   make it a documented default, possibly with an option to keep everything
 - Automatic `sqlserver_instance` label resolved on the first successful
   connection instead of only at startup (today it stays empty until a
