@@ -224,14 +224,29 @@ first; implement in this order.
 - Replication status
 - Unit tests for collectors (mock `*sql.DB`), integration tests with
   SQL Server in Docker
-- Microsoft Entra ID authentication (Azure SQL Managed Instance and SQL
-  Database): `go-mssqldb/azuread` and the `azuresql` driver when the DSN has
-  `fedauth=` (managed identity, service principal, default credential)
-- Azure SQL Database mode: one connection per database (the unit is the
-  database, no cross-database queries), `sys.dm_db_resource_stats`, elastic
-  pools and geo-replication instead of AGs; detect it with
-  `SERVERPROPERTY('EngineEdition') = 5`. Size it after the reconnaissance
-  pass of the Azure homologation phase
+- Azure SQL Database mode: one exporter per database (the unit is the
+  database, no cross-database queries); detect it with
+  `SERVERPROPERTY('EngineEdition') = 5`. The reconnaissance (HML-053) sized
+  it: today 10 of 19 collectors work with a contained user (11 with a login
+  in `##MS_ServerStateReader##`, which adds `tempdb`). The mode would
+  - turn off, with one clear log line instead of an error every scrape, the
+    collectors with no equivalent: `availability_groups`,
+    `database_mirroring`, `backups` and `agent_jobs` (`msdb` is not
+    reachable, error 40515; backups are managed by Azure);
+  - switch `databases`, `io_file_stats` and `volumes` from
+    `sys.master_files` (missing) to `sys.database_files` +
+    `FILEPROPERTY(name, 'SpaceUsed')` and
+    `sys.dm_io_virtual_file_stats(DB_ID(), NULL)`; skip
+    `sys.dm_os_sys_memory` in `server_info`;
+  - read `sys.dm_db_wait_stats` instead of `sys.dm_os_wait_stats` (11 wait
+    types with data instead of 1,760 series per metric) and bound the
+    memory clerk series (324, many named by GUID);
+  - add the resource governance view `sys.dm_db_resource_stats` (CPU, data
+    IO, log write, memory, workers and sessions as % of the service
+    objective limits, every 15 s, UTC);
+  - document that a scrape keeps a serverless database awake (no
+    auto-pause, the free amount keeps being consumed). Elastic pools and
+    geo-replication come later
 - Helm chart and a homologation of the exporter on GKE, after the first
   public release
 
