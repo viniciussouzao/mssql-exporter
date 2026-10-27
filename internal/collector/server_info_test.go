@@ -36,6 +36,40 @@ func TestServerInfoScrapeHappyPath(t *testing.T) {
 	}
 }
 
+// Azure SQL Managed Instance returns NULL for SERVERPROPERTY('MachineName');
+// the other properties must still be exposed.
+func TestServerInfoScrapeNullPropertyOmitsOnlyThatMetric(t *testing.T) {
+	db, mock := newSQLMock(t)
+
+	mock.ExpectQuery("SERVERPROPERTY").WillReturnRows(
+		sqlmock.NewRows([]string{"hostname", "servername", "edition", "product_version", "engine_edition", "is_hadr_enabled"}).
+			AddRow(nil, "mi1.abc.database.windows.net", "SQL Azure", "12.0.2000.8", 8, 0))
+	mock.ExpectQuery("FROM sys.dm_os_sys_info").WillReturnRows(
+		sqlmock.NewRows([]string{"cpu_count"}).AddRow(4))
+	mock.ExpectQuery("FROM sys.dm_os_sys_memory").WillReturnRows(
+		sqlmock.NewRows([]string{"total_physical_memory_mb", "available_physical_memory_mb"}).
+			AddRow(23_000_000, 9_000_000))
+
+	c := NewServerInfoCollector(db)
+	families := gatherScraper(t, c)
+
+	if _, ok := metricValue(families, "sqlserver_hostname", nil); ok {
+		t.Error("hostname present, want omitted since MachineName is NULL")
+	}
+	if v, ok := metricValue(families, "sqlserver_servername", map[string]string{"servername": "mi1.abc.database.windows.net"}); !ok || v != 1 {
+		t.Errorf("servername = %v (found=%v), want 1", v, ok)
+	}
+	if v, ok := metricValue(families, "sqlserver_edition", map[string]string{"edition": "SQL Azure"}); !ok || v != 1 {
+		t.Errorf("edition = %v (found=%v), want 1", v, ok)
+	}
+	if v, ok := metricValue(families, "sqlserver_engine_edition", nil); !ok || v != 8 {
+		t.Errorf("engine_edition = %v (found=%v), want 8", v, ok)
+	}
+	if v, ok := metricValue(families, "sqlserver_is_hadr_enabled", nil); !ok || v != 0 {
+		t.Errorf("is_hadr_enabled = %v (found=%v), want 0", v, ok)
+	}
+}
+
 func TestServerInfoScrapePartialFailureStillEmitsOtherMetrics(t *testing.T) {
 	db, mock := newSQLMock(t)
 
