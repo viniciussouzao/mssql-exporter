@@ -27,7 +27,7 @@ de 2026-10-20, em outras nuvens (Google Cloud SQL e Azure).
 | HML-016 | Driver `denisenkom/go-mssqldb` arquivado: migrar para `microsoft/go-mssqldb` | EC2 Windows (01+02) | média | resolvido (v0.5.0) |
 | HML-017 | Rolling upgrade SQL Server 2019 → 2022 (02) → 2025 (01, 02) com AG, mirroring e log shipping (validação) | EC2 Windows (01+02) | — | resolvido |
 | HML-018 | Estado do mirroring some (sem série) quando o banco espelhado não está acessível | EC2 Windows (01+02) | média | resolvido (documentação, v0.5.0) |
-| HML-019 | `volumes` estoura o timeout de query quando um banco está trocando de estado | EC2 Windows (01+02) | baixa | adiado (ROADMAP) |
+| HML-019 | `volumes` estoura o timeout de query quando um banco está trocando de estado | EC2 Windows (01+02) | baixa | resolvido (v0.13.4) |
 | HML-020 | `blocking` falha com erro 983 logo após o SQL Server subir (réplica do AG em `RESOLVING`) | EC2 Windows (02) | baixa | resolvido (v0.5.0) |
 | HML-021 | `sqlserver_sessions_by_login` com carga de vários logins (validação) | EC2 Windows (01) | — | resolvido |
 | HML-022 | Coletor `active_queries`: requests longas e transações abertas (validação) | EC2 Windows (01) | — | resolvido |
@@ -1638,7 +1638,7 @@ inventar um valor que o SQL Server não informa.
 - **Ambiente:** EC2 01 + 02, durante o HML-017
 - **Encontrado em:** 2026-10-14
 - **Severidade:** baixa (uma coleta parcial por evento)
-- **Status:** adiado (ROADMAP, Later)
+- **Status:** resolvido (v0.13.4)
 
 **Observado**
 
@@ -1660,6 +1660,18 @@ falha.
 Filtrar a query por `sys.databases.state IN (0, 1)` (ONLINE/RESTORING), o que
 reduz a janela mas não elimina a corrida se a transição começar durante a
 query. Ganho pequeno; decidir depois.
+
+**Correção (2026-10-27)** — branch `fix/quick-fixes`:
+
+- `volumes` só considera arquivos de bancos `ONLINE` (0) ou `RESTORING` (1),
+  para manter os volumes das secundárias de AG e log shipping. Um volume que
+  hospede apenas bancos em outro estado (`RECOVERING`, `SUSPECT`,
+  `OFFLINE`…) deixa de aparecer enquanto o banco estiver nesse estado.
+- Validado no container `mssql-2025-agent` (Linux): com `QSOffTest` em
+  `OFFLINE`, a query passa a ler 17 dos 19 arquivos e o volume continua
+  com os mesmos bytes; o banco voltou para `ONLINE` em seguida.
+- A corrida no meio de uma transição continua possível; o `scrape_timeout`
+  maior que o timeout de query (HML-013) segue absorvendo esse caso.
 
 ---
 
@@ -2329,7 +2341,8 @@ desfeita com `ROLLBACK`:
 - `volumes`: `sys.dm_os_volume_stats` devolve `NULL` em
   `volume_mount_point`, `logical_volume_name` e `file_system_type`; os bytes
   vêm certos (disco de 20 GB), mas a série sai com `volume_mount_point=""`.
-  Ponto a considerar: rótulo de fallback no coletor.
+  Ponto a considerar: rótulo de fallback no coletor. Resolvido na v0.13.4:
+  o rótulo passa a ser o diretório dos arquivos (`/var/opt/mssql/data/`).
 - Banco interno `gcloud_cloudsqladmin` em `databases`, `backups` e
   `log_used_percent`, como o `rdsadmin` no RDS. Em `sessions_by_login`
   aparecem as contas do Cloud SQL: `CloudDbSqlRoot`, `CloudDbSqlRoot_2`,

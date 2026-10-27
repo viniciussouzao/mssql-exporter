@@ -27,6 +27,27 @@ func TestVolumesScrapeHappyPath(t *testing.T) {
 	}
 }
 
+// SQL Server on Linux returns no mount point nor logical volume name: the
+// label falls back to the directory of the database file. Databases changing
+// state are skipped (HML-019).
+func TestVolumesScrapeLinuxFallbackAndStateFilter(t *testing.T) {
+	db, mock := newSQLMock(t)
+	expectEngineEdition(mock, 3)
+
+	rows := sqlmock.NewRows([]string{"mount_point", "total_bytes", "available_bytes"}).
+		AddRow("/var/opt/mssql/data/", 1000.0, 400.0)
+	mock.ExpectQuery(`(?s)NULLIF\(vs\.logical_volume_name, ''\),\s*LEFT\(mf\.physical_name, .*CHARINDEX\('/', REVERSE\(mf\.physical_name\)\).*WHERE d\.state IN \(0, 1\).*GROUP BY mount_point`).
+		WillReturnRows(rows)
+
+	c := NewVolumesCollector(db)
+	families := gatherScraper(t, c)
+
+	labels := map[string]string{"volume_mount_point": "/var/opt/mssql/data/"}
+	if v, ok := metricValue(families, "sqlserver_volume_total_bytes", labels); !ok || v != 1000 {
+		t.Errorf("volume_total_bytes = %v (found=%v), want 1000", v, ok)
+	}
+}
+
 func TestVolumesScrapeQueryError(t *testing.T) {
 	db, mock := newSQLMock(t)
 	expectEngineEdition(mock, 3)

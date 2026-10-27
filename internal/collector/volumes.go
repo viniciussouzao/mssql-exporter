@@ -100,22 +100,34 @@ func (c *SQLServerVolumes) scrapeInstanceStorage(ctx context.Context, ch chan<- 
 }
 
 func (c *SQLServerVolumes) scrapeVolumes(ctx context.Context, ch chan<- prometheus.Metric) error {
-	// volume_mount_point can be NULL on SQL Server on Linux; fall back to the
-	// logical volume name so the series still has a usable label.
+	// SQL Server on Linux (Cloud SQL, the Docker images) returns NULL mount
+	// point, volume id and logical volume name; fall back to the directory of
+	// the database file so the series still has a usable label. Files in
+	// different directories of the same file system then report the same
+	// bytes under separate labels.
 	// dm_os_volume_stats is evaluated once per database file, so under write
 	// load files on the same volume can report different available_bytes in a
 	// single execution. Group by mount point (DISTINCT is not enough) so each
 	// volume yields exactly one row; otherwise the duplicate series make the
 	// whole /metrics response fail.
+	// Only ONLINE and RESTORING (AG and log shipping secondaries) databases:
+	// dm_os_volume_stats waits on a database that is changing state and the
+	// query runs into the scrape timeout (HML-019).
 	rows, err := c.db.QueryContext(ctx, `
 		SELECT mount_point, MAX(total_bytes), MIN(available_bytes)
 		FROM (
 			SELECT
-				COALESCE(NULLIF(vs.volume_mount_point, ''), vs.logical_volume_name, '') AS mount_point,
+				COALESCE(
+					NULLIF(vs.volume_mount_point, ''),
+					NULLIF(vs.logical_volume_name, ''),
+					LEFT(mf.physical_name, LEN(mf.physical_name) - CHARINDEX('/', REVERSE(mf.physical_name)) + 1)
+				) AS mount_point,
 				vs.total_bytes,
 				vs.available_bytes
 			FROM sys.master_files mf
+			JOIN sys.databases d ON d.database_id = mf.database_id
 			CROSS APPLY sys.dm_os_volume_stats(mf.database_id, mf.file_id) vs
+			WHERE d.state IN (0, 1)
 		) v
 		GROUP BY mount_point
 	`)
