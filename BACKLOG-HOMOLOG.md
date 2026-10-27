@@ -60,6 +60,8 @@ de 2026-10-20, em outras nuvens (Google Cloud SQL e Azure).
 | HML-049 | Coletores por banco no MI com `CONNECT ANY DATABASE` (validação) | Azure SQL Managed Instance (GP) | — | resolvido |
 | HML-050 | TLS no MI: `encrypt=true` e `encrypt=strict` com CA pública, sem arquivo de certificado (validação) | Azure SQL Managed Instance (GP) | — | resolvido (README) |
 | HML-051 | Failover gerenciado do MI com carga: ≈80 s de `sqlserver_up 0`, nenhum scrape perdido (validação) | Azure SQL Managed Instance (GP) | — | resolvido |
+| HML-052 | Dashboard para Managed Instance: exporter + Azure Monitor (validação) | Azure SQL Managed Instance (GP) | — | resolvido |
+| HML-053 | Reconhecimento do Azure SQL Database: 10 de 19 coletores funcionam; o resto depende de `sys.master_files`, `msdb` e DMVs de servidor (validação) | Azure SQL Database (serverless GP, free offer) | — | adiado (ROADMAP) |
 
 ## Encerramento da fase EC2 (2026-10-15)
 
@@ -282,10 +284,10 @@ e nomes físicos diferentes dos de um SQL Server instalado.
    suporta; ficou no ROADMAP (Later), sem prioridade.
 6. Failover gerenciado do MI (`az sql mi failover`): `sqlserver_up` e volta
    sozinho, como no RDS (HML-030) e no Cloud SQL (HML-036).
-7. Dashboard exporter + Azure Monitor.
+7. Dashboard exporter + Azure Monitor (HML-052).
 8. SQL Database pelo free offer, só como reconhecimento: um exporter por
    banco, coletores incompatíveis desligados, para dimensionar o modo novo
-   (ROADMAP).
+   (ROADMAP; HML-053).
 
 ---
 
@@ -2907,3 +2909,89 @@ gerenciado a aceitar TDS 8.0, depois do RDS (HML-027); o Cloud SQL não aceita
 
 Comparação: RDS Multi-AZ ≈45 s (HML-030), Cloud SQL HA ≈60–77 s (HML-036),
 MI General Purpose ≈80 s.
+
+---
+
+## HML-052 — Dashboard para Managed Instance: exporter + Azure Monitor (validação)
+
+- **Ambiente:** Grafana 13.1 local com o Prometheus (exporter `0.13.2` na
+  bastion, pelo túnel) e um datasource Azure Monitor autenticado por app
+  registration (Terraform: client secret, `Monitoring Reader` só no resource
+  group)
+- **Encontrado em:** 2026-10-27
+- **Severidade:** — (validação)
+- **Status:** resolvido (`dashboards/mssql-exporter-azure-mi-dashboard.json`)
+
+Mesmo modelo dos dashboards do RDS (HML-031) e do Cloud SQL (HML-035). O
+Azure Monitor publica só 7 métricas para o MI (`avg_cpu_percent`,
+`virtual_core_count`, `storage_space_used_mb`, `reserved_storage_mb`,
+`io_requests`, `io_bytes_read`, `io_bytes_written`): sem memória, conexões
+ou latência, que ficam com o exporter.
+
+- As variáveis de assinatura, resource group e instância (consultas do
+  próprio datasource) se resolvem sozinhas.
+- As 7 métricas do Azure Monitor trazem dados. Das queries do Prometheus, 52
+  com dados e 10 vazias, todas esperadas: `top_query_info` (texto
+  desligado), Always On (o General Purpose não usa AG) e log retido por
+  motivo não rotineiro (nenhum no momento).
+- As correlações mostram a carga e o failover do HML-051 nas duas fontes. O
+  storage usado do Azure Monitor e o do exporter se sobrepõem (≈369 MB),
+  porque os dois leem o `sys.server_resource_stats`.
+- O Azure Monitor manda a unidade da métrica (`Count` para o storage em MB),
+  que sobrescreve a do painel; o dashboard fixa a unidade nas séries do Azure
+  Monitor.
+- Health check do datasource: Azure Monitor e Resource Graph OK; "No Log
+  Analytics workspaces found" é esperado (não usamos Log Analytics).
+
+---
+
+## HML-053 — Reconhecimento do Azure SQL Database: 10 de 19 coletores funcionam; o resto depende de `sys.master_files`, `msdb` e DMVs de servidor (validação)
+
+- **Ambiente:** servidor lógico `mssql-exporter-hml-sqldb-*` em `westus3`,
+  endpoint público liberado só para a bastion e o operador; banco `hml`
+  serverless `GP_S_Gen5_2` pelo free offer (pausa quando o limite grátis
+  acaba). `EngineEdition` 5, `ProductVersion` `12.0.2000.8`, `@@SERVERNAME`
+  sem o domínio. Exporter `0.13.2` temporário na bastion, com os opt-in
+  ligados
+- **Encontrado em:** 2026-10-27
+- **Severidade:** — (reconhecimento)
+- **Status:** adiado (ROADMAP: modo SQL Database)
+
+**Logins testados** (o Azure exige senha complexa: o `123` dos outros
+ambientes é recusado)
+
+- Usuário contido `usr_exporter` no banco, com `VIEW DATABASE STATE` e
+  `VIEW DEFINITION`.
+- Login `usr_exporter_srv` no `master`, membro do `##MS_ServerStateReader##`,
+  com usuário no banco: a única diferença é o `tempdb`, que o usuário contido
+  não lê (`VIEW DATABASE PERFORMANCE STATE permission denied in database
+  'tempdb'`).
+
+**Coletores**
+
+| Situação | Coletores |
+|---|---|
+| `success 1` | `sessions`, `active_queries`, `blocking`, `perf_counters`, `schedulers`, `memory_clerks`, `wait_stats`, `top_queries`, `query_store`, `index_fragmentation` |
+| `success 1` só com o login de servidor | `tempdb` |
+| `sys.master_files` não existe (208) | `volumes`, `io_file_stats`, `databases` (estado e recovery model saem antes da falha) |
+| `sys.dm_os_sys_memory` não existe (208) | `server_info` (edição, versão e servername saem) |
+| objeto não existe (208) | `database_mirroring`, `availability_groups` |
+| `msdb` inacessível (40515: `Reference to database and/or server name … is not supported`) | `backups`, `agent_jobs` |
+
+- ≈5 900 séries para um banco quase vazio: o `wait_stats` lê o
+  `sys.dm_os_wait_stats` e emite 1 760 tipos de espera (×3 métricas); o
+  `memory_clerks`, 324 séries, muitas com nome em GUID.
+- Não medido: a pausa automática do serverless (60 min sem conexão). Um
+  scrape a cada 15 s conecta o tempo todo, então o banco não pausa e consome
+  o limite grátis.
+
+**Equivalentes lidos pelo usuário contido**
+
+| No lugar de | Usar |
+|---|---|
+| `sys.master_files` | `sys.database_files` + `FILEPROPERTY(name, 'SpaceUsed')` (dados 32 MB/20 MB usados, log 8 MB/1 MB) |
+| `sys.dm_io_virtual_file_stats(NULL, NULL)` + `sys.master_files` | `sys.dm_io_virtual_file_stats(DB_ID(), NULL)` (2 arquivos) |
+| `sys.dm_os_wait_stats` | `sys.dm_db_wait_stats` (11 tipos com valor contra 106 no `dm_os`) |
+| CPU/memória do host | `sys.dm_db_resource_stats`: CPU, IO de dados, escrita de log, memória, workers e sessões em % do limite do service objective, a cada 15 s, em UTC |
+
+O desenho do modo SQL Database ficou no ROADMAP (Later).

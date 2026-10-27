@@ -747,8 +747,9 @@ during a Cloud SQL failover): a ping that does not return reports
 
 Ready-to-use dashboards are included in [`dashboards/`](dashboards/): a
 general one, one for **Amazon RDS** that shows the exporter's engine
-metrics next to the host metrics from CloudWatch, and one for **Google Cloud
-SQL** that does the same with Cloud Monitoring. See
+metrics next to the host metrics from CloudWatch, one for **Google Cloud
+SQL** that does the same with Cloud Monitoring, and one for **Azure SQL
+Managed Instance** with Azure Monitor. See
 [`dashboards/README.md`](dashboards/README.md) for import instructions.
 
 ## Security
