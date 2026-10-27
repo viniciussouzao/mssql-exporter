@@ -47,6 +47,14 @@ de 2026-10-20, em outras nuvens (Google Cloud SQL e Azure).
 | HML-036 | Conversão para HA regional e failover do Cloud SQL (validação) | Cloud SQL (SQL Server 2022 SE) | — | resolvido |
 | HML-037 | Scrape inteiro perdido quando o servidor para de responder sem fechar a conexão | Cloud SQL (SQL Server 2022 SE) | média | resolvido (v0.12.1) |
 | HML-038 | SQL Server Express sem Agent (validação local) | Docker local (SQL Server 2025 Express) | — | resolvido |
+| HML-039 | Linha de base no SQL Managed Instance: permissões, coletores e carga (validação) | Azure SQL Managed Instance (GP) | — | resolvido |
+| HML-040 | Free Trial da Azure: cota de Managed Instance só em `westus3`, sem VMs série B e 404 ao reaproveitar o nome do resource group (ambiente) | Azure SQL Managed Instance (GP) | — | resolvido |
+| HML-041 | SQL pelo túnel SSH não chega ao MI: o gateway exige o nome da instância e redireciona para o nó (ambiente) | Azure SQL Managed Instance (GP) | baixa | resolvido (T-SQL pela bastion) |
+| HML-042 | `server_info` falha inteiro com `MachineName` NULL no MI | Azure SQL Managed Instance (GP) | média | resolvido (v0.12.2) |
+| HML-043 | `volumes` no MI: `total_bytes` é o tamanho dos arquivos, não do volume (disponível acima de 100%) | Azure SQL Managed Instance (GP) | média | resolvido (v0.13.0) |
+| HML-044 | `database_log_used_percent` sem os bancos de usuário no MI (contador pelo nome físico) | Azure SQL Managed Instance (GP) | baixa | resolvido (v0.13.1) |
+| HML-045 | `backups` sem nenhuma série no MI: `server_name` NULL no `backupset` | Azure SQL Managed Instance (GP) | média | aberto |
+| HML-046 | `requests_long_running` sempre com 1 em todas as faixas no MI: sessão de telemetria `TdService` | Azure SQL Managed Instance (GP) | baixa | aberto |
 
 ## Encerramento da fase EC2 (2026-10-15)
 
@@ -233,6 +241,45 @@ Fica para depois:
   Cloud SQL lendo os jobs do Agent.
 - **Próxima fase:** Azure (SQL Managed Instance e reconhecimento do SQL
   Database), como planejado na abertura.
+
+---
+
+## Abertura da fase Azure — SQL Managed Instance (2026-10-27)
+
+Terceira nuvem gerenciada, com o mesmo roteiro das anteriores. O Managed
+Instance é o primeiro ambiente com `EngineEdition` 8: o exporter vê uma
+instância completa (Agent, `msdb`, DMVs de servidor), mas com storage remoto
+e nomes físicos diferentes dos de um SQL Server instalado.
+
+**Ambiente**
+
+- Assinatura Free Trial (US$ 200 de crédito, 30 dias). Recursos em Terraform
+  (`azurerm` + `azapi`), fora do repositório, com plan/apply feitos pelo
+  operador; orçamento de US$ 50/mês com alertas.
+- Região `westus3` (HML-040). SQL Managed Instance pelo free offer: General
+  Purpose Gen5, 4 vCores, 64 GB, formato `SQLServer2022`, só endpoint
+  privado (VNet), fuso UTC-3 (`E. South America Standard Time`), agenda de
+  start/stop seg–sex 13h–21h para caber nas 720 vCore-hora do mês.
+- Bastion Ubuntu 26.04 (`Standard_D2s_v4`) na mesma VNet, com o exporter via
+  systemd, desligada às 21h10; Prometheus local pelo túnel SSH, como no RDS e
+  no Cloud SQL. T-SQL ad hoc roda na bastion com `go-sqlcmd` (HML-041).
+
+**Roteiro** (cada item vira um HML ao ser executado)
+
+1. Linha de base: login mínimo, coletores padrão com carga do
+   `hack/loadgen` (HML-039).
+2. Diferenças do MI nos coletores: `server_info`, `volumes`,
+   `log_used_percent`, `backups` e `active_queries` (HML-042 a HML-046).
+3. Coletores por banco (`index_fragmentation`, `query_store`) com
+   `CONNECT ANY DATABASE`.
+4. TLS: `encrypt=true` (em uso) e `encrypt=strict`.
+5. Autenticação Microsoft Entra ID no lugar do login SQL.
+6. Failover gerenciado do MI (`az sql mi failover`): `sqlserver_up` e volta
+   sozinho, como no RDS (HML-030) e no Cloud SQL (HML-036).
+7. Dashboard exporter + Azure Monitor.
+8. SQL Database pelo free offer, só como reconhecimento: um exporter por
+   banco, coletores incompatíveis desligados, para dimensionar o modo novo
+   (ROADMAP).
 
 ---
 
@@ -2451,3 +2498,252 @@ exporter não tem lógica por edição.
   sem erro, média de 78 batch requests/s (pico 118), até 16 sessões
   bloqueadas e 16 requests acima de 10 s; scrape máximo de 0,23 s, nenhum
   coletor com `success 0`; `top_queries` com 50 queries.
+
+---
+
+## HML-039 — Linha de base no SQL Managed Instance: permissões, coletores e carga (validação)
+
+- **Ambiente:** Azure SQL Managed Instance pelo free offer (General Purpose
+  Gen5, 4 vCores, 64 GB, formato `SQLServer2022`) em `westus3`, só endpoint
+  privado, fuso UTC-3; host Windows Server 2025 com 22 GB e 4 CPUs visíveis.
+  Exporter via systemd na bastion Ubuntu 26.04 da mesma VNet, DSN com
+  `encrypt=true`, lido pelo Prometheus local por túnel. Recursos em
+  Terraform, fora do repositório
+- **Encontrado em:** 2026-10-27
+- **Severidade:** — (validação)
+- **Status:** resolvido
+
+**Permissões**
+
+O admin SQL da instância (`sqladmin`) é `sysadmin`, então os grants da EC2
+funcionam sem adaptação, inclusive no `msdb`:
+
+```sql
+CREATE LOGIN [usr_exporter] WITH PASSWORD = '…', CHECK_POLICY = OFF, CHECK_EXPIRATION = OFF;
+GRANT VIEW SERVER STATE TO [usr_exporter];
+GRANT VIEW ANY DEFINITION TO [usr_exporter];
+USE msdb;
+CREATE USER usr_exporter FOR LOGIN usr_exporter;
+GRANT SELECT ON sysjobs TO usr_exporter;
+GRANT SELECT ON sysjobhistory TO usr_exporter;
+```
+
+Sem os grants do `msdb`, o `agent_jobs` fica com `success 0`, como na EC2
+(HML-002).
+
+**Plataforma**
+
+- `SERVERPROPERTY`: `EngineEdition` 8, `Edition` `SQL Azure`,
+  `ProductVersion` `12.0.2000.8` (fixo, não segue a versão do motor);
+  `@@SERVERNAME` é o FQDN da instância; `MachineName`,
+  `ComputerNamePhysicalNetBIOS` e `InstanceName` são NULL (HML-042).
+- Bancos de sistema e de usuário ficam no blob storage remoto
+  (`physical_name` `https://…blob.core.windows.net/…` no `io_file_stats`); só
+  o `tempdb` fica no SSD local (`C:\`, 12 arquivos de 16 MB). Ver HML-043.
+- `sessions_by_login` mostra as contas do serviço: `NT AUTHORITY\SYSTEM` e
+  `User Manager\ContainerAdministrator`.
+- O `availability_groups` não mostra nada (o HA do General Purpose não aparece
+  como AG) e o `agent_jobs` não tem séries (nenhum job criado).
+- `wait_stats`: 1 499 tipos de espera expostos. No topo, por tempo
+  acumulado, só esperas de fundo do serviço: `SOS_WORK_DISPATCHER`,
+  `HADR_WORK_QUEUE`, `DISPATCHER_QUEUE_SEMAPHORE` e `LOGMGR_QUEUE`; a
+  primeira espera de carga é `LCK_M_X`. Reforça o filtro de esperas ociosas
+  do ROADMAP (HML-031).
+
+**Coletores**
+
+Na primeira coleta, 14 dos 16 coletores padrão estavam em `success 1`. As
+falhas eram o `server_info` (HML-042) e o `agent_jobs`, que rodou antes dos
+grants do `msdb`. Depois dos grants e das correções, os 16 com `success 1`.
+`volumes`, `log_used_percent`, `backups` e `requests_long_running` precisaram
+de análise própria (HML-043 a HML-046).
+
+**Carga (`hack/loadgen` na bastion, 10 logins × 2 workers, 30 min, 14:55–15:25 UTC)**
+
+- ≈115 300 statements sem erro no loadgen; ≈67 batch requests/s em média.
+- Até 16 sessões bloqueadas (espera máxima de 28,6 s) e transação aberta mais
+  antiga de 35 s, na fila do `blocker`; nenhum deadlock.
+- Scrape máximo de 1,31 s; os coletores mais lentos foram o `perf_counters`
+  (0,77 s) e o `tempdb` (0,46 s); nenhum coletor com `success 0`.
+- Latência de escrita do `LoadTestDB`: 33 ms nos dados e 4,3 ms no log, por
+  causa do storage remoto do General Purpose.
+- `log_reuse_wait` do `LoadTestDB` em `OLDEST_PAGE` durante a carga.
+
+---
+
+## HML-040 — Free Trial da Azure: cota de Managed Instance só em `westus3`, sem VMs série B e 404 ao reaproveitar o nome do resource group (ambiente)
+
+- **Ambiente:** assinatura Free Trial (`FreeTrial_2014-09-01`), Terraform com
+  `azurerm` 5.11 e `azapi` 2.13
+- **Encontrado em:** 2026-10-27
+- **Severidade:** — (ambiente)
+- **Status:** resolvido
+
+- **Cota de MI:** 0 vCores em `eastus`, `eastus2`, `centralus`,
+  `southcentralus`, `westus2`, `brazilsouth`, `canadacentral`,
+  `northeurope` e `westeurope`; 16 em `westus3`. O ambiente foi para
+  `westus3`.
+- **VM da bastion:** a assinatura não oferece a série B (nem a B1s gratuita);
+  a mais barata disponível foi a `Standard_D2s_v4` (US$ 0,096/h), com
+  desligamento automático às 21h10.
+- **Resource providers:** a primeira execução falha até Compute,
+  Consumption, DevTestLab, Network e Sql serem registrados na assinatura.
+- **Free offer do MI:** o `azurerm` 5.11 não expõe o free offer; o MI foi
+  criado pelo `azapi` com `pricingModel = "Freemium"`
+  (`Microsoft.Sql/managedInstances@2025-01-01`), junto com a agenda de
+  start/stop. Criação em 6 min 14 s, com a sub-rede nova.
+- **Nome do resource group:** recriar o grupo com o mesmo nome em outra
+  região (de `eastus2` para `westus3`) fez o ARM responder 404 para recursos
+  que acabavam de ser criados (`Root object was present, but now absent`):
+  NSG, NIC e VNet sumiam do state de forma intermitente. Resolvido com a
+  região no nome (`mssql-exporter-hml-westus3`). As sub-redes também
+  precisaram de `replace_triggered_by` na VNet, porque o ID delas não muda
+  quando a VNet é recriada.
+
+---
+
+## HML-041 — SQL pelo túnel SSH não chega ao MI: o gateway exige o nome da instância e redireciona para o nó (ambiente)
+
+- **Ambiente:** o do HML-039; Mac → túnel SSH na bastion
+  (`-L 14332:<fqdn>:1433`) → endpoint privado do MI
+- **Encontrado em:** 2026-10-27
+- **Severidade:** baixa (afeta só o acesso ad hoc; o exporter na VNet
+  conecta normalmente)
+- **Status:** resolvido (T-SQL pela bastion)
+
+- Conectando em `localhost:14332`, o gateway do MI recusa o login com o
+  erro 40532, porque não sabe para qual instância rotear.
+- Com o login no formato `usuario@instancia`, o gateway aceita, mas
+  responde com um redirecionamento para o IP do nó na sub-rede do MI
+  (`10.20.1.x:1433`), que o Mac não alcança pelo túnel.
+- O exporter na bastion não tem o problema: ele resolve o FQDN e segue o
+  redirecionamento dentro da VNet.
+- T-SQL de teste e de administração roda na bastion com `go-sqlcmd`, a
+  partir de arquivos `.sql` copiados por `scp` (`sqlcmd -i`).
+
+---
+
+## HML-042 — `server_info` falha inteiro com `MachineName` NULL no MI
+
+- **Ambiente:** o do HML-039, exporter `0.12.1`
+- **Encontrado em:** 2026-10-27
+- **Severidade:** média (perde edição, versão e `engine_edition` da
+  instância)
+- **Status:** resolvido (v0.12.2)
+
+No MI, `SERVERPROPERTY('MachineName')`, `ComputerNamePhysicalNetBIOS` e
+`InstanceName` são NULL. A linha de propriedades era lida em strings do Go,
+e um único NULL derrubava a linha inteira:
+
+```
+ERROR collector scrape failed collector=server_info error="failed to query server properties: sql: Scan error on column index 0, name \"hostname\": converting NULL to string is unsupported"
+```
+
+`sqlserver_servername`, `sqlserver_edition`, `sqlserver_product_version`,
+`sqlserver_engine_edition` e `sqlserver_is_hadr_enabled` sumiam, e o coletor
+ficava em `success 0` em todas as coletas. CPU e memória continuavam, porque
+vêm de outras queries.
+
+**Correção:** propriedades lidas como `sql.NullString`/`sql.NullInt64`; só a
+métrica da propriedade NULL é omitida (no MI, só `sqlserver_hostname`).
+Teste com uma linha igual à do MI; README documenta o comportamento.
+
+---
+
+## HML-043 — `volumes` no MI: `total_bytes` é o tamanho dos arquivos, não do volume (disponível acima de 100%)
+
+- **Ambiente:** o do HML-039, exporter `0.12.2`
+- **Encontrado em:** 2026-10-27
+- **Severidade:** média (painel e alerta de disco sem sentido no MI)
+- **Status:** resolvido (v0.13.0)
+
+No MI, `sys.dm_os_volume_stats` não descreve o volume: `total_bytes` é a
+soma dos arquivos no volume e fica menor que `available_bytes`.
+
+| Volume | O que é | `total_bytes` | `available_bytes` |
+|---|---|---|---|
+| `http://` | blob storage remoto (bancos de sistema e de usuário) | 304 MB | 63,7 GB |
+| `C:\` | SSD local (só o `tempdb`) | 192 MB | 95,8 GB |
+
+O painel "Volume Space Available (%)" mostrava ≈21 000% e ≈51 000%, e um
+alerta de pouco espaço montado nessas séries nunca dispararia.
+
+**Correção:** o `volumes` consulta `SERVERPROPERTY('EngineEdition')`; no MI
+(8) não emite as séries de volume e reporta o storage da instância pela
+amostra mais recente de `master.sys.server_resource_stats` (coberta pelo
+`VIEW SERVER STATE`): `sqlserver_instance_storage_reserved_bytes` (64 GiB) e
+`sqlserver_instance_storage_used_bytes` (336 MiB na validação; 99,49%
+disponível no novo painel). A view é publicada com alguns minutos de atraso e
+vem vazia logo depois da criação da instância; sem linha, nada é emitido.
+Dashboard com "Instance Storage Available (%)" e "Instance Storage Used vs
+Reserved". Nas outras plataformas, só uma query de `SERVERPROPERTY` a mais
+por scrape (validado no SQL Server 2025 em Docker).
+
+---
+
+## HML-044 — `database_log_used_percent` sem os bancos de usuário no MI (contador pelo nome físico)
+
+- **Ambiente:** o do HML-039, exporter `0.13.0`, durante a carga
+- **Encontrado em:** 2026-10-27
+- **Severidade:** baixa (os bancos de sistema continuam; o uso do log dos
+  bancos de usuário some)
+- **Status:** resolvido (v0.13.1)
+
+No MI, a instância do contador `Percent Log Used` de um banco de usuário é o
+`physical_database_name` (um GUID), não o nome: o `LoadTestDB` aparece como
+`17f319d1-1099-430f-8903-7c77b206bf6b`. O join do `databases` pelo nome
+descartava todos os bancos de usuário. O contador também tem instâncias para
+os nomes físicos de `master` (`replicatedmaster`) e `model`
+(`managed_model`), com valores diferentes dos de `master` e `model`.
+
+**Correção:** só no MI, o contador é casado pelo nome ou pelo
+`physical_database_name`, com preferência pelo nome (`CROSS APPLY … TOP (1)`),
+para `master` e `model` não pegarem o valor da instância física. Nas outras
+plataformas a query não muda; um teste garante que ela não usa
+`physical_database_name`, que só existe a partir do SQL Server 2019. A
+consulta de `EngineEdition` virou um helper compartilhado com o `volumes`.
+Validado no MI (`LoadTestDB` 1, `master` 44, `model` 19) e no SQL Server
+2025 em Docker (séries iguais às de antes).
+
+---
+
+## HML-045 — `backups` sem nenhuma série no MI: `server_name` NULL no `backupset`
+
+- **Ambiente:** o do HML-039, exporter `0.13.1`
+- **Encontrado em:** 2026-10-27
+- **Severidade:** média (sem `sqlserver_backup_*` não há alerta de backup
+  atrasado no MI)
+- **Status:** aberto
+
+Os backups automáticos do MI aparecem no `msdb.dbo.backupset` (FULL do
+`LoadTestDB` na criação e LOG a cada ≈5 min durante a carga, depois a cada
+≈1 h), com `time_zone` -12 (UTC-3) correto. Mas `server_name` e
+`machine_name` vêm NULL, e `physical_device_name` também (`device_type` 9,
+URL). O coletor filtra `server_name = @@SERVERNAME` para não reportar backups
+restaurados de outro servidor (HML-012), então descarta todas as linhas e
+fica com `success 1` sem séries. Os bancos de sistema não têm histórico no
+`msdb`.
+
+Correção candidata: só no MI (`EngineEdition` 8), aceitar `server_name` NULL,
+como nas correções do HML-043 e do HML-044.
+
+---
+
+## HML-046 — `requests_long_running` sempre com 1 em todas as faixas no MI: sessão de telemetria `TdService`
+
+- **Ambiente:** o do HML-039, exporter `0.13.1`, sem carga
+- **Encontrado em:** 2026-10-27
+- **Severidade:** baixa (um alerta em
+  `sqlserver_requests_long_running{over_seconds="1800"} > 0` dispararia para
+  sempre no MI)
+- **Status:** aberto
+
+O `active_queries` já exclui as sessões de sistema (`is_user_process = 0`,
+98 requests no MI). Sobra uma sessão do serviço marcada como de usuário:
+`program_name` `TdService`, login `NT AUTHORITY\SYSTEM`, um `SELECT` em
+`suspended` com espera `XE_LIVE_TARGET_TVF` (leitura contínua de uma sessão
+de Extended Events), aberto desde a subida da instância (15 292 s na
+consulta). Ela conta 1 nas faixas de 10, 60, 300 e 1 800 s o tempo todo.
+
+Correção candidata: só no MI, ignorar essa sessão (`program_name =
+'TdService'` ou espera `XE_LIVE_TARGET_TVF`).
