@@ -119,9 +119,11 @@ func (c *SQLServerProperties) Scrape(ctx context.Context, ch chan<- prometheus.M
 		SERVERPROPERTY('IsHadrEnabled') AS is_hadr_enabled
 	`)
 
-	var hostname, servername, edition, productVersion string
-	var engineEdition int
-	var isHadrEnabled int
+	// SERVERPROPERTY returns NULL for properties the platform does not have
+	// (MachineName on Azure SQL Managed Instance): each NULL only omits its
+	// own metric.
+	var hostname, servername, edition, productVersion sql.NullString
+	var engineEdition, isHadrEnabled sql.NullInt64
 
 	if err := row.Scan(
 		&hostname,
@@ -133,12 +135,24 @@ func (c *SQLServerProperties) Scrape(ctx context.Context, ch chan<- prometheus.M
 	); err != nil {
 		errs = append(errs, fmt.Errorf("failed to query server properties: %w", err))
 	} else {
-		ch <- prometheus.MustNewConstMetric(c.hostname, prometheus.GaugeValue, 1, hostname)
-		ch <- prometheus.MustNewConstMetric(c.servername, prometheus.GaugeValue, 1, servername)
-		ch <- prometheus.MustNewConstMetric(c.edition, prometheus.GaugeValue, 1, edition)
-		ch <- prometheus.MustNewConstMetric(c.productVersion, prometheus.GaugeValue, 1, productVersion)
-		ch <- prometheus.MustNewConstMetric(c.engineEdition, prometheus.GaugeValue, float64(engineEdition))
-		ch <- prometheus.MustNewConstMetric(c.isHadrEnabled, prometheus.GaugeValue, float64(isHadrEnabled))
+		if hostname.Valid {
+			ch <- prometheus.MustNewConstMetric(c.hostname, prometheus.GaugeValue, 1, hostname.String)
+		}
+		if servername.Valid {
+			ch <- prometheus.MustNewConstMetric(c.servername, prometheus.GaugeValue, 1, servername.String)
+		}
+		if edition.Valid {
+			ch <- prometheus.MustNewConstMetric(c.edition, prometheus.GaugeValue, 1, edition.String)
+		}
+		if productVersion.Valid {
+			ch <- prometheus.MustNewConstMetric(c.productVersion, prometheus.GaugeValue, 1, productVersion.String)
+		}
+		if engineEdition.Valid {
+			ch <- prometheus.MustNewConstMetric(c.engineEdition, prometheus.GaugeValue, float64(engineEdition.Int64))
+		}
+		if isHadrEnabled.Valid {
+			ch <- prometheus.MustNewConstMetric(c.isHadrEnabled, prometheus.GaugeValue, float64(isHadrEnabled.Int64))
+		}
 	}
 
 	row = c.db.QueryRowContext(ctx, `SELECT cpu_count FROM sys.dm_os_sys_info`)

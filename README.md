@@ -407,11 +407,14 @@ Metric names are stable and follow Prometheus best practices. Selected examples:
   - `sqlserver_servername{servername="HOST\\INSTANCE"} 1`
   - `sqlserver_edition{edition="Developer Edition (64-bit)"} 1`
   - `sqlserver_product_version{product_version="16.0.4095.4"} 1`
-  - `sqlserver_engine_edition 3` (numeric code)
+  - `sqlserver_engine_edition 3` (numeric code; 8 on Azure SQL Managed Instance)
   - `sqlserver_is_hadr_enabled 0|1`
   - `sqlserver_visible_cpus 8`
-  - `sqlserver_total_physical_memory_mb 65536`
-  - `sqlserver_available_physical_memory_mb 42000`
+  - `sqlserver_total_physical_memory_kb 67108864`
+  - `sqlserver_available_physical_memory_kb 43008000`
+  - A property that `SERVERPROPERTY` returns as NULL omits only its own
+    metric: Azure SQL Managed Instance has no `MachineName`, so it exposes no
+    `sqlserver_hostname`.
 
 - Sessions
   - `sqlserver_sessions_total{session_state="running"} 12`
