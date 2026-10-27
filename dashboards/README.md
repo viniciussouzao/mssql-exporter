@@ -1,10 +1,12 @@
 # Grafana Dashboards
 
-Three dashboards are included: the general one below, one for Amazon RDS
+Four dashboards are included: the general one below, one for Amazon RDS
 that combines the exporter with CloudWatch (see
-[Amazon RDS dashboard](#amazon-rds-dashboard-exporter--cloudwatch)) and one
+[Amazon RDS dashboard](#amazon-rds-dashboard-exporter--cloudwatch)), one
 for Google Cloud SQL that combines it with Cloud Monitoring (see
-[Google Cloud SQL dashboard](#google-cloud-sql-dashboard-exporter--cloud-monitoring)).
+[Google Cloud SQL dashboard](#google-cloud-sql-dashboard-exporter--cloud-monitoring))
+and one for Azure SQL Managed Instance that combines it with Azure Monitor
+(see [Azure SQL Managed Instance dashboard](#azure-sql-managed-instance-dashboard-exporter--azure-monitor)).
 
 `mssql-exporter-grafana-dashboard.json` is a ready-to-use Grafana dashboard
 covering the metrics exposed by this exporter: instance overview, throughput
@@ -146,6 +148,43 @@ Requirements and import:
 
 Set `instance_label` in the exporter (see the root README): the host name
 behind a Cloud SQL instance is generated and not meaningful as a label.
+
+## Azure SQL Managed Instance dashboard (exporter + Azure Monitor)
+
+`mssql-exporter-azure-mi-dashboard.json` does the same for Azure SQL Managed
+Instance. Azure Monitor (`microsoft.sql/managedinstances`) publishes only
+seven metrics for it (CPU, vCores, storage used and reserved, IO requests,
+bytes read and written), with no memory, connection or latency metric, so
+the exporter covers most of the engine and the instance.
+
+- **Overview:** SQL Server up, the instance name (its FQDN), CPU, share of
+  the reserved storage in use, vCores, batch requests, blocked sessions and
+  the age of the oldest last FULL backup.
+- **Instance — Azure Monitor:** CPU, storage used vs reserved, IO requests,
+  IO throughput and vCores.
+- **Engine vs host — correlation:** CPU vs batch requests, IO bytes written
+  vs SQL Server file writes, and storage used from both sources (the
+  exporter reads the same `sys.server_resource_stats`, so the lines
+  overlap).
+- **Instance storage (exporter):** available storage and used vs reserved,
+  as in the general dashboard.
+- **Engine, workload, backups & high availability:** as in the RDS
+  dashboard. The Always On tables stay empty on General Purpose, whose high
+  availability is not an availability group.
+- **Transaction log & Query Store:** log reuse wait and Query Store health,
+  as in the general dashboard.
+
+Requirements and import:
+
+1. An **Azure Monitor** data source whose identity has **Monitoring Reader**
+   on the instance (or its resource group), in addition to the Prometheus
+   data source. An app registration with a client secret works
+   (**App Registration** authentication, with the tenant ID, client ID and
+   secret).
+2. Import the JSON as above and map both inputs: `DS_PROMETHEUS` and
+   `DS_AZURE_MONITOR`.
+3. Pick the **Subscription**, **Resource group** and **Managed Instance**
+   (Azure Monitor) and the **sqlserver_instance** (exporter label).
 
 ## Updating
 
