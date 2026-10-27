@@ -114,7 +114,10 @@ func (c *SQLServerActiveQueries) queryRequests(ctx context.Context) ([]requestsB
 	// start_time and GETDATE() are both server local time. DATEDIFF in
 	// seconds instead of total_elapsed_time (int milliseconds), which
 	// overflows after ~24 days. The exporter's own request (@@SPID) and
-	// system sessions are excluded.
+	// system sessions are excluded, and so is the telemetry service of Azure
+	// SQL Managed Instance (EngineEdition 8): a user session that keeps a
+	// request reading an Extended Events live target open from instance
+	// start, so it would count in every bucket.
 	rows, err := c.db.QueryContext(ctx, `
 		SELECT
 			RTRIM(r.command),
@@ -128,6 +131,11 @@ func (c *SQLServerActiveQueries) queryRequests(ctx context.Context) ([]requestsB
 			ON s.session_id = r.session_id
 		WHERE s.is_user_process = 1
 			AND r.session_id <> @@SPID
+			AND NOT (
+				CAST(SERVERPROPERTY('EngineEdition') AS int) = 8
+				AND ISNULL(s.program_name, N'') = N'TdService'
+				AND s.login_name = N'NT AUTHORITY\SYSTEM'
+			)
 		GROUP BY r.command
 	`)
 	if err != nil {

@@ -53,7 +53,10 @@ func (c *SQLServerBackups) Scrape(ctx context.Context, ch chan<- prometheus.Metr
 	// Only backups taken by this instance count: RESTORE also writes the
 	// restored backup into the local backupset (with the original
 	// server_name), so a log shipping secondary or a mirror would otherwise
-	// report the primary's backups as its own.
+	// report the primary's backups as its own. Azure SQL Managed Instance
+	// (EngineEdition 8) records its automatic backups with a NULL
+	// server_name, so there NULL counts as this instance; elsewhere the
+	// filter is unchanged.
 	//
 	// The latest backup per database/type is picked by backup_set_id (an
 	// identity), not by date: backupset dates are the server's local time,
@@ -93,7 +96,10 @@ func (c *SQLServerBackups) Scrape(ctx context.Context, ch chan<- prometheus.Metr
 				) AS rn
 			FROM msdb.dbo.backupset b
 			WHERE backup_finish_date IS NOT NULL
-				AND server_name = @@SERVERNAME
+				AND (
+					server_name = @@SERVERNAME
+					OR (server_name IS NULL AND CAST(SERVERPROPERTY('EngineEdition') AS int) = 8)
+				)
 				AND NOT EXISTS (
 					SELECT 1
 					FROM msdb.dbo.backupmediafamily mf

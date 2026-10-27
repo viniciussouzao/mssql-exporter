@@ -17,7 +17,7 @@ The exporter currently includes these collectors:
 - IO file stats: per-database file IO counters and stalls.
 - Wait stats: wait time and counts by wait type.
 - Memory clerks: memory usage by clerk type.
-- Backups: last backup timestamp (UTC, correct for servers in any time zone), duration and size per database, counting only backups taken by the instance itself (restores recorded in `backupset`, e.g. on a log shipping secondary, are ignored) and skipping backups written to the `NUL` device, which are discarded (Amazon RDS takes such backups at instance creation). On Amazon RDS, automated backups show up as daily snapshot FULL backups (duration ~1s, size = database size) and log backups every 5 minutes.
+- Backups: last backup timestamp (UTC, correct for servers in any time zone), duration and size per database, counting only backups taken by the instance itself (restores recorded in `backupset`, e.g. on a log shipping secondary, are ignored) and skipping backups written to the `NUL` device, which are discarded (Amazon RDS takes such backups at instance creation). On Amazon RDS, automated backups show up as daily snapshot FULL backups (duration ~1s, size = database size) and log backups every 5 minutes. On Azure SQL Managed Instance, the automatic backups of user databases are reported (recorded with a NULL `server_name`); system databases have no backup history there.
 - TempDB: space usage and temp table activity.
 - Performance counters: batch requests, compilations, page life expectancy, buffer cache hit ratio, deadlocks, lock waits, user connections and more.
 - Databases: state, recovery model, data/log sizes and log usage per database.
@@ -484,7 +484,9 @@ Metric names are stable and follow Prometheus best practices. Selected examples:
     while the replica is still resolving its role right after SQL Server
     starts; the collector retries once before reporting the scrape as failed)
 
-- Active queries (user sessions only; the exporter's own request is excluded)
+- Active queries (user sessions only; the exporter's own request is excluded,
+  and so is the `TdService` telemetry session of Azure SQL Managed Instance,
+  which keeps a request open from instance start)
   - `sqlserver_requests_long_running{over_seconds="60"} 2`: user requests
     running for at least 10, 60, 300 and 1800 seconds (always emitted, 0 when
     idle)
