@@ -291,6 +291,51 @@ e nomes físicos diferentes dos de um SQL Server instalado.
 
 ---
 
+## Encerramento da fase Azure (2026-10-27)
+
+Fase Azure encerrada com a v0.13.2 rodando na bastion. Ambiente: Azure SQL
+Managed Instance pelo free offer (General Purpose Gen5, 4 vCores, 64 GB, só
+endpoint privado, fuso UTC-3) e, no reconhecimento, um Azure SQL Database
+serverless pelo free offer; exporter na bastion Ubuntu 26.04 via systemd,
+lido pelo Prometheus local por túnel SSH. Recursos em Terraform, fora do
+repositório. Coberto:
+
+- **Permissões:** o admin SQL do MI é `sysadmin`; os grants da EC2,
+  inclusive `CONNECT ANY DATABASE` e o usuário no `msdb`, funcionam como num
+  SQL Server instalado (HML-039, HML-049, README).
+- **Coletores:** os 16 padrão e os opt-in `top_queries`,
+  `index_fragmentation` e `query_store` com `success 1`, sob carga do
+  `hack/loadgen` e durante o failover (HML-039, HML-049, HML-051).
+- **Correções que saíram da Azure:** propriedades NULL no `server_info`
+  (v0.12.2, HML-042), storage da instância no lugar dos volumes (v0.13.0,
+  HML-043), `log_used_percent` pelo nome físico (v0.13.1, HML-044), backups
+  com `server_name` NULL e sessão `TdService` fora das requests longas
+  (v0.13.2, HML-045, HML-046). Todas só valem com `EngineEdition` 8; nas
+  outras plataformas as consultas devolvem o mesmo de antes.
+- **Conexão:** `encrypt=true` e `encrypt=strict` (TDS 8.0) com a CA pública
+  da Microsoft, sem arquivo de certificado; o exporter precisa rodar na VNet
+  por causa do redirecionamento para o nó (HML-041, HML-050, README).
+- **Alta disponibilidade:** failover gerenciado com carga, ≈80 s de
+  `sqlserver_up 0`, nenhum scrape perdido e `@@SERVERNAME` estável
+  (HML-051).
+- **Grafana:** dashboard exporter + Azure Monitor para o MI (HML-052).
+- **SQL Database:** reconhecimento com 10 de 19 coletores funcionando e o
+  modo próprio dimensionado no ROADMAP (HML-053).
+
+Fica para depois:
+
+- **ROADMAP (Later):** modo SQL Database (HML-053), autenticação Microsoft
+  Entra ID (sem prioridade) e filtro de esperas ociosas no `wait_stats`, com
+  as esperas de fundo do MI (HML-039).
+- **Não testado:** MI Business Critical e Next-gen General Purpose, failover
+  groups, Managed Instance link, instance pools, endpoint público do MI;
+  SQL Database Hyperscale, elastic pools, geo-replicação e o efeito real do
+  scrape na pausa automática do serverless.
+- **Laboratório doméstico:** o notebook Windows e o Raspberry Pi (abaixo)
+  seguem como ambiente permanente para validar as próximas mudanças.
+
+---
+
 ## Laboratório doméstico — Windows + Raspberry Pi (2026-10-27)
 
 Ambiente permanente para validar mudanças no Windows, além do Docker/Linux
