@@ -176,6 +176,11 @@ first; implement in this order.
 
 ## Later / ideas (unprioritized)
 
+- Microsoft Entra ID authentication (managed identity, service principal)
+  for Azure SQL Managed Instance and Azure SQL Database: import
+  `go-mssqldb/azuread` and use its `azuresql` driver when the DSN sets
+  `fedauth`. Not a priority: SQL logins work on both, and the Azure identity
+  SDK adds a few MB to every binary (HML-016 kept it out on purpose)
 - Missing indexes (`sys.dm_db_missing_index_*`)
 - `wait_stats`: filter idle/background waits in the exporter (today only
   `SLEEP%`, `XE%` and `BROKER_%` are skipped), e.g. `LAZYWRITER_SLEEP`,

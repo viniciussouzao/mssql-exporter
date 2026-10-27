@@ -175,6 +175,15 @@ sqlserver://user:pass@NODE1:1433?database=master&encrypt=strict&certificate=C:/m
   handshake fails with `EOF`, even with `trustservercertificate=true`
   (validated on Cloud SQL for SQL Server 2022):
   `sqlserver://user:pass@10.0.0.3:1433?database=master&encrypt=true&certificate=/etc/mssql-exporter/cloudsql-server-ca.pem`
+- **Azure SQL Managed Instance:** the certificate is issued by a public
+  Microsoft CA for `*.<dns-zone>.database.windows.net`, so `encrypt=true` and
+  `encrypt=strict` work with the system CAs and the instance FQDN as the host,
+  with no certificate file and no server-side change; the instance refuses
+  unencrypted connections (validated on a General Purpose instance):
+  `sqlserver://user:pass@<instance>.<dns-zone>.database.windows.net:1433?database=master&encrypt=strict`.
+  Run the exporter inside the instance's virtual network (or a peered one):
+  the gateway redirects the connection to the node's private IP, so a port
+  forward to the gateway alone is not enough.
 
 ### Running as a Windows service
 
@@ -340,6 +349,11 @@ GRANT VIEW ANY DEFINITION TO [your_login] AS [CustomerDbRootRole];
   also manage logins and create databases. Cloud SQL publishes job outcomes
   itself in Cloud Monitoring (`sqlserver/sql_agent/jobs`).
 - `backups` works with no grant (`public` can read `backupset`).
+
+On **Azure SQL Managed Instance** the SQL admin of the instance is
+`sysadmin`, so every grant above works as on a self-managed instance,
+including `CONNECT ANY DATABASE` and the `msdb` user for `agent_jobs`
+(validated on a General Purpose instance).
 
 Notes:
 
