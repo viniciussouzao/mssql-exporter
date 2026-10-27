@@ -2,6 +2,7 @@ package collector
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
@@ -24,6 +25,18 @@ var logUsageQueryRegex = sqlContainsInOrder(
 	"AND pc.counter_name = 'Percent Log Used'",
 )
 
+// logUsageMIQueryRegex pins the Managed Instance match on the physical name,
+// with the database name preferred.
+var logUsageMIQueryRegex = sqlContainsInOrder(
+	"SELECT d.name, pc.cntr_value",
+	"FROM sys.databases d",
+	"CROSS APPLY",
+	"SELECT TOP (1) p.cntr_value",
+	"AND p.counter_name = 'Percent Log Used'",
+	"IN (d.name, d.physical_database_name)",
+	"ORDER BY CASE WHEN RTRIM(p.instance_name) COLLATE DATABASE_DEFAULT = d.name THEN 0 ELSE 1 END",
+)
+
 func TestDatabasesScrapeHappyPath(t *testing.T) {
 	db, mock := newSQLMock(t)
 
@@ -34,6 +47,7 @@ func TestDatabasesScrapeHappyPath(t *testing.T) {
 		sqlmock.NewRows([]string{"db_name", "type", "size_bytes"}).
 			AddRow("AppDB", 0, 1_000_000.0).
 			AddRow("AppDB", 1, 200_000.0))
+	expectEngineEdition(mock, 3)
 	mock.ExpectQuery(logUsageQueryRegex).WillReturnRows(
 		sqlmock.NewRows([]string{"instance_name", "cntr_value"}).
 			AddRow("AppDB", 12.5))
@@ -69,6 +83,7 @@ func TestDatabasesScrapeFileSizeSkipsNullDBName(t *testing.T) {
 	mock.ExpectQuery("FROM sys.master_files").WillReturnRows(
 		sqlmock.NewRows([]string{"db_name", "type", "size_bytes"}).
 			AddRow(nil, 0, 1_000_000.0))
+	expectEngineEdition(mock, 3)
 	mock.ExpectQuery("FROM sys.dm_os_performance_counters").WillReturnRows(
 		sqlmock.NewRows([]string{"instance_name", "cntr_value"}))
 
@@ -89,6 +104,7 @@ func TestDatabasesScrapeCombinesErrorsAcrossQueries(t *testing.T) {
 	mock.ExpectQuery("FROM sys.master_files").WillReturnRows(
 		sqlmock.NewRows([]string{"db_name", "type", "size_bytes"}).
 			AddRow("AppDB", 0, 1_000_000.0))
+	expectEngineEdition(mock, 3)
 	mock.ExpectQuery("FROM sys.dm_os_performance_counters").WillReturnError(logUsageErr)
 
 	c := NewDatabasesCollector(db)
@@ -116,6 +132,7 @@ func TestDatabasesScrapeStatesRowIterationError(t *testing.T) {
 			RowError(1, rowErr))
 	mock.ExpectQuery("FROM sys.master_files").WillReturnRows(
 		sqlmock.NewRows([]string{"db_name", "type", "size_bytes"}))
+	expectEngineEdition(mock, 3)
 	mock.ExpectQuery("FROM sys.dm_os_performance_counters").WillReturnRows(
 		sqlmock.NewRows([]string{"instance_name", "cntr_value"}))
 
@@ -127,5 +144,62 @@ func TestDatabasesScrapeStatesRowIterationError(t *testing.T) {
 	}
 	if v, ok := metricValue(families, "sqlserver_database_state", map[string]string{"db_name": "AppDB", "state": "ONLINE"}); !ok || v != 1 {
 		t.Errorf("database_state = %v (found=%v), want 1 despite the later iteration error", v, ok)
+	}
+}
+
+// physical_database_name only exists on SQL Server 2019+: the query sent to
+// every server other than Managed Instance must not reference it.
+func TestDatabasesLogUsageQueryAvoidsPhysicalName(t *testing.T) {
+	if strings.Contains(logUsageQuery, "physical_database_name") {
+		t.Error("logUsageQuery references physical_database_name, which fails before SQL Server 2019")
+	}
+}
+
+func TestDatabasesScrapeLogUsageManagedInstance(t *testing.T) {
+	db, mock := newSQLMock(t)
+
+	mock.ExpectQuery("FROM sys.databases").WillReturnRows(
+		sqlmock.NewRows([]string{"name", "state_desc", "recovery_model_desc", "log_reuse_wait_desc"}))
+	mock.ExpectQuery("FROM sys.master_files").WillReturnRows(
+		sqlmock.NewRows([]string{"db_name", "type", "size_bytes"}))
+	expectEngineEdition(mock, engineEditionManagedInstance)
+	mock.ExpectQuery(logUsageMIQueryRegex).WillReturnRows(
+		sqlmock.NewRows([]string{"name", "cntr_value"}).
+			AddRow("master", 44.0).
+			AddRow("LoadTestDB", 7.0))
+
+	c := NewDatabasesCollector(db)
+	families := gatherScraper(t, c)
+
+	if v, ok := metricValue(families, "sqlserver_database_log_used_percent", map[string]string{"db_name": "LoadTestDB"}); !ok || v != 7 {
+		t.Errorf("database_log_used_percent{db_name=LoadTestDB} = %v (found=%v), want 7", v, ok)
+	}
+	if v, ok := metricValue(families, "sqlserver_database_log_used_percent", map[string]string{"db_name": "master"}); !ok || v != 44 {
+		t.Errorf("database_log_used_percent{db_name=master} = %v (found=%v), want 44", v, ok)
+	}
+}
+
+func TestDatabasesScrapeLogUsageEngineEditionError(t *testing.T) {
+	db, mock := newSQLMock(t)
+
+	editionErr := errors.New("edition failed")
+	mock.ExpectQuery("FROM sys.databases").WillReturnRows(
+		sqlmock.NewRows([]string{"name", "state_desc", "recovery_model_desc", "log_reuse_wait_desc"}).
+			AddRow("AppDB", "ONLINE", "FULL", "NOTHING"))
+	mock.ExpectQuery("FROM sys.master_files").WillReturnRows(
+		sqlmock.NewRows([]string{"db_name", "type", "size_bytes"}))
+	mock.ExpectQuery("SERVERPROPERTY\\('EngineEdition'\\)").WillReturnError(editionErr)
+
+	c := NewDatabasesCollector(db)
+	families, err := gatherScraperErr(t, c)
+
+	if !errors.Is(err, editionErr) {
+		t.Errorf("Scrape() error = %v, want it to wrap %v", err, editionErr)
+	}
+	if v, ok := metricValue(families, "sqlserver_database_state", map[string]string{"db_name": "AppDB", "state": "ONLINE"}); !ok || v != 1 {
+		t.Errorf("database_state = %v (found=%v), want 1 despite the engine edition error", v, ok)
+	}
+	if _, ok := metricValue(families, "sqlserver_database_log_used_percent", nil); ok {
+		t.Error("database_log_used_percent present, want none when the engine edition is unknown")
 	}
 }

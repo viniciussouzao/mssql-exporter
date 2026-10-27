@@ -147,6 +147,33 @@ func (c *SQLServerDatabases) collectFileSizes(ctx context.Context, ch chan<- pro
 	return errors.Join(append(scanErrs, rows.Err())...)
 }
 
+const logUsageQuery = `
+	SELECT d.name, pc.cntr_value
+	FROM sys.dm_os_performance_counters pc
+	INNER JOIN sys.databases d
+		ON d.name = RTRIM(pc.instance_name) COLLATE DATABASE_DEFAULT
+	WHERE pc.object_name LIKE '%Databases%'
+		AND pc.counter_name = 'Percent Log Used'
+`
+
+// logUsageQueryManagedInstance also matches physical_database_name (SQL Server
+// 2019+, hence only sent to Managed Instance): there the counter instance of a
+// user database is its physical name, a GUID. The name wins when both exist,
+// because the physical names of master and model (replicatedmaster,
+// managed_model) are instances of their own.
+const logUsageQueryManagedInstance = `
+	SELECT d.name, pc.cntr_value
+	FROM sys.databases d
+	CROSS APPLY (
+		SELECT TOP (1) p.cntr_value
+		FROM sys.dm_os_performance_counters p
+		WHERE p.object_name LIKE '%Databases%'
+			AND p.counter_name = 'Percent Log Used'
+			AND RTRIM(p.instance_name) COLLATE DATABASE_DEFAULT IN (d.name, d.physical_database_name)
+		ORDER BY CASE WHEN RTRIM(p.instance_name) COLLATE DATABASE_DEFAULT = d.name THEN 0 ELSE 1 END
+	) pc
+`
+
 // collectLogUsage reads the "Percent Log Used" counter of the databases listed
 // in sys.databases. The counter also has instances for hidden databases
 // (mssqlsystemresource, and model_msdb/model_replicatedmaster on SQL Server
@@ -154,14 +181,16 @@ func (c *SQLServerDatabases) collectFileSizes(ctx context.Context, ch chan<- pro
 // Amazon RDS the counter has no instance for master, model, msdb and rdsadmin,
 // so those databases get no series there.
 func (c *SQLServerDatabases) collectLogUsage(ctx context.Context, ch chan<- prometheus.Metric) error {
-	rows, err := c.db.QueryContext(ctx, `
-		SELECT d.name, pc.cntr_value
-		FROM sys.dm_os_performance_counters pc
-		INNER JOIN sys.databases d
-			ON d.name = RTRIM(pc.instance_name) COLLATE DATABASE_DEFAULT
-		WHERE pc.object_name LIKE '%Databases%'
-			AND pc.counter_name = 'Percent Log Used'
-	`)
+	engineEdition, err := queryEngineEdition(ctx, c.db)
+	if err != nil {
+		return err
+	}
+	query := logUsageQuery
+	if engineEdition == engineEditionManagedInstance {
+		query = logUsageQueryManagedInstance
+	}
+
+	rows, err := c.db.QueryContext(ctx, query)
 	if err != nil {
 		return fmt.Errorf("failed to query log usage performance counters: %w", err)
 	}

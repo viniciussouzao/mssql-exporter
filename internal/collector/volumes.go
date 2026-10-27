@@ -9,10 +9,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-// engineEditionManagedInstance is SERVERPROPERTY('EngineEdition') on Azure SQL
-// Managed Instance.
-const engineEditionManagedInstance = 8
-
 type SQLServerVolumes struct {
 	db                   *sql.DB
 	totalBytes           *prometheus.Desc
@@ -63,11 +59,9 @@ func (c *SQLServerVolumes) Describe(ch chan<- *prometheus.Desc) {
 // also works when the exporter runs on a different machine than the server.
 // On Azure SQL Managed Instance it reports the instance storage instead.
 func (c *SQLServerVolumes) Scrape(ctx context.Context, ch chan<- prometheus.Metric) error {
-	var engineEdition int
-	if err := c.db.QueryRowContext(ctx,
-		`SELECT CAST(SERVERPROPERTY('EngineEdition') AS int)`,
-	).Scan(&engineEdition); err != nil {
-		return fmt.Errorf("failed to query engine edition: %w", err)
+	engineEdition, err := queryEngineEdition(ctx, c.db)
+	if err != nil {
+		return err
 	}
 	if engineEdition == engineEditionManagedInstance {
 		return c.scrapeInstanceStorage(ctx, ch)
