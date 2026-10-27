@@ -193,7 +193,9 @@ wrapper (NSSM, WinSW) is needed. From an elevated PowerShell:
   the binary where it was installed from.
 - The service runs as `LocalSystem`. Restrict the config file, which holds the
   DSN, to SYSTEM and Administrators:
-  `icacls config.yml /inheritance:r /grant:r "SYSTEM:R" "Administrators:F"`.
+  `icacls config.yml /inheritance:r /grant:r "*S-1-5-18:R" "*S-1-5-32-544:F"`
+  (the well-known SIDs of SYSTEM and Administrators: the group names are
+  translated on non-English Windows, e.g. `Administradores`).
 - Logs go to the Windows Event Log (`Application`, source `mssql-exporter`).
 - Relative paths in the config file (e.g. `web.config_file`) are resolved from
   the config file's directory.

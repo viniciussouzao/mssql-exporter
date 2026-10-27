@@ -55,6 +55,8 @@ de 2026-10-20, em outras nuvens (Google Cloud SQL e Azure).
 | HML-044 | `database_log_used_percent` sem os bancos de usuário no MI (contador pelo nome físico) | Azure SQL Managed Instance (GP) | baixa | resolvido (v0.13.1) |
 | HML-045 | `backups` sem nenhuma série no MI: `server_name` NULL no `backupset` | Azure SQL Managed Instance (GP) | média | resolvido (v0.13.2) |
 | HML-046 | `requests_long_running` sempre com 1 em todas as faixas no MI: sessão de telemetria `TdService` | Azure SQL Managed Instance (GP) | baixa | resolvido (v0.13.2) |
+| HML-047 | Coletor de SO loga `ERROR` de swap a cada scrape no Windows sem arquivo de paginação | Windows 11 (notebook doméstico, SQL Server 2025 Developer) | média | resolvido (v0.13.3) |
+| HML-048 | `icacls` do README falha em Windows não inglês (`Administrators` não existe em pt-BR) | Windows 11 (notebook doméstico, SQL Server 2025 Developer) | baixa | resolvido (README) |
 
 ## Encerramento da fase EC2 (2026-10-15)
 
@@ -280,6 +282,21 @@ e nomes físicos diferentes dos de um SQL Server instalado.
 8. SQL Database pelo free offer, só como reconhecimento: um exporter por
    banco, coletores incompatíveis desligados, para dimensionar o modo novo
    (ROADMAP).
+
+---
+
+## Laboratório doméstico — Windows + Raspberry Pi (2026-10-27)
+
+Ambiente permanente para validar mudanças no Windows, além do Docker/Linux
+local e das nuvens:
+
+- Notebook Windows 11 Pro **pt-BR** (`INSPIRON`, i7-7500U, 16 GB) com SQL
+  Server 2025 Developer RTM (`17.0.1000.7`), na rede de casa. Exporter como
+  serviço Windows (`C:\mssql-exporter`, config em
+  `C:\ProgramData\mssql-exporter\config.yml`), coletores de SO ligados,
+  `instance_label` `notebook-win`; acesso por OpenSSH com chave.
+- Raspberry Pi 5 (Debian 13 aarch64) com Prometheus 3.10 e Grafana 12.4 em
+  Docker: job `sqlserver` raspando o notebook a cada 15 s.
 
 ---
 
@@ -2754,3 +2771,51 @@ também tira o `SELECT` de 15 mil segundos de
 `sqlserver_request_max_elapsed_seconds`. Validado no MI: as faixas foram
 para 0 e um `WAITFOR` de 40 s do `sqladmin` apareceu em `over_seconds="10"`
 e em `request_max_elapsed_seconds{command="WAITFOR"}`.
+
+---
+
+## HML-047 — Coletor de SO loga `ERROR` de swap a cada scrape no Windows sem arquivo de paginação
+
+- **Ambiente:** notebook doméstico (Windows 11 Pro pt-BR, sem arquivo de
+  paginação), exporter `0.13.2` como serviço, raspado pelo Prometheus do
+  Raspberry Pi a cada 15 s
+- **Encontrado em:** 2026-10-27
+- **Severidade:** média (≈5 760 erros por dia no Event Log, escondendo erros
+  reais; as métricas de swap somem)
+- **Status:** resolvido (v0.13.3)
+
+Com o arquivo de paginação desligado, o contador `\Paging File(_Total)\% Usage`
+não tem dados e o `mem.SwapMemory()` do gopsutil falha em toda coleta:
+
+```
+level=ERROR msg="failed to collect swap memory metrics" error="A operação foi concluída com êxito.: this counter has not data"
+```
+
+18 erros em 5 minutos no Event Log. Na EC2 não apareceu porque havia
+arquivo de paginação.
+
+**Correção:** quando o `SwapMemory` falha e o Windows não lista nenhum
+arquivo de paginação (`mem.SwapDevices()` vazio), o coletor emite o swap
+zerado sem logar erro, como no Linux sem swap. Com arquivo de paginação, o
+erro continua sendo logado. Validado no notebook com o build `0.13.3-homolog`
+numa porta separada: 4 scrapes sem nenhum `ERROR` e
+`os_memory_swap_total_bytes 0`.
+
+---
+
+## HML-048 — `icacls` do README falha em Windows não inglês (`Administrators` não existe em pt-BR)
+
+- **Ambiente:** o do HML-047
+- **Encontrado em:** 2026-10-27
+- **Severidade:** baixa (o comando falha e o arquivo fica sem a restrição)
+- **Status:** resolvido (README)
+
+O README restringia o `config.yml` (que guarda o DSN) com
+`icacls … /grant:r "SYSTEM:R" "Administrators:F"`. No Windows em português os
+grupos são `AUTORIDADE NT\SISTEMA` e `BUILTIN\Administradores`, e o `icacls`
+responde `Não foi feito mapeamento entre os nomes de conta e as
+identificações de segurança`, sem alterar nada. O mesmo acontece com o
+`administrators_authorized_keys` do OpenSSH.
+
+**Correção:** o README usa os SIDs fixos (`*S-1-5-18` para SYSTEM e
+`*S-1-5-32-544` para Administrators), que funcionam em qualquer idioma.
