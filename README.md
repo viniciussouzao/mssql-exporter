@@ -25,7 +25,7 @@ The exporter currently includes these collectors:
 - Active queries: long-running user requests and open user transactions, aggregated (no per-query labels).
 - Availability Groups: replica role, synchronization health and send/redo queues (emits nothing when Always On is disabled).
 - SQL Agent jobs: enabled state, last run outcome, timestamp and duration.
-- Volumes: total/available disk space per volume hosting database files, as seen by SQL Server (works for remote monitoring).
+- Volumes: total/available disk space per volume hosting database files, as seen by SQL Server (works for remote monitoring); reserved/used instance storage on Azure SQL Managed Instance.
 - Schedulers: runnable tasks (CPU pressure signal), active workers and work queue.
 - Database mirroring: role, state, safety level, witness state and send/redo queues per mirrored database (emits nothing when no database is mirrored).
 - Log shipping (opt-in): last backup/copy/restore timestamps, restore latency and alert thresholds from the log shipping monitor tables.
@@ -681,6 +681,15 @@ Metric names are stable and follow Prometheus best practices. Selected examples:
 - Volumes
   - `sqlserver_volume_total_bytes{volume_mount_point="C:\\"} 1962694664192`
   - `sqlserver_volume_available_bytes{volume_mount_point="C:\\"} 1846100799488`
+  - Azure SQL Managed Instance (`sqlserver_engine_edition 8`): no volume
+    series. There `dm_os_volume_stats` reports in `total_bytes` the size of
+    the files on the volume, not its capacity (smaller than
+    `available_bytes`), so the collector reports the instance storage from
+    `sys.server_resource_stats` instead (latest 15-second sample, published a
+    few minutes late):
+    - `sqlserver_instance_storage_reserved_bytes 68719476736` (the storage
+      size of the instance)
+    - `sqlserver_instance_storage_used_bytes 352321536`
 
 - Schedulers
   - `sqlserver_schedulers_runnable_tasks 1`

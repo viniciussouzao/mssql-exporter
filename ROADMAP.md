@@ -237,3 +237,8 @@ first; implement in this order.
 - [x] First unit tests (`internal/config`) (PR #7)
 - [x] Linux service: hardened systemd unit (`contrib/systemd`) shipped in the
   release archives, install steps in the README (HML-025)
+- [x] Azure SQL Managed Instance storage: `volumes` reports
+  `sqlserver_instance_storage_{reserved,used}_bytes` from
+  `sys.server_resource_stats` instead of `dm_os_volume_stats`, whose
+  `total_bytes` is the size of the files there, not the volume capacity
+  (Azure homologation phase)
