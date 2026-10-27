@@ -9,6 +9,7 @@ import (
 
 func TestVolumesScrapeHappyPath(t *testing.T) {
 	db, mock := newSQLMock(t)
+	expectEngineEdition(mock, 3)
 
 	rows := sqlmock.NewRows([]string{"mount_point", "total_bytes", "available_bytes"}).
 		AddRow("C:\\", 1000.0, 400.0)
@@ -28,6 +29,7 @@ func TestVolumesScrapeHappyPath(t *testing.T) {
 
 func TestVolumesScrapeQueryError(t *testing.T) {
 	db, mock := newSQLMock(t)
+	expectEngineEdition(mock, 3)
 
 	queryErr := errors.New("boom")
 	mock.ExpectQuery("GROUP BY mount_point").WillReturnError(queryErr)
@@ -40,6 +42,7 @@ func TestVolumesScrapeQueryError(t *testing.T) {
 
 func TestVolumesScrapeScanError(t *testing.T) {
 	db, mock := newSQLMock(t)
+	expectEngineEdition(mock, 3)
 
 	rows := sqlmock.NewRows([]string{"mount_point", "total_bytes", "available_bytes"}).
 		AddRow("C:\\", "not-a-number", 400.0).
@@ -59,6 +62,7 @@ func TestVolumesScrapeScanError(t *testing.T) {
 
 func TestVolumesScrapeRowIterationError(t *testing.T) {
 	db, mock := newSQLMock(t)
+	expectEngineEdition(mock, 3)
 
 	rowErr := errors.New("row iteration failed")
 	rows := sqlmock.NewRows([]string{"mount_point", "total_bytes", "available_bytes"}).
@@ -80,6 +84,7 @@ func TestVolumesScrapeRowIterationError(t *testing.T) {
 
 func TestVolumesScrapeEmpty(t *testing.T) {
 	db, mock := newSQLMock(t)
+	expectEngineEdition(mock, 3)
 
 	mock.ExpectQuery("GROUP BY mount_point").WillReturnRows(
 		sqlmock.NewRows([]string{"mount_point", "total_bytes", "available_bytes"}))
@@ -88,5 +93,71 @@ func TestVolumesScrapeEmpty(t *testing.T) {
 	families := gatherScraper(t, c)
 	if _, ok := metricValue(families, "sqlserver_volume_total_bytes", nil); ok {
 		t.Error("volume_total_bytes present, want no metrics for empty result set (e.g. missing VIEW ANY DEFINITION)")
+	}
+}
+
+func expectEngineEdition(mock sqlmock.Sqlmock, edition int) {
+	mock.ExpectQuery("SERVERPROPERTY\\('EngineEdition'\\)").WillReturnRows(
+		sqlmock.NewRows([]string{"engine_edition"}).AddRow(edition))
+}
+
+func TestVolumesScrapeEngineEditionError(t *testing.T) {
+	db, mock := newSQLMock(t)
+
+	editionErr := errors.New("edition failed")
+	mock.ExpectQuery("SERVERPROPERTY").WillReturnError(editionErr)
+
+	c := NewVolumesCollector(db)
+	if err := scrapeErr(t, c); !errors.Is(err, editionErr) {
+		t.Errorf("Scrape() error = %v, want it to wrap %v", err, editionErr)
+	}
+}
+
+// On Azure SQL Managed Instance dm_os_volume_stats is not queried: the
+// instance storage comes from server_resource_stats.
+func TestVolumesScrapeManagedInstanceStorage(t *testing.T) {
+	db, mock := newSQLMock(t)
+	expectEngineEdition(mock, 8)
+	mock.ExpectQuery("FROM master.sys.server_resource_stats").WillReturnRows(
+		sqlmock.NewRows([]string{"reserved_storage_mb", "storage_space_used_mb"}).AddRow(65536, 120.0))
+
+	c := NewVolumesCollector(db)
+	families := gatherScraper(t, c)
+
+	if v, ok := metricValue(families, "sqlserver_instance_storage_reserved_bytes", nil); !ok || v != 65536*1024*1024 {
+		t.Errorf("instance_storage_reserved_bytes = %v (found=%v), want %v", v, ok, 65536*1024*1024)
+	}
+	if v, ok := metricValue(families, "sqlserver_instance_storage_used_bytes", nil); !ok || v != 120*1024*1024 {
+		t.Errorf("instance_storage_used_bytes = %v (found=%v), want %v", v, ok, 120*1024*1024)
+	}
+	if _, ok := metricValue(families, "sqlserver_volume_total_bytes", nil); ok {
+		t.Error("volume_total_bytes present, want no volume series on Managed Instance")
+	}
+}
+
+func TestVolumesScrapeManagedInstanceStorageQueryError(t *testing.T) {
+	db, mock := newSQLMock(t)
+	expectEngineEdition(mock, 8)
+	queryErr := errors.New("boom")
+	mock.ExpectQuery("FROM master.sys.server_resource_stats").WillReturnError(queryErr)
+
+	c := NewVolumesCollector(db)
+	if err := scrapeErr(t, c); !errors.Is(err, queryErr) {
+		t.Errorf("Scrape() error = %v, want it to wrap %v", err, queryErr)
+	}
+}
+
+// server_resource_stats is empty for the first minutes after the instance is
+// created.
+func TestVolumesScrapeManagedInstanceStorageEmpty(t *testing.T) {
+	db, mock := newSQLMock(t)
+	expectEngineEdition(mock, 8)
+	mock.ExpectQuery("FROM master.sys.server_resource_stats").WillReturnRows(
+		sqlmock.NewRows([]string{"reserved_storage_mb", "storage_space_used_mb"}))
+
+	c := NewVolumesCollector(db)
+	families := gatherScraper(t, c)
+	if _, ok := metricValue(families, "sqlserver_instance_storage_used_bytes", nil); ok {
+		t.Error("instance_storage_used_bytes present, want none for an empty server_resource_stats")
 	}
 }

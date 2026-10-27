@@ -5602,6 +5602,183 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 15
+              },
+              {
+                "color": "green",
+                "value": 30
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 0,
+        "y": 173
+      },
+      "id": 94,
+      "options": {
+        "displayMode": "gradient",
+        "minVizHeight": 10,
+        "minVizWidth": 0,
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true,
+        "valueMode": "color"
+      },
+      "pluginVersion": "13.1.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "(1 - sqlserver_instance_storage_used_bytes{sqlserver_instance=~\"$sqlserver_instance\"} / sqlserver_instance_storage_reserved_bytes{sqlserver_instance=~\"$sqlserver_instance\"}) * 100",
+          "instant": true,
+          "legendFormat": "{{sqlserver_instance}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Instance Storage Available (%)",
+      "type": "bargauge",
+      "description": "Azure SQL Managed Instance only (instance storage from sys.server_resource_stats). Other platforms report per-volume space above."
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 12,
+        "y": 173
+      },
+      "id": 95,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sqlserver_instance_storage_used_bytes{sqlserver_instance=~\"$sqlserver_instance\"}",
+          "legendFormat": "{{sqlserver_instance}} used",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sqlserver_instance_storage_reserved_bytes{sqlserver_instance=~\"$sqlserver_instance\"}",
+          "legendFormat": "{{sqlserver_instance}} reserved",
+          "refId": "B"
+        }
+      ],
+      "title": "Instance Storage Used vs Reserved",
+      "type": "timeseries",
+      "description": "Azure SQL Managed Instance only (sys.server_resource_stats, published a few minutes late)."
+    },
+    {
       "id": 57,
       "type": "row",
       "title": "Availability Groups",
@@ -5611,7 +5788,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 173
+        "y": 179
       }
     },
     {
@@ -5627,7 +5804,7 @@
         "h": 8,
         "w": 10,
         "x": 0,
-        "y": 174
+        "y": 180
       },
       "fieldConfig": {
         "defaults": {
@@ -5796,7 +5973,7 @@
         "h": 8,
         "w": 14,
         "x": 10,
-        "y": 174
+        "y": 180
       },
       "fieldConfig": {
         "defaults": {
@@ -6114,7 +6291,7 @@
         "h": 7,
         "w": 12,
         "x": 0,
-        "y": 182
+        "y": 188
       },
       "fieldConfig": {
         "defaults": {
@@ -6311,7 +6488,7 @@
         "h": 7,
         "w": 12,
         "x": 12,
-        "y": 182
+        "y": 188
       },
       "id": 61,
       "options": {
@@ -6409,7 +6586,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 189
+        "y": 195
       },
       "id": 62,
       "options": {
@@ -6507,7 +6684,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 189
+        "y": 195
       },
       "id": 63,
       "options": {
@@ -6605,7 +6782,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 189
+        "y": 195
       },
       "id": 64,
       "options": {
@@ -6645,7 +6822,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 197
+        "y": 203
       },
       "id": 65,
       "panels": [],
@@ -6665,7 +6842,7 @@
         "h": 7,
         "w": 12,
         "x": 0,
-        "y": 198
+        "y": 204
       },
       "fieldConfig": {
         "defaults": {
@@ -6977,7 +7154,7 @@
         "h": 7,
         "w": 12,
         "x": 12,
-        "y": 198
+        "y": 204
       },
       "fieldConfig": {
         "defaults": {
@@ -7180,7 +7357,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 205
+        "y": 211
       },
       "id": 68,
       "options": {
@@ -7278,7 +7455,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 205
+        "y": 211
       },
       "id": 69,
       "options": {
@@ -7376,7 +7553,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 205
+        "y": 211
       },
       "id": 70,
       "options": {
@@ -7474,7 +7651,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 213
+        "y": 219
       },
       "id": 71,
       "options": {
@@ -7590,7 +7767,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 213
+        "y": 219
       },
       "id": 72,
       "options": {
@@ -7630,7 +7807,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 222
+        "y": 228
       },
       "id": 73,
       "panels": [],
@@ -7650,7 +7827,7 @@
         "h": 7,
         "w": 10,
         "x": 0,
-        "y": 223
+        "y": 229
       },
       "fieldConfig": {
         "defaults": {
@@ -7818,7 +7995,7 @@
         "h": 7,
         "w": 14,
         "x": 10,
-        "y": 223
+        "y": 229
       },
       "fieldConfig": {
         "defaults": {
@@ -8118,7 +8295,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 230
+        "y": 236
       },
       "id": 76,
       "options": {
@@ -8251,7 +8428,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 230
+        "y": 236
       },
       "id": 77,
       "options": {
@@ -8358,7 +8535,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 230
+        "y": 236
       },
       "id": 78,
       "options": {
@@ -8398,7 +8575,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 239
+        "y": 245
       },
       "id": 54,
       "panels": [],
@@ -8443,7 +8620,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 240
+        "y": 246
       },
       "id": 55,
       "options": {
@@ -8519,7 +8696,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 240
+        "y": 246
       },
       "id": 56,
       "options": {
