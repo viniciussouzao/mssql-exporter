@@ -68,8 +68,15 @@ func (c *memoryCollector) Collect(ch chan<- prometheus.Metric) {
 
 	swap, err := mem.SwapMemory()
 	if err != nil {
-		slog.Error("failed to collect swap memory metrics", slog.Any("error", err))
-		return
+		// Without a paging file the "\Paging File(_Total)\% Usage" counter has
+		// no data and SwapMemory fails on every scrape: report an empty swap
+		// instead of logging an error each time.
+		devices, devErr := mem.SwapDevices()
+		if devErr != nil || len(devices) > 0 {
+			slog.Error("failed to collect swap memory metrics", slog.Any("error", err))
+			return
+		}
+		swap = &mem.SwapMemoryStat{}
 	}
 	g := func(desc *prometheus.Desc, v uint64) {
 		ch <- prometheus.MustNewConstMetric(desc, prometheus.GaugeValue, float64(v))
