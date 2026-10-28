@@ -47,6 +47,11 @@ collectors:
   # index_fragmentation: false
   # query_store: false
 
+# Options of the wait_stats collector. Idle/background wait types and wait
+# types that never happened are skipped unless include_idle is true.
+# wait_stats:
+#   include_idle: false
+
 # Options of the top_queries collector. They do not enable it: set
 # `top_queries: true` under `collectors:` above.
 # top_queries:

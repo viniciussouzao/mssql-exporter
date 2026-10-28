@@ -62,6 +62,7 @@ de 2026-10-20, em outras nuvens (Google Cloud SQL e Azure).
 | HML-051 | Failover gerenciado do MI com carga: ≈80 s de `sqlserver_up 0`, nenhum scrape perdido (validação) | Azure SQL Managed Instance (GP) | — | resolvido |
 | HML-052 | Dashboard para Managed Instance: exporter + Azure Monitor (validação) | Azure SQL Managed Instance (GP) | — | resolvido |
 | HML-053 | Reconhecimento do Azure SQL Database: 10 de 19 coletores funcionam; o resto depende de `sys.master_files`, `msdb` e DMVs de servidor (validação) | Azure SQL Database (serverless GP, free offer) | — | adiado (ROADMAP) |
+| HML-054 | Rótulo automático da instância, fila de disco e esperas ociosas (validação) | Laboratório doméstico + Docker local | — | resolvido (v0.15.0) |
 
 ## Encerramento da fase EC2 (2026-10-15)
 
@@ -537,6 +538,12 @@ Branch sugerida: `fix/windows-disk-io-wmi-class` (label `release:patch`).
   nome da métrica (e alinhar com o Linux); tratar em item próprio.
 
 Validado na EC2 em 2026-10-08 com o build `0.1.1-homolog`: métricas `os_disk_*` de I/O aparecendo nos gráficos.
+
+**Atualização (2026-10-28, v0.15.0):** `os_disk_read_queue_length` e
+`os_disk_write_queue_length` eram gauges sobre contadores cumulativos
+(`PERF_COUNTER_100NS_QUEUELEN_TYPE`) e só cresciam. Foram trocados por
+`os_disk_read_time_seconds_total` e `os_disk_write_time_seconds_total`
+(contadores; `rate()` é a fila média), também no Linux; ver HML-054.
 
 ---
 
@@ -2198,6 +2205,10 @@ de valor em branco; 5 mutações no `config.go` pegas.
 `servername` passou de `EC2AMAZ-JFK9UC6` para `EC2AMAZ-94TRL9U` e o rótulo
 continuou `mssql-exporter-hml`: as séries seguiram sem quebra.
 
+**Atualização (2026-10-28, v0.15.0):** sem `instance_label` e com o SQL
+Server fora no startup, o exporter tenta ler `@@SERVERNAME` a cada 15 s e
+define o rótulo sem reiniciar; ver HML-054.
+
 ---
 
 ## HML-030 — Conversão Single-AZ → Multi-AZ e failover do RDS: Always On aparece sem falhas de coleta (validação)
@@ -3083,3 +3094,48 @@ ambientes é recusado)
 | CPU/memória do host | `sys.dm_db_resource_stats`: CPU, IO de dados, escrita de log, memória, workers e sessões em % do limite do service objective, a cada 15 s, em UTC |
 
 O desenho do modo SQL Database ficou no ROADMAP (Later).
+
+---
+
+## HML-054 — Rótulo automático da instância, fila de disco e esperas ociosas (validação)
+
+- **Ambiente:** container `mssql-2025-agent` (SQL Server 2025 em Linux), o
+  notebook doméstico (Windows 11 pt-BR, SQL Server 2025 Developer) e o
+  Raspberry Pi 5 (Debian 13 arm64, só coletores de SO); binário da branch
+  `feat/label-waits-diskqueue` em porta separada, sem mexer no serviço
+- **Encontrado em:** 2026-10-28
+- **Severidade:** — (validação)
+- **Status:** resolvido (v0.15.0)
+
+**Rótulo automático (HML-029)**
+
+Container parado com `docker stop -t 60`, exporter iniciado sem
+`instance_label`: `sqlserver_up{sqlserver_instance=""} 0`. Container
+religado às 10:41:01; às 10:41:09 o log registra `sql server instance
+resolved` e, ≈12 s depois de religar, `sqlserver_up{sqlserver_instance="6af7e96149bc"} 1`,
+sem nenhuma série restante com rótulo vazio e sem reiniciar o exporter.
+
+**Fila de disco (HML-003)**
+
+- Windows: com escrita contínua de 32 MB num arquivo temporário, na mesma
+  janela de 10,6 s, `rate(os_disk_write_time_seconds_total{device="0 C:"})`
+  deu 0,7154 e a fórmula do Windows sobre
+  `Win32_PerfRawData_PerfDisk_PhysicalDisk` (`ΔAvgDiskWriteQueueLength /
+  ΔTimestamp_Sys100NS`) deu 0,7092. Em Windows pt-BR o `Get-Counter` exige os
+  nomes traduzidos dos contadores; a classe raw do WMI não.
+- Linux (Pi): `os_disk_read_time_seconds_total`,
+  `os_disk_write_time_seconds_total` e `os_disk_queue_length` em `mmcblk0`,
+  contadores crescendo entre as coletas.
+
+**Esperas ociosas**
+
+| Ambiente | Tipos de espera (padrão) | Com `include_idle` |
+|---|---|---|
+| Docker (2025, Linux) | 74 | 1 475 |
+| Notebook (2025 Developer) | 77 | 1 475 |
+
+Com `include_idle` o topo do notebook é `SOS_WORK_DISPATCHER`,
+`LOGMGR_QUEUE`, `DISPATCHER_QUEUE_SEMAPHORE` e outras esperas de fundo; no
+padrão passa a ser `PREEMPTIVE_OS_CRYPTOPS`, `PREEMPTIVE_OS_DEVICEOPS`,
+`SOS_SCHEDULER_YIELD` e `ASYNC_NETWORK_IO`.
+

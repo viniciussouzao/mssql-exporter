@@ -61,7 +61,7 @@ var scrapersDisabledByDefault = map[string]bool{
 }
 
 var scraperFactories = map[string]func(*sql.DB, Options) Scraper{
-	"wait_stats":          func(db *sql.DB, _ Options) Scraper { return NewWaitStatsCollector(db) },
+	"wait_stats":          func(db *sql.DB, o Options) Scraper { return NewWaitStatsCollector(db, o.WaitStats) },
 	"io_file_stats":       func(db *sql.DB, _ Options) Scraper { return NewIOFileStatsCollector(db) },
 	"sessions":            func(db *sql.DB, _ Options) Scraper { return NewSessionsCollector(db) },
 	"server_info":         func(db *sql.DB, _ Options) Scraper { return NewServerInfoCollector(db) },

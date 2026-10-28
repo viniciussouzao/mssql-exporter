@@ -83,6 +83,9 @@ Flags (mirroring the ergonomics of `mysqld_exporter`/`postgres_exporter`):
                                volumes, schedulers, database_mirroring, log_shipping,
                                top_queries, index_fragmentation, query_store.
                                Example: --collector.backups=false, --collector.log_shipping
+--collector.wait_stats.include_idle
+                               Also expose idle/background wait types and wait types that never
+                               happened (default false).
 --collector.top_queries.limit int
                                Queries (by total CPU) exposed by top_queries (default 50, max 1000).
 --collector.top_queries.include_text
@@ -406,9 +409,11 @@ scrape — alert on `sqlserver_up` instead of watching the process:
 When `sqlserver_up` is 0, individual collectors are skipped for that scrape.
 
 Every metric carries a `sqlserver_instance` label. By default it is
-`@@SERVERNAME`, read once at startup. **Known limitation**: if SQL Server is
-unreachable at that moment the label stays empty until the exporter restarts.
-The metrics themselves recover automatically; only this label does not.
+`@@SERVERNAME`, read at startup. If SQL Server is unreachable at that moment
+the label is empty at first and the exporter retries every 15 seconds; once
+SQL Server answers, the label is set without a restart (the series with the
+empty label stop and new ones start). The name is not read again after
+that.
 
 Set `instance_label` (or `--sqlserver.instance-label`, or
 `SQL_SERVER_INSTANCE_LABEL`) to fix the label to a name of your choice. The
@@ -459,6 +464,27 @@ Metric names are stable and follow Prometheus best practices. Selected examples:
   - `sqlserver_wait_time_ms{wait_type="PAGEIOLATCH_SH"} 123456`
   - `sqlserver_waiting_tasks{wait_type="PAGEIOLATCH_SH"} 789`
   - `sqlserver_max_wait_time_ms{wait_type="PAGEIOLATCH_SH"} 1024`
+  - Idle and background waits (lazy writer, checkpoint, Always On and
+    mirroring queues, Query Store and trace flushes, `SOS_WORK_DISPATCHER`
+    and others that only accumulate while SQL Server is idle) and wait types
+    that never happened are skipped: about 75 wait types instead of ~1,500.
+    Waits that slow queries, such as `HADR_SYNC_COMMIT`, are kept.
+    `--collector.wait_stats.include_idle` exposes everything again (only
+    `SLEEP%`, `XE%` and `BROKER_%` excluded, as before v0.15.0).
+
+- OS collectors (`--collector.os-collectors`, Linux and Windows), disk I/O
+  per device
+  - `os_disk_reads_total`, `os_disk_writes_total`, `os_disk_read_bytes_total`,
+    `os_disk_write_bytes_total`, `os_disk_io_time_ms_total`
+  - `os_disk_read_time_seconds_total{device="0 C:"}` and
+    `os_disk_write_time_seconds_total`: time spent on reads/writes summed
+    over concurrent requests; `rate()` is the average read/write queue
+    length, e.g. `rate(os_disk_write_time_seconds_total[5m])`. Same
+    semantics as node_exporter's `node_disk_*_time_seconds_total`.
+  - `os_disk_queue_length`: requests in progress at the time of the scrape.
+  - Before v0.15.0 Windows exposed `os_disk_read_queue_length` and
+    `os_disk_write_queue_length` as gauges over cumulative counters, which
+    only ever grew; they are replaced by the two counters above.
 
 - Performance counters
   - `sqlserver_batch_requests_total 656`

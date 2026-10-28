@@ -25,24 +25,32 @@ type win32RawDiskPhysicalDisk struct {
 	DiskReadBytesPerSec  uint64
 	DiskWriteBytesPerSec uint64
 	// PercentDiskTime is a PERF_PRECISION_100NS_TIMER: busy time in 100ns ticks.
-	PercentDiskTime         uint64
-	CurrentDiskQueueLength  uint64
+	PercentDiskTime        uint64
+	CurrentDiskQueueLength uint64
+	// AvgDiskReadQueueLength and AvgDiskWriteQueueLength are
+	// PERF_COUNTER_100NS_QUEUELEN_TYPE: the queue length summed over time, in
+	// 100ns ticks. Their rate is the average queue length, so they are
+	// exported as cumulative seconds, like the read/write time on Linux.
 	AvgDiskReadQueueLength  uint64
 	AvgDiskWriteQueueLength uint64
 }
 
-// ticks100nsPerMs converts 100ns ticks to milliseconds.
-const ticks100nsPerMs = 10_000
+const (
+	// ticks100nsPerMs converts 100ns ticks to milliseconds.
+	ticks100nsPerMs = 10_000
+	// ticks100nsPerSecond converts 100ns ticks to seconds.
+	ticks100nsPerSecond = 10_000_000
+)
 
 type diskIOCollector struct {
-	reads            *prometheus.Desc
-	writes           *prometheus.Desc
-	readBytes        *prometheus.Desc
-	writeBytes       *prometheus.Desc
-	ioTime           *prometheus.Desc
-	queueLength      *prometheus.Desc
-	readQueueLength  *prometheus.Desc
-	writeQueueLength *prometheus.Desc
+	reads       *prometheus.Desc
+	writes      *prometheus.Desc
+	readBytes   *prometheus.Desc
+	writeBytes  *prometheus.Desc
+	ioTime      *prometheus.Desc
+	readTime    *prometheus.Desc
+	writeTime   *prometheus.Desc
+	queueLength *prometheus.Desc
 }
 
 func newDiskIOCollector() *diskIOCollector {
@@ -51,14 +59,14 @@ func newDiskIOCollector() *diskIOCollector {
 		return prometheus.NewDesc(name, help, labels, nil)
 	}
 	return &diskIOCollector{
-		reads:            desc("os_disk_reads_total", "Total number of disk read operations"),
-		writes:           desc("os_disk_writes_total", "Total number of disk write operations"),
-		readBytes:        desc("os_disk_read_bytes_total", "Total bytes read from disk"),
-		writeBytes:       desc("os_disk_write_bytes_total", "Total bytes written to disk"),
-		ioTime:           desc("os_disk_io_time_ms_total", "Total time spent on disk I/O in milliseconds"),
-		queueLength:      desc("os_disk_queue_length", "Current disk queue length"),
-		readQueueLength:  desc("os_disk_read_queue_length", "Average disk read queue length"),
-		writeQueueLength: desc("os_disk_write_queue_length", "Average disk write queue length"),
+		reads:       desc("os_disk_reads_total", "Total number of disk read operations"),
+		writes:      desc("os_disk_writes_total", "Total number of disk write operations"),
+		readBytes:   desc("os_disk_read_bytes_total", "Total bytes read from disk"),
+		writeBytes:  desc("os_disk_write_bytes_total", "Total bytes written to disk"),
+		ioTime:      desc("os_disk_io_time_ms_total", "Total time spent on disk I/O in milliseconds"),
+		readTime:    desc("os_disk_read_time_seconds_total", readTimeHelp),
+		writeTime:   desc("os_disk_write_time_seconds_total", writeTimeHelp),
+		queueLength: desc("os_disk_queue_length", queueLengthHelp),
 	}
 }
 
@@ -68,9 +76,9 @@ func (c *diskIOCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.readBytes
 	ch <- c.writeBytes
 	ch <- c.ioTime
+	ch <- c.readTime
+	ch <- c.writeTime
 	ch <- c.queueLength
-	ch <- c.readQueueLength
-	ch <- c.writeQueueLength
 }
 
 func (c *diskIOCollector) Collect(ch chan<- prometheus.Metric) {
@@ -96,12 +104,8 @@ func (c *diskIOCollector) Collect(ch chan<- prometheus.Metric) {
 
 		ioTimeMs := float64(d.PercentDiskTime) / ticks100nsPerMs
 		ch <- prometheus.MustNewConstMetric(c.ioTime, prometheus.CounterValue, ioTimeMs, d.Name)
-
-		gauge := func(desc *prometheus.Desc, v uint64) {
-			ch <- prometheus.MustNewConstMetric(desc, prometheus.GaugeValue, float64(v), d.Name)
-		}
-		gauge(c.queueLength, d.CurrentDiskQueueLength)
-		gauge(c.readQueueLength, d.AvgDiskReadQueueLength)
-		gauge(c.writeQueueLength, d.AvgDiskWriteQueueLength)
+		ch <- prometheus.MustNewConstMetric(c.readTime, prometheus.CounterValue, float64(d.AvgDiskReadQueueLength)/ticks100nsPerSecond, d.Name)
+		ch <- prometheus.MustNewConstMetric(c.writeTime, prometheus.CounterValue, float64(d.AvgDiskWriteQueueLength)/ticks100nsPerSecond, d.Name)
+		ch <- prometheus.MustNewConstMetric(c.queueLength, prometheus.GaugeValue, float64(d.CurrentDiskQueueLength), d.Name)
 	}
 }
