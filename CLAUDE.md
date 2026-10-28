@@ -42,7 +42,7 @@ mssql-exporter/
 ├── config.example.yml               # Example YAML config file (--config.file)
 │
 ├── .github/workflows/
-│   ├── ci.yml                       # PR checks: vet, golangci-lint, test, build
+│   ├── ci.yml                       # PR checks: vet, golangci-lint, test, build; integration tests on SQL Server 2022/2025
 │   └── release.yml                  # Tag + GoReleaser on merged PRs labeled release:*
 │
 ├── dashboards/
@@ -57,6 +57,7 @@ mssql-exporter/
 │   └── mssql-exporter.service       # Hardened Linux unit, shipped in the release archives
 │
 ├── hack/loadgen/                    # Load generator (main.go, setup.sql, cleanup.sql) for homologation
+├── integration/                     # Integration tests (build tag `integration`) against a real SQL Server
 │
 └── internal/
     ├── config/
@@ -299,6 +300,7 @@ make help           # Show all available targets
 make build          # Build binary to bin/mssql-exporter
 make run            # Build and run the exporter
 make test           # Run unit tests
+make test-integration  # Integration tests against a disposable SQL Server container (Docker)
 make tidy           # go mod tidy
 make fmt            # Format code with gofmt
 make vet            # Run go vet
@@ -565,9 +567,18 @@ and README):
 - Unit tests for `internal/config` (flag/env/YAML precedence, validation), `internal/db`,
   the Exporter and every collector (`go-sqlmock`) — run with `make test`
   (196 test functions, 238 runs counting subtests)
-- CI (`.github/workflows/ci.yml`) runs vet, golangci-lint, tests and build on every PR
-- No integration tests against a real SQL Server yet
-- Manual homologation recorded in `BACKLOG-HOMOLOG.md` (HML-001..053), all
+- CI (`.github/workflows/ci.yml`) runs vet, golangci-lint, tests and build on every PR,
+  plus the integration tests on SQL Server 2022 and 2025 service containers
+- Integration tests (`integration/`, build tag `integration`, `make test-integration`):
+  as sa they create a database, a backup and a login with exactly the README grants;
+  as that login they enable every collector and require `scrape_collector_success 1`
+  for each (and the first background collection of index_fragmentation/query_store),
+  check fixture values (database state, recovery model, backup timestamp in UTC,
+  non-empty volume label) and `sqlserver_up 0` for an unreachable server. A new
+  collector is covered automatically (it iterates `collector.ScraperNames()`); if it
+  needs a grant, add it to the fixture AND to the README. Not covered: AG, mirroring,
+  log shipping and replication topologies, Windows, managed platforms
+- Manual homologation recorded in `BACKLOG-HOMOLOG.md` (HML-001..057), all
   cloud resources destroyed after each phase:
   - AWS: EC2 Windows (2019 → 2022 → 2025, AG, mirroring, log shipping) and
     RDS for SQL Server 2025 SE (Single/Multi-AZ)
@@ -593,7 +604,7 @@ and README):
 6. Check metric cardinality is reasonable
 
 ### Future Testing Improvements
-- Integration tests with SQL Server in Docker (including an Availability Group scenario)
+- Integration scenarios with topology (Availability Group, replication) in Docker
 - Metric validation tests
 
 ## Common Tasks for AI Assistants
@@ -629,7 +640,8 @@ and README):
 ### Current Limitations
 - Query timeout (5s) and connection lifetimes are not configurable; only the
   pool size is (`--sqlserver.max-connections`)
-- No integration tests against a real SQL Server (manual homologation is tracked in `BACKLOG-HOMOLOG.md`)
+- Integration tests cover a standalone SQL Server on Linux only; HA/DR topologies, Windows and
+  managed platforms rely on the manual homologation in `BACKLOG-HOMOLOG.md`
 - Azure SQL Database is not supported (see "Managed platforms")
 - availability_groups was validated against a real 2-replica Always On AG on EC2 (SQL Server 2019, 2026-10-12).
   A secondary's DMVs only show its own replica, so the same replica series is reported by every exporter

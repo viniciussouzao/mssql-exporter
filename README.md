@@ -916,10 +916,26 @@ Managed Instance** with Azure Monitor. See
 
 ## Roadmap
 
-See [ROADMAP.md](ROADMAP.md) for the full phased plan — phases 1-4 (core
-metrics, exporter robustness, operational collectors, TLS/healthz) are done.
-Next ideas include query performance metrics, index health and integration
-tests with SQL Server in Docker.
+See [ROADMAP.md](ROADMAP.md) for the phased plan and the next candidates.
+
+## Development
+
+```bash
+make check             # gofmt, go vet and unit tests (go-sqlmock, no SQL Server needed)
+make test-integration  # integration tests against a disposable SQL Server container
+```
+
+`make test-integration` starts `mcr.microsoft.com/mssql/server:2025-latest`
+(`IT_IMAGE=...:2022-latest` for another version) with a random `sa`
+password on `127.0.0.1:14339`, runs `go test -tags integration ./integration/...`
+and stops the container (it is removed on stop). The tests create a database,
+a backup and a monitoring login with exactly the grants of
+[Permissions](#permissions), enable **every** collector as that login and
+require each one to succeed, so a missing grant in the documentation fails
+the run. To use your own disposable instance, set
+`MSSQL_EXPORTER_TEST_DSN` to a sysadmin `sqlserver://` DSN and run the
+`go test` command above. CI runs them on every pull request against SQL
+Server 2022 and 2025.
 
 ## Releases
 

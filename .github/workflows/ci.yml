@@ -32,3 +32,35 @@ jobs:
 
       - name: Build
         run: go build -trimpath ./...
+
+  integration:
+    name: Integration (SQL Server ${{ matrix.version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        version: ["2022-latest", "2025-latest"]
+
+    # Disposable instance for the test run only; the password never leaves it.
+    services:
+      mssql:
+        image: mcr.microsoft.com/mssql/server:${{ matrix.version }}
+        env:
+          ACCEPT_EULA: "Y"
+          MSSQL_SA_PASSWORD: "Integration-Test-Only-1"
+        ports:
+          - 1433:1433
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Integration tests
+        env:
+          MSSQL_EXPORTER_TEST_DSN: "sqlserver://sa:Integration-Test-Only-1@127.0.0.1:1433?encrypt=disable"
+        run: go test -tags integration -count=1 -v ./integration/...

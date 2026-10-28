@@ -187,8 +187,6 @@ first; implement in this order.
   default) and cleanup purges old intervals, so totals can decrease and break
   `rate()`; per-database scans are expensive and series churn is the same as
   `top_queries`. The Query Store UI remains the better tool for analysis
-- Integration tests with SQL Server in Docker (every collector already has
-  `go-sqlmock` unit tests)
 - Azure SQL Database mode, **on demand only** (the Azure environment was
   destroyed after the homologation and is not recreated just for this; today
   10 of 19 collectors work and the gaps are documented in the README): one
@@ -259,3 +257,7 @@ first; implement in this order.
 - [x] Replication status: opt-in `replication` collector on the Distributor,
   Log Reader and Distribution agents' status, last activity, delivery
   latency and pending commands (HML-057)
+- [x] Integration tests with SQL Server in Docker: `make test-integration`
+  and a CI job on SQL Server 2022 and 2025; every collector must succeed as
+  a login with the README grants. Topologies (AG, replication) are not
+  covered yet
