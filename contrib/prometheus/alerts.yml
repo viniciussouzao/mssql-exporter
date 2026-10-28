@@ -1,0 +1,329 @@
+# Example alerting rules for mssql-exporter.
+#
+# Load with `rule_files: [alerts.yml]` in prometheus.yml and validate with
+# `promtool check rules alerts.yml`. The thresholds are starting points:
+# tune them (and the `for:` windows) to your workload. Rules over opt-in
+# collectors simply never fire while the collector is disabled.
+#
+# The `job` selector of MSSQLExporterDown assumes the job name of the
+# README example; change it to yours.
+
+groups:
+  - name: mssql-exporter
+    rules:
+      - alert: MSSQLExporterDown
+        expr: up{job="sqlserver_exporter"} == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "mssql-exporter {{ $labels.instance }} is not answering scrapes"
+
+      - alert: SQLServerDown
+        # The exporter answers, but cannot reach SQL Server.
+        expr: sqlserver_up == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "SQL Server {{ $labels.sqlserver_instance }} is unreachable from the exporter"
+
+      - alert: SQLServerCollectorFailing
+        # Usually a missing grant; the exporter log has the error.
+        expr: sqlserver_scrape_collector_success == 0
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Collector {{ $labels.collector }} fails on {{ $labels.sqlserver_instance }}"
+
+  - name: sqlserver-databases
+    rules:
+      - alert: SQLServerDatabaseUnavailable
+        expr: sqlserver_database_state{state=~"SUSPECT|RECOVERY_PENDING|EMERGENCY"} == 1
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Database {{ $labels.db_name }} on {{ $labels.sqlserver_instance }} is {{ $labels.state }}"
+
+      - alert: SQLServerLogNotTruncating
+        # LOG_BACKUP and CHECKPOINT are normal between log backups and checkpoints.
+        expr: |
+          sqlserver_database_log_reuse_wait{reason!~"NOTHING|LOG_BACKUP|CHECKPOINT"} == 1
+            and on (instance, sqlserver_instance, db_name) sqlserver_database_log_used_percent > 60
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Log of {{ $labels.db_name }} on {{ $labels.sqlserver_instance }} cannot be truncated ({{ $labels.reason }})"
+
+      - alert: SQLServerLogBackupsStopped
+        # Absent for databases without a log backup chain (SIMPLE recovery).
+        expr: |
+          deriv(sqlserver_database_log_since_last_log_backup_bytes[1h]) > 0
+            and sqlserver_database_log_since_last_log_backup_bytes > 10e9
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.db_name }} on {{ $labels.sqlserver_instance }} has 10 GB+ of log since the last log backup, still growing"
+
+      - alert: SQLServerFullBackupTooOld
+        # Weekly full backups plus a day of margin. Databases that were never
+        # backed up have no series: they do not fire here.
+        expr: time() - sqlserver_backup_last_completed_timestamp_seconds{backup_type="full"} > 8 * 86400
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Last full backup of {{ $labels.database_name }} on {{ $labels.sqlserver_instance }} is older than 8 days"
+
+      - alert: SQLServerLogBackupTooOld
+        expr: time() - sqlserver_backup_last_completed_timestamp_seconds{backup_type="log"} > 4 * 3600
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Last log backup of {{ $labels.database_name }} on {{ $labels.sqlserver_instance }} is older than 4 hours"
+
+      - alert: SQLServerManyVLFs
+        # Thousands of VLFs slow down recovery, restores and AG redo.
+        expr: sqlserver_database_log_vlf_count > 1000
+        for: 1h
+        labels:
+          severity: info
+        annotations:
+          summary: "{{ $labels.db_name }} on {{ $labels.sqlserver_instance }} has {{ $value }} VLFs"
+
+      - alert: SQLServerVolumeAlmostFull
+        expr: sqlserver_volume_available_bytes / sqlserver_volume_total_bytes < 0.10
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Volume {{ $labels.volume_mount_point }} of {{ $labels.sqlserver_instance }} has less than 10% free"
+
+      - alert: SQLServerInstanceStorageAlmostFull
+        # Azure SQL Managed Instance only.
+        expr: sqlserver_instance_storage_used_bytes / sqlserver_instance_storage_reserved_bytes > 0.90
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Instance storage of {{ $labels.sqlserver_instance }} is over 90% used"
+
+  - name: sqlserver-workload
+    rules:
+      - alert: SQLServerBlocking
+        expr: sqlserver_blocked_max_wait_ms > 60000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Sessions on {{ $labels.sqlserver_instance }} blocked for more than a minute ({{ $value }} ms)"
+
+      - alert: SQLServerLongRunningRequest
+        # Commands that wait by design are excluded.
+        expr: |
+          max by (instance, sqlserver_instance) (
+            sqlserver_request_max_elapsed_seconds{command!~"WAITFOR|BACKUP.*|RESTORE.*|DBCC.*"}
+          ) > 600
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "A user request on {{ $labels.sqlserver_instance }} has been running for more than 10 minutes"
+
+      - alert: SQLServerLongOpenTransaction
+        # Holds locks, row versions in tempdb and log truncation.
+        expr: sqlserver_oldest_open_transaction_seconds > 1800
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "A transaction on {{ $labels.sqlserver_instance }} has been open for more than 30 minutes"
+
+      - alert: SQLServerDeadlocks
+        expr: increase(sqlserver_deadlocks_total[10m]) > 5
+        labels:
+          severity: info
+        annotations:
+          summary: "{{ $value }} deadlocks in 10 minutes on {{ $labels.sqlserver_instance }}"
+
+      - alert: SQLServerCPUPressure
+        # More than one task waiting for CPU per scheduler, sustained.
+        expr: sqlserver_schedulers_runnable_tasks / sqlserver_schedulers_online > 1
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Tasks are waiting for CPU on {{ $labels.sqlserver_instance }}"
+
+  - name: sqlserver-ha-dr
+    rules:
+      - alert: SQLServerAGReplicaNotHealthy
+        expr: sqlserver_hadr_replica_synchronization_health != 2
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "AG {{ $labels.ag_name }} replica {{ $labels.replica_server }} is not healthy"
+
+      - alert: SQLServerAGDataMovementSuspended
+        # Every exporter in the AG reports the same replica: aggregate.
+        expr: max by (ag_name, db_name) (sqlserver_hadr_database_is_suspended) == 1
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Data movement of {{ $labels.db_name }} in AG {{ $labels.ag_name }} is suspended"
+
+      - alert: SQLServerAGLogSendQueueHigh
+        expr: max by (ag_name, replica_server, db_name) (sqlserver_hadr_database_log_send_queue_kb) > 1048576
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.db_name }} has more than 1 GB of log not sent to {{ $labels.replica_server }}"
+
+      - alert: SQLServerMirroringNotSynchronized
+        # 4 = synchronized. Reported by the principal only.
+        expr: sqlserver_mirroring_state != 4
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Mirroring of {{ $labels.db_name }} on {{ $labels.sqlserver_instance }} is not synchronized"
+
+      - alert: SQLServerLogShippingBackupBehind
+        expr: |
+          time() - sqlserver_log_shipping_primary_last_backup_timestamp_seconds
+            > sqlserver_log_shipping_primary_backup_threshold_seconds
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Log shipping backup of {{ $labels.primary_database }} is behind its threshold"
+
+      - alert: SQLServerLogShippingRestoreBehind
+        expr: |
+          time() - sqlserver_log_shipping_secondary_last_restored_timestamp_seconds
+            > sqlserver_log_shipping_secondary_restore_threshold_seconds
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Log shipping restore of {{ $labels.secondary_database }} on {{ $labels.secondary_server }} is behind its threshold"
+
+      - alert: SQLServerAgentJobFailed
+        # Stays active until the next successful run.
+        expr: |
+          sqlserver_agent_job_last_run_status == 0
+            and on (instance, sqlserver_instance, job_name) sqlserver_agent_job_enabled == 1
+        labels:
+          severity: warning
+        annotations:
+          summary: "SQL Agent job {{ $labels.job_name }} failed on {{ $labels.sqlserver_instance }}"
+
+  - name: sqlserver-replication
+    rules:
+      - alert: SQLServerReplicationAgentFailed
+        # 6 = failed in the agent's last history entry.
+        expr: sqlserver_replication_agent_run_status == 6
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Replication {{ $labels.agent_type }} agent {{ $labels.agent_name }} failed"
+
+      - alert: SQLServerReplicationAgentRetrying
+        expr: sqlserver_replication_agent_run_status == 5
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Replication {{ $labels.agent_type }} agent {{ $labels.agent_name }} keeps retrying"
+
+      - alert: SQLServerReplicationAgentStale
+        # A stopped agent keeps its last status (2 after a clean stop), so
+        # also alert on history that stopped moving. Continuous agents log
+        # every few minutes; raise the window for scheduled agents.
+        expr: time() - sqlserver_replication_agent_last_history_timestamp_seconds > 3600
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Replication {{ $labels.agent_type }} agent {{ $labels.agent_name }} has no history for over an hour"
+
+      - alert: SQLServerReplicationPendingCommands
+        # The pending commands come first so that $value is their number.
+        expr: |
+          sqlserver_replication_pending_commands > 10000
+            and deriv(sqlserver_replication_pending_commands[15m]) > 0
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $value }} commands waiting for {{ $labels.subscriber }}/{{ $labels.subscriber_db }} ({{ $labels.publication }}), still growing"
+
+      - alert: SQLServerReplicationLatencyHigh
+        expr: sqlserver_replication_agent_delivery_latency_seconds > 300
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Replication {{ $labels.agent_type }} agent {{ $labels.agent_name }} delivery latency is above 5 minutes"
+
+  - name: sqlserver-background-collectors
+    rules:
+      - alert: SQLServerQueryStoreNotCapturing
+        # Desired state differs from the actual one (e.g. READ_ONLY when full).
+        # Exclude readable AG secondaries (readonly_reason 8) if you have them.
+        expr: |
+          sqlserver_query_store_desired_state == 1
+            unless on (instance, sqlserver_instance, db_name, state) sqlserver_query_store_actual_state == 1
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Query Store of {{ $labels.db_name }} on {{ $labels.sqlserver_instance }} is not {{ $labels.state }}"
+
+      - alert: SQLServerQueryStoreAlmostFull
+        expr: sqlserver_query_store_storage_used_bytes / sqlserver_query_store_storage_max_bytes > 0.90
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Query Store of {{ $labels.db_name }} on {{ $labels.sqlserver_instance }} is over 90% full"
+
+      - alert: SQLServerQueryStoreForcedPlanFailing
+        expr: sqlserver_query_store_forced_plans_failing > 0
+        for: 15m
+        labels:
+          severity: info
+        annotations:
+          summary: "{{ $value }} forced plans fail in {{ $labels.db_name }} on {{ $labels.sqlserver_instance }}"
+
+      - alert: SQLServerBackgroundCollectionStale
+        # Two missed runs at the default intervals (index_fragmentation 6h,
+        # query_store 5m); adjust if you changed them.
+        expr: |
+          time() - sqlserver_index_fragmentation_last_collection_timestamp_seconds > 2 * 6 * 3600
+            or time() - sqlserver_query_store_last_collection_timestamp_seconds > 2 * 5 * 60
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "A background collection on {{ $labels.sqlserver_instance }} has not run on time"
+
+      - alert: SQLServerBackgroundCollectionNoDatabases
+        # No accessible database: usually a missing CONNECT ANY DATABASE.
+        expr: |
+          sqlserver_index_fragmentation_last_collection_databases == 0
+            or sqlserver_query_store_last_collection_databases == 0
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "A background collection on {{ $labels.sqlserver_instance }} reaches no database"

@@ -11,12 +11,16 @@ and one for Azure SQL Managed Instance that combines it with Azure Monitor
 `mssql-exporter-grafana-dashboard.json` is a ready-to-use Grafana dashboard
 covering the metrics exposed by this exporter: instance overview, throughput
 and compilation, memory, blocking/concurrency, CPU/schedulers, I/O, databases
-(including why each transaction log can't be truncated), Query Store health,
-TempDB, storage volumes, Availability Groups, database mirroring, log shipping,
-and exporter/collector self-health. The HA/DR rows show "No data" when the
-feature isn't in use; the Log Shipping row also needs the opt-in
-`log_shipping` collector (`--collector.log_shipping`), and the Query Store row
-the opt-in `query_store` collector (`--collector.query_store`).
+(including why each transaction log can't be truncated, VLFs and missing
+indexes), Query Store health, TempDB, storage volumes, Availability Groups,
+database mirroring, log shipping, replication and exporter/collector
+self-health. The HA/DR rows show "No data" when the feature isn't in use;
+the Log Shipping row also needs the opt-in `log_shipping` collector
+(`--collector.log_shipping`), the Query Store row the opt-in `query_store`
+collector (`--collector.query_store`), the Replication row the opt-in
+`replication` collector scraped on the Distributor
+(`--collector.replication`) and the Missing Indexes table the opt-in
+`missing_indexes` collector (`--collector.missing_indexes`).
 
 ## Requirements
 

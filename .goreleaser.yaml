@@ -38,6 +38,7 @@ archives:
       - LICENSE
       - config.example.yml
       - contrib/systemd/mssql-exporter.service
+      - contrib/prometheus/alerts.yml
 
 checksum:
   name_template: "checksums.txt"

@@ -1,0 +1,129 @@
+# Unit tests for alerts.yml: `promtool test rules alerts_test.yml`.
+# They cover the rules whose joins or time logic are easy to get wrong.
+
+rule_files:
+  - alerts.yml
+
+evaluation_interval: 1m
+
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'sqlserver_up{instance="db1:10060",sqlserver_instance="DB1"}'
+        values: '1 1 0x10'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: SQLServerDown
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: SQLServerDown
+        exp_alerts:
+          - exp_labels: {severity: critical, instance: "db1:10060", sqlserver_instance: DB1}
+            exp_annotations:
+              summary: "SQL Server DB1 is unreachable from the exporter"
+
+  # Only truncation blockers other than the normal LOG_BACKUP/CHECKPOINT, and
+  # only with the log filling up.
+  - interval: 1m
+    input_series:
+      - series: 'sqlserver_database_log_reuse_wait{instance="db1:10060",sqlserver_instance="DB1",db_name="app",reason="ACTIVE_TRANSACTION"}'
+        values: '1x40'
+      - series: 'sqlserver_database_log_used_percent{instance="db1:10060",sqlserver_instance="DB1",db_name="app"}'
+        values: '70x40'
+      - series: 'sqlserver_database_log_reuse_wait{instance="db1:10060",sqlserver_instance="DB1",db_name="busy",reason="LOG_BACKUP"}'
+        values: '1x40'
+      - series: 'sqlserver_database_log_used_percent{instance="db1:10060",sqlserver_instance="DB1",db_name="busy"}'
+        values: '90x40'
+      - series: 'sqlserver_database_log_reuse_wait{instance="db1:10060",sqlserver_instance="DB1",db_name="small",reason="ACTIVE_TRANSACTION"}'
+        values: '1x40'
+      - series: 'sqlserver_database_log_used_percent{instance="db1:10060",sqlserver_instance="DB1",db_name="small"}'
+        values: '20x40'
+    alert_rule_test:
+      - eval_time: 35m
+        alertname: SQLServerLogNotTruncating
+        exp_alerts:
+          - exp_labels: {severity: warning, instance: "db1:10060", sqlserver_instance: DB1, db_name: app, reason: ACTIVE_TRANSACTION}
+            exp_annotations:
+              summary: "Log of app on DB1 cannot be truncated (ACTIVE_TRANSACTION)"
+
+  # A failed job fires only while it is enabled.
+  - interval: 1m
+    input_series:
+      - series: 'sqlserver_agent_job_last_run_status{instance="db1:10060",sqlserver_instance="DB1",job_name="nightly"}'
+        values: '0x5'
+      - series: 'sqlserver_agent_job_enabled{instance="db1:10060",sqlserver_instance="DB1",job_name="nightly"}'
+        values: '1x5'
+      - series: 'sqlserver_agent_job_last_run_status{instance="db1:10060",sqlserver_instance="DB1",job_name="retired"}'
+        values: '0x5'
+      - series: 'sqlserver_agent_job_enabled{instance="db1:10060",sqlserver_instance="DB1",job_name="retired"}'
+        values: '0x5'
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: SQLServerAgentJobFailed
+        exp_alerts:
+          - exp_labels: {severity: warning, instance: "db1:10060", sqlserver_instance: DB1, job_name: nightly}
+            exp_annotations:
+              summary: "SQL Agent job nightly failed on DB1"
+
+  # A stopped distribution agent: status stays 2 (succeeded), the history
+  # stops moving and the queue grows.
+  - interval: 1m
+    input_series:
+      - series: 'sqlserver_replication_agent_run_status{distribution_db="distribution",agent_type="distribution",agent_name="pub-sub",publication="P",subscriber="SUB",subscriber_db="db"}'
+        values: '2x90'
+      - series: 'sqlserver_replication_agent_last_history_timestamp_seconds{distribution_db="distribution",agent_type="distribution",agent_name="pub-sub",publication="P",subscriber="SUB",subscriber_db="db"}'
+        values: '0x90'
+      - series: 'sqlserver_replication_pending_commands{distribution_db="distribution",agent_type="distribution",agent_name="pub-sub",publication="P",subscriber="SUB",subscriber_db="db"}'
+        values: '20000+100x90'
+    alert_rule_test:
+      - eval_time: 90m
+        alertname: SQLServerReplicationAgentFailed
+        exp_alerts: []
+      - eval_time: 65m
+        alertname: SQLServerReplicationAgentStale
+        exp_alerts: []
+      - eval_time: 75m
+        alertname: SQLServerReplicationAgentStale
+        exp_alerts:
+          - exp_labels: {severity: warning, distribution_db: distribution, agent_type: distribution, agent_name: pub-sub, publication: P, subscriber: SUB, subscriber_db: db}
+            exp_annotations:
+              summary: "Replication distribution agent pub-sub has no history for over an hour"
+      - eval_time: 40m
+        alertname: SQLServerReplicationPendingCommands
+        exp_alerts:
+          - exp_labels: {severity: warning, distribution_db: distribution, agent_type: distribution, agent_name: pub-sub, publication: P, subscriber: SUB, subscriber_db: db}
+            exp_annotations:
+              summary: "24000 commands waiting for SUB/db (P), still growing"
+
+  # Query Store switched itself to READ_ONLY; a database where both states
+  # match does not fire.
+  - interval: 1m
+    input_series:
+      - series: 'sqlserver_query_store_desired_state{instance="db1:10060",sqlserver_instance="DB1",db_name="app",state="READ_WRITE"}'
+        values: '1x20'
+      - series: 'sqlserver_query_store_actual_state{instance="db1:10060",sqlserver_instance="DB1",db_name="app",state="READ_ONLY"}'
+        values: '1x20'
+      - series: 'sqlserver_query_store_desired_state{instance="db1:10060",sqlserver_instance="DB1",db_name="ok",state="READ_WRITE"}'
+        values: '1x20'
+      - series: 'sqlserver_query_store_actual_state{instance="db1:10060",sqlserver_instance="DB1",db_name="ok",state="READ_WRITE"}'
+        values: '1x20'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: SQLServerQueryStoreNotCapturing
+        exp_alerts:
+          - exp_labels: {severity: warning, instance: "db1:10060", sqlserver_instance: DB1, db_name: app, state: READ_WRITE}
+            exp_annotations:
+              summary: "Query Store of app on DB1 is not READ_WRITE"
+
+  # Log backups stopped: the log since the last log backup only grows.
+  - interval: 1m
+    input_series:
+      - series: 'sqlserver_database_log_since_last_log_backup_bytes{instance="db1:10060",sqlserver_instance="DB1",db_name="app"}'
+        values: '11e9+1e7x180'
+    alert_rule_test:
+      - eval_time: 150m
+        alertname: SQLServerLogBackupsStopped
+        exp_alerts:
+          - exp_labels: {severity: warning, instance: "db1:10060", sqlserver_instance: DB1, db_name: app}
+            exp_annotations:
+              summary: "app on DB1 has 10 GB+ of log since the last log backup, still growing"
