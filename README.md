@@ -21,6 +21,7 @@ The exporter currently includes these collectors:
 - TempDB: space usage and temp table activity.
 - Performance counters: batch requests, compilations, page life expectancy, buffer cache hit ratio, deadlocks, lock waits, user connections and more.
 - Databases: state, recovery model, data/log sizes and log usage per database.
+- Transaction log: VLF count, active log and log generated since the last log backup and checkpoint, per database (`sys.dm_db_log_stats`, SQL Server 2016 SP2 and later).
 - Blocking: blocked sessions, longest current block and requests by status.
 - Active queries: long-running user requests and open user transactions, aggregated (no per-query labels).
 - Availability Groups: replica role, synchronization health and send/redo queues (emits nothing when Always On is disabled).
@@ -79,7 +80,7 @@ Flags (mirroring the ergonomics of `mysqld_exporter`/`postgres_exporter`):
                                and query_store).
                                Names: wait_stats, io_file_stats, sessions, server_info,
                                memory_clerks, backups, tempdb, perf_counters, databases,
-                               blocking, active_queries, availability_groups, agent_jobs,
+                               transaction_log, blocking, active_queries, availability_groups, agent_jobs,
                                volumes, schedulers, database_mirroring, log_shipping,
                                top_queries, index_fragmentation, query_store.
                                Example: --collector.backups=false, --collector.log_shipping
@@ -389,6 +390,7 @@ The exporter reads from (among others):
 - `sys.dm_os_performance_counters`
 - `sys.dm_os_waiting_tasks`
 - `sys.databases`
+- `sys.dm_db_log_stats` (transaction_log), `sys.dm_hadr_database_replica_states`
 - `msdb.dbo.backupset`, `msdb.dbo.backupmediafamily`
 - `sys.database_mirroring`
 - `msdb.dbo.log_shipping_monitor_primary` / `log_shipping_monitor_secondary` (log_shipping only)
@@ -522,6 +524,23 @@ Metric names are stable and follow Prometheus best practices. Selected examples:
     user databases are reported normally. On Azure SQL Managed Instance the
     counter instance of a user database is its `physical_database_name` (a
     GUID); the series still carries the database name
+
+- Transaction log (`sys.dm_db_log_stats`, SQL Server 2016 SP2 and later; on
+  older versions disable it with `--collector.transaction_log=false`). Every
+  `ONLINE` database the login can access; local secondary replicas of an
+  Availability Group are skipped (their log follows the primary's)
+  - `sqlserver_database_log_vlf_count{db_name="AppDB"} 12` and
+    `sqlserver_database_log_active_vlf_count{db_name="AppDB"} 8`: thousands
+    of VLFs (many small autogrowths) slow down recovery, restores and redo
+  - `sqlserver_database_log_active_bytes{db_name="AppDB"} 91561984`
+  - `sqlserver_database_log_since_last_log_backup_bytes{db_name="AppDB"} 91533312`:
+    log generated since the last log backup; absent for databases without a
+    log backup chain (SIMPLE recovery, or FULL before the first full backup).
+    A value that only grows means log backups stopped:
+    `deriv(sqlserver_database_log_since_last_log_backup_bytes[1h]) > 0 and sqlserver_database_log_since_last_log_backup_bytes > 10e9`
+  - `sqlserver_database_log_since_last_checkpoint_bytes{db_name="AppDB"} 3293184`
+  - Works on Amazon RDS for the system databases too, where the `Percent Log
+    Used` counter has no instance for them
 
 - Blocking
   - `sqlserver_blocked_sessions 0` (from `sys.dm_os_waiting_tasks`; a parallel

@@ -4171,12 +4171,177 @@
       ]
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 200
+              },
+              {
+                "color": "red",
+                "value": 1000
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 140
+      },
+      "id": 96,
+      "options": {
+        "displayMode": "gradient",
+        "minVizHeight": 10,
+        "minVizWidth": 0,
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true,
+        "valueMode": "color"
+      },
+      "pluginVersion": "13.1.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sqlserver_database_log_vlf_count{sqlserver_instance=~\"$sqlserver_instance\",db_name=~\"$database\"}",
+          "instant": true,
+          "legendFormat": "{{db_name}}",
+          "refId": "A"
+        }
+      ],
+      "title": "VLF Count by Database",
+      "type": "bargauge",
+      "description": "Virtual log files per database (sys.dm_db_log_stats). Thousands of VLFs slow down recovery, restores and AG/log shipping redo; usually caused by many small autogrowths. Active VLFs cannot be reused yet."
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "bytes",
+          "noValue": "No data"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 140
+      },
+      "id": 97,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sqlserver_database_log_since_last_log_backup_bytes{sqlserver_instance=~\"$sqlserver_instance\",db_name=~\"$database\"}",
+          "legendFormat": "{{db_name}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Log Since Last Log Backup",
+      "type": "timeseries",
+      "description": "Transaction log generated since the last log backup (sys.dm_db_log_stats), per database. Absent for databases without a log backup chain (SIMPLE recovery). A line that only grows means log backups stopped."
+    },
+    {
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 140
+        "y": 148
       },
       "id": 87,
       "panels": [],
@@ -4196,7 +4361,7 @@
         "h": 4,
         "w": 6,
         "x": 0,
-        "y": 141
+        "y": 149
       },
       "fieldConfig": {
         "defaults": {
@@ -4261,7 +4426,7 @@
         "h": 4,
         "w": 6,
         "x": 6,
-        "y": 141
+        "y": 149
       },
       "fieldConfig": {
         "defaults": {
@@ -4326,7 +4491,7 @@
         "h": 4,
         "w": 6,
         "x": 12,
-        "y": 141
+        "y": 149
       },
       "fieldConfig": {
         "defaults": {
@@ -4391,7 +4556,7 @@
         "h": 4,
         "w": 6,
         "x": 18,
-        "y": 141
+        "y": 149
       },
       "fieldConfig": {
         "defaults": {
@@ -4503,7 +4668,7 @@
         "h": 8,
         "w": 16,
         "x": 0,
-        "y": 145
+        "y": 153
       },
       "fieldConfig": {
         "defaults": {
@@ -4883,7 +5048,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 145
+        "y": 153
       },
       "fieldConfig": {
         "defaults": {
@@ -4952,7 +5117,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 153
+        "y": 161
       },
       "id": 44,
       "panels": [],
@@ -4987,7 +5152,7 @@
         "h": 4,
         "w": 6,
         "x": 0,
-        "y": 154
+        "y": 162
       },
       "id": 45,
       "options": {
@@ -5048,7 +5213,7 @@
         "h": 4,
         "w": 6,
         "x": 6,
-        "y": 154
+        "y": 162
       },
       "id": 46,
       "options": {
@@ -5109,7 +5274,7 @@
         "h": 4,
         "w": 6,
         "x": 12,
-        "y": 154
+        "y": 162
       },
       "id": 47,
       "options": {
@@ -5170,7 +5335,7 @@
         "h": 4,
         "w": 6,
         "x": 18,
-        "y": 154
+        "y": 162
       },
       "id": 48,
       "options": {
@@ -5266,7 +5431,7 @@
         "h": 8,
         "w": 16,
         "x": 0,
-        "y": 158
+        "y": 166
       },
       "id": 49,
       "options": {
@@ -5389,7 +5554,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 158
+        "y": 166
       },
       "id": 50,
       "options": {
@@ -5428,7 +5593,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 166
+        "y": 174
       },
       "id": 51,
       "panels": [],
@@ -5471,7 +5636,7 @@
         "h": 6,
         "w": 12,
         "x": 0,
-        "y": 167
+        "y": 175
       },
       "id": 52,
       "options": {
@@ -5568,7 +5733,7 @@
         "h": 6,
         "w": 12,
         "x": 12,
-        "y": 167
+        "y": 175
       },
       "id": 53,
       "options": {
@@ -5637,7 +5802,7 @@
         "h": 6,
         "w": 12,
         "x": 0,
-        "y": 173
+        "y": 181
       },
       "id": 94,
       "options": {
@@ -5735,7 +5900,7 @@
         "h": 6,
         "w": 12,
         "x": 12,
-        "y": 173
+        "y": 181
       },
       "id": 95,
       "options": {
@@ -5788,7 +5953,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 179
+        "y": 187
       }
     },
     {
@@ -5804,7 +5969,7 @@
         "h": 8,
         "w": 10,
         "x": 0,
-        "y": 180
+        "y": 188
       },
       "fieldConfig": {
         "defaults": {
@@ -5973,7 +6138,7 @@
         "h": 8,
         "w": 14,
         "x": 10,
-        "y": 180
+        "y": 188
       },
       "fieldConfig": {
         "defaults": {
@@ -6291,7 +6456,7 @@
         "h": 7,
         "w": 12,
         "x": 0,
-        "y": 188
+        "y": 196
       },
       "fieldConfig": {
         "defaults": {
@@ -6488,7 +6653,7 @@
         "h": 7,
         "w": 12,
         "x": 12,
-        "y": 188
+        "y": 196
       },
       "id": 61,
       "options": {
@@ -6586,7 +6751,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 195
+        "y": 203
       },
       "id": 62,
       "options": {
@@ -6684,7 +6849,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 195
+        "y": 203
       },
       "id": 63,
       "options": {
@@ -6782,7 +6947,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 195
+        "y": 203
       },
       "id": 64,
       "options": {
@@ -6822,7 +6987,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 203
+        "y": 211
       },
       "id": 65,
       "panels": [],
@@ -6842,7 +7007,7 @@
         "h": 7,
         "w": 12,
         "x": 0,
-        "y": 204
+        "y": 212
       },
       "fieldConfig": {
         "defaults": {
@@ -7154,7 +7319,7 @@
         "h": 7,
         "w": 12,
         "x": 12,
-        "y": 204
+        "y": 212
       },
       "fieldConfig": {
         "defaults": {
@@ -7357,7 +7522,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 211
+        "y": 219
       },
       "id": 68,
       "options": {
@@ -7455,7 +7620,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 211
+        "y": 219
       },
       "id": 69,
       "options": {
@@ -7553,7 +7718,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 211
+        "y": 219
       },
       "id": 70,
       "options": {
@@ -7651,7 +7816,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 219
+        "y": 227
       },
       "id": 71,
       "options": {
@@ -7767,7 +7932,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 219
+        "y": 227
       },
       "id": 72,
       "options": {
@@ -7807,7 +7972,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 228
+        "y": 236
       },
       "id": 73,
       "panels": [],
@@ -7827,7 +7992,7 @@
         "h": 7,
         "w": 10,
         "x": 0,
-        "y": 229
+        "y": 237
       },
       "fieldConfig": {
         "defaults": {
@@ -7995,7 +8160,7 @@
         "h": 7,
         "w": 14,
         "x": 10,
-        "y": 229
+        "y": 237
       },
       "fieldConfig": {
         "defaults": {
@@ -8295,7 +8460,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 236
+        "y": 244
       },
       "id": 76,
       "options": {
@@ -8428,7 +8593,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 236
+        "y": 244
       },
       "id": 77,
       "options": {
@@ -8535,7 +8700,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 236
+        "y": 244
       },
       "id": 78,
       "options": {
@@ -8575,7 +8740,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 245
+        "y": 253
       },
       "id": 54,
       "panels": [],
@@ -8620,7 +8785,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 246
+        "y": 254
       },
       "id": 55,
       "options": {
@@ -8696,7 +8861,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 246
+        "y": 254
       },
       "id": 56,
       "options": {

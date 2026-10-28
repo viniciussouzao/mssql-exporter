@@ -86,6 +86,7 @@ mssql-exporter/
         ├── tempdb.go                # TempDB space usage and temp table activity
         ├── perf_counters.go         # Instance-level performance counters
         ├── databases.go             # Database state, recovery model, sizes, log usage and log reuse wait
+        ├── transaction_log.go       # VLFs, active log, log since last log backup/checkpoint (dm_db_log_stats)
         ├── blocking.go              # Blocked sessions and requests by status
         ├── active_queries.go        # Long-running requests and open transactions, aggregated
         ├── availability_groups.go   # Always On replica/database health, queues, suspension and lag
@@ -456,6 +457,7 @@ The exporter queries these Dynamic Management Views (DMVs):
 | `tempdb.sys.dm_db_file_space_usage` | VIEW SERVER STATE | tempdb | TempDB space usage |
 | `sys.dm_os_performance_counters` | VIEW SERVER STATE | perf_counters, databases, tempdb | Instance/database counters |
 | `sys.databases` | - | databases | Database state, recovery model and log reuse wait |
+| `sys.dm_db_log_stats` + `sys.dm_hadr_database_replica_states` | VIEW SERVER STATE | transaction_log | VLFs, active log, log since last log backup/checkpoint (2016 SP2+; AG secondaries skipped) |
 | `sys.dm_exec_requests` | VIEW SERVER STATE | blocking, active_queries | Blocked sessions, request status, long-running requests |
 | `sys.dm_tran_active_transactions` + `dm_tran_session_transactions` | VIEW SERVER STATE | active_queries | Open transactions and their age |
 | `sys.dm_hadr_availability_replica_states` | VIEW SERVER STATE | availability_groups | Replica role and sync health |
@@ -555,7 +557,7 @@ and README):
 ### Current State
 - Unit tests for `internal/config` (flag/env/YAML precedence, validation), `internal/db`,
   the Exporter and every collector (`go-sqlmock`) — run with `make test`
-  (181 test functions, 223 runs counting subtests)
+  (185 test functions, 227 runs counting subtests)
 - CI (`.github/workflows/ci.yml`) runs vet, golangci-lint, tests and build on every PR
 - No integration tests against a real SQL Server yet
 - Manual homologation recorded in `BACKLOG-HOMOLOG.md` (HML-001..053), all
