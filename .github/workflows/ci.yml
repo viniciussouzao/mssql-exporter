@@ -36,6 +36,19 @@ jobs:
       - name: Alert rules
         run: make test-alerts
 
+  secrets:
+    name: Secrets (gitleaks)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history: the scan covers every commit, not only the PR's.
+          fetch-depth: 0
+
+      - name: Scan history
+        run: make scan-secrets
+
   integration:
     name: Integration (SQL Server ${{ matrix.version }})
     runs-on: ubuntu-latest

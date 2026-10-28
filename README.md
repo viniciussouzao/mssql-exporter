@@ -965,6 +965,7 @@ See [ROADMAP.md](ROADMAP.md) for the phased plan and the next candidates.
 make check             # gofmt, go vet and unit tests (go-sqlmock, no SQL Server needed)
 make test-integration  # integration tests against a disposable SQL Server container
 make test-alerts       # promtool check + unit tests of contrib/prometheus/alerts.yml (Docker)
+make scan-secrets      # gitleaks over the whole git history (Docker)
 ```
 
 `make test-integration` starts `mcr.microsoft.com/mssql/server:2025-latest`
