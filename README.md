@@ -59,13 +59,9 @@ scrape_configs:
       - targets: ['localhost:9187']
 ```
 
-A ready-to-use `prometheus.yml` and a `docker-compose.yml` for Prometheus and Grafana are included. Run them with:
-
-```bash
-docker compose up -d
-```
-
-By default, that setup scrapes `host.docker.internal:9187`, assuming the exporter runs on your host.
+A `docker-compose.yml` for Prometheus and Grafana is included; it mounts a
+local `prometheus.yml` that you create first (see
+[Running With Prometheus and Grafana](#running-with-prometheus-and-grafana)).
 
 ## Configuration
 
@@ -847,15 +843,31 @@ Metric names are stable and follow Prometheus best practices. Selected examples:
 
 ## Running With Prometheus and Grafana
 
-This repository includes:
+This repository includes `docker-compose.yml` with Prometheus and Grafana
+services. It mounts `./prometheus.yml`, which is not versioned (it is in
+`.gitignore`, so each environment keeps its own targets). Create it next to
+`docker-compose.yml`:
 
-- `prometheus.yml`: simple scrape job for the exporter.
-- `docker-compose.yml`: Prometheus and Grafana services.
+```yaml
+global:
+  scrape_interval: 5s
+
+scrape_configs:
+  - job_name: 'sqlserver_exporter'
+    scrape_interval: 15s
+    # Must exceed the exporter's 5s query timeout, or a slow scrape (e.g. SQL
+    # Server starting up) fails as a whole instead of returning partial data.
+    scrape_timeout: 10s
+    static_configs:
+      # host.docker.internal reaches the exporter running on the Docker host;
+      # switch to 'mssql-exporter:9187' if you enable the exporter service in docker-compose.yml
+      - targets: ['host.docker.internal:9187']
+```
 
 Steps:
 
 1) Start the exporter locally on `:9187`.
-2) `docker compose up -d` to bring up Prometheus and Grafana.
+2) `docker compose up -d` (or `make compose-up`) to bring up Prometheus and Grafana.
 3) Prometheus UI: http://localhost:9090
 4) Grafana UI: http://localhost:3000 (admin/admin by default; password set in `docker-compose.yml`).
 

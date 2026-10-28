@@ -202,7 +202,8 @@ exige `AS CustomerDbRootRole`. Depois do GCP vem a Azure (abaixo).
   Só `ONLINE` faria sumir o volume das secundárias em `RESTORING`.
 - Mirroring com witness: segue como limitação do laboratório.
 - Antes da release pública: varrer o histórico com `gitleaks`; atualizar o
-  `CLAUDE.md` versionado; revisar o `prometheus.yml` versionado; trocar a
+  `CLAUDE.md` versionado; ~~revisar o `prometheus.yml` versionado~~ (deixou
+  de ser versionado em 2026-10-28, exemplo no README); trocar a
   porta 9187 (alocada ao postgres_exporter) e registrar a nova na lista de
   portas do Prometheus depois de o repositório ficar público; CHANGELOG
   opcional.

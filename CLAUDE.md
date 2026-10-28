@@ -38,7 +38,7 @@ mssql-exporter/
 ├── .gitignore                       # Git ignore patterns
 ├── .env                             # Environment variables (not committed, create locally)
 ├── docker-compose.yml               # Prometheus + Grafana stack for local testing
-├── prometheus.yml                   # Prometheus scrape configuration
+├── prometheus.yml                   # Local scrape config mounted by docker-compose (not committed, example in README)
 ├── config.example.yml               # Example YAML config file (--config.file)
 │
 ├── .github/workflows/
@@ -320,7 +320,8 @@ make release-dry-run  # GoReleaser snapshot build (no publish, no tag needed)
 
 ### Local Testing Setup
 
-1. Create `.env` file with SQL Server credentials
+1. Create `.env` file with SQL Server credentials, and `prometheus.yml` from
+   the example in README ("Running With Prometheus and Grafana")
 2. Run exporter: `make run` or `./bin/mssql-exporter`
 3. Start monitoring stack: `make compose-up`
 4. Access services:
@@ -743,7 +744,7 @@ make test
 - Consider filtering or sampling for large deployments
 
 ### Scrape Interval
-- Default: 15 seconds (see `prometheus.yml`)
+- Default: 15 seconds (`scrape_interval` of the README's `prometheus.yml` example)
 - Balance freshness vs. SQL Server load
 - For high-cardinality metrics, consider longer intervals
 

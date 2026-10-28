@@ -27,6 +27,9 @@ go.work.sum
 # env file
 .env
 
+# local Prometheus config mounted by docker-compose.yml (example in README)
+prometheus.yml
+
 # local config file (may contain the DSN with credentials)
 config.yml
 config.yaml
