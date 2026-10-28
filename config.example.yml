@@ -16,7 +16,7 @@ dsn: "sqlserver://sa:MyStrongP%40ss@localhost:1433?database=master&app+name=mssq
 # max_connections: 5
 
 web:
-  listen_address: ":9187"
+  listen_address: ":10060"
   telemetry_path: "/metrics"
   # Optional exporter-toolkit web config file enabling TLS and/or basic auth:
   # config_file: "web-config.yml"

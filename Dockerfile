@@ -33,9 +33,9 @@ WORKDIR /app
 COPY --from=builder --chown=exporter:exporter /out/mssql-exporter .
 
 USER exporter
-EXPOSE 9187
+EXPOSE 10060
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-    CMD wget -qO- http://localhost:9187/healthz || exit 1
+    CMD wget -qO- http://localhost:10060/healthz || exit 1
 
 ENTRYPOINT ["./mssql-exporter"]

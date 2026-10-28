@@ -261,3 +261,5 @@ first; implement in this order.
   and a CI job on SQL Server 2022 and 2025; every collector must succeed as
   a login with the README grants. Topologies (AG, replication) are not
   covered yet
+- [x] Default port 10060 instead of 9187 (allocated to `postgres_exporter`);
+  register it in the Prometheus port list once the repository is public

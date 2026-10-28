@@ -2,7 +2,11 @@
 
 Prometheus exporter for Microsoft SQL Server. It collects a handful of instance-level metrics and exposes them on an HTTP endpoint for Prometheus to scrape, following a similar structure and naming style to other official database exporters (e.g. `mysqld_exporter`).
 
-- Endpoint: `:9187/metrics`
+- Endpoint: `:10060/metrics`. Up to v0.17 the default port was 9187, which
+  the [Prometheus port registry](https://github.com/prometheus/prometheus/wiki/Default-port-allocations)
+  assigns to `postgres_exporter`. When upgrading, either point the scrape
+  targets (and firewall rules) at 10060 or keep the old port with
+  `--web.listen-address=:9187`
 - Driver: [`microsoft/go-mssqldb`](https://github.com/microsoft/go-mssqldb)
 - Validated against SQL Server 2019 (CU32), 2022 (RTM) and 2025 (RTM) on Windows,
   including rolling upgrades of an Availability Group, database mirroring and
@@ -46,7 +50,7 @@ The exporter currently includes these collectors:
 # Build
 go build -o mssql-exporter ./
 
-# Run (binary listens on :9187)
+# Run (binary listens on :10060)
 ./mssql-exporter
 ```
 
@@ -56,7 +60,7 @@ go build -o mssql-exporter ./
 scrape_configs:
   - job_name: 'sqlserver_exporter'
     static_configs:
-      - targets: ['localhost:9187']
+      - targets: ['localhost:10060']
 ```
 
 A `docker-compose.yml` for Prometheus and Grafana is included; it mounts a
@@ -71,7 +75,7 @@ Configuration comes from three sources, merged with the following precedence
 Flags (mirroring the ergonomics of `mysqld_exporter`/`postgres_exporter`):
 
 ```
---web.listen-address string    Address to listen on for the web interface and metrics. (default ":9187")
+--web.listen-address string    Address to listen on for the web interface and metrics. (default ":10060")
 --web.telemetry-path string    Path under which to expose metrics. (default "/metrics")
 --collector.<name>             Enable/disable a SQL Server collector (all default to true
                                except log_shipping, top_queries, index_fragmentation,
@@ -133,7 +137,7 @@ to the executable). See `config.example.yml`:
 ```yaml
 dsn: "sqlserver://sa:MyStrongP%40ss@localhost:1433?database=master"
 web:
-  listen_address: ":9187"
+  listen_address: ":10060"
   telemetry_path: "/metrics"
 collectors:
   os_collectors: false
@@ -255,7 +259,7 @@ Edit `/etc/mssql-exporter/config.yml` (DSN and collectors), then:
 systemctl daemon-reload
 systemctl enable --now mssql-exporter
 systemctl status mssql-exporter
-curl -s localhost:9187/metrics | grep sqlserver_up
+curl -s localhost:10060/metrics | grep sqlserver_up
 ```
 
 - The config file holds the DSN, so it is readable only by root and the
@@ -270,8 +274,8 @@ curl -s localhost:9187/metrics | grep sqlserver_up
   (`systemd-analyze security mssql-exporter` rates it 3.1, "OK").
 - If Prometheus reaches the exporter through an SSH tunnel (e.g. from a
   bastion host), bind it to loopback with `web.listen_address:
-  "127.0.0.1:9187"` and forward the port:
-  `ssh -N -L 19187:127.0.0.1:9187 user@bastion`.
+  "127.0.0.1:10060"` and forward the port:
+  `ssh -N -L 10060:127.0.0.1:10060 user@bastion`.
 - When the exporter runs on a different host than SQL Server (a bastion, or
   any managed instance such as RDS), leave `os_collectors` disabled: they
   would describe the exporter's host, not the database server.
@@ -860,13 +864,13 @@ scrape_configs:
     scrape_timeout: 10s
     static_configs:
       # host.docker.internal reaches the exporter running on the Docker host;
-      # switch to 'mssql-exporter:9187' if you enable the exporter service in docker-compose.yml
-      - targets: ['host.docker.internal:9187']
+      # switch to 'mssql-exporter:10060' if you enable the exporter service in docker-compose.yml
+      - targets: ['host.docker.internal:10060']
 ```
 
 Steps:
 
-1) Start the exporter locally on `:9187`.
+1) Start the exporter locally on `:10060`.
 2) `docker compose up -d` (or `make compose-up`) to bring up Prometheus and Grafana.
 3) Prometheus UI: http://localhost:9090
 4) Grafana UI: http://localhost:3000 (admin/admin by default; password set in `docker-compose.yml`).
@@ -924,7 +928,7 @@ Managed Instance** with Azure Monitor. See
 - Cannot connect / ping fails: verify host, port, authentication mode, and that the SQL Server accepts TCP connections.
 - Permission errors or empty metrics: ensure the login has `VIEW SERVER STATE` and access to the queried DMVs.
 - Panic on scrape: fixed in current code by aligning metric labels and descriptors. If you see a panic, check the logs and validate label counts vs. descriptors.
-- No metrics in Prometheus: confirm Prometheus can reach `:9187/metrics` and that the scrape job is correctly targeted.
+- No metrics in Prometheus: confirm Prometheus can reach `:10060/metrics` and that the scrape job is correctly targeted.
 
 ## Roadmap
 

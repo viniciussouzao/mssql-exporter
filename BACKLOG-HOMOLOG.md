@@ -203,9 +203,11 @@ exige `AS CustomerDbRootRole`. Depois do GCP vem a Azure (abaixo).
 - Mirroring com witness: segue como limitação do laboratório.
 - Antes da release pública: varrer o histórico com `gitleaks`; atualizar o
   `CLAUDE.md` versionado; ~~revisar o `prometheus.yml` versionado~~ (deixou
-  de ser versionado em 2026-10-28, exemplo no README); trocar a
-  porta 9187 (alocada ao postgres_exporter) e registrar a nova na lista de
-  portas do Prometheus depois de o repositório ficar público; CHANGELOG
+  de ser versionado em 2026-10-28, exemplo no README); ~~trocar a
+  porta 9187 (alocada ao postgres_exporter)~~ (padrão passou a ser 10060 em
+  2026-10-28; 9100–9999 está toda alocada e a 9433 é do Knot exporter);
+  registrar a 10060 na lista de portas do Prometheus depois de o
+  repositório ficar público (conferir antes se ainda está livre); CHANGELOG
   opcional.
 - Já atendidos: `ContinueOnError` no `/metrics` (HML-004, v0.1.1), testes de
   todos os coletores por um registry pedante e dashboards com

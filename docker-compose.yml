@@ -21,7 +21,7 @@ services:
   #   container_name: mssql-exporter
   #   env_file: .env
   #   ports:
-  #     - "9187:9187"
+  #     - "10060:10060"
   #   depends_on:
   #     mssql:
   #       condition: service_healthy
