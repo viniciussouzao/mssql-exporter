@@ -17,7 +17,7 @@ RUN CGO_ENABLED=0 go build -trimpath \
     -X github.com/viniciussouzao/mssql-exporter/internal/version.Date=${DATE}" \
     -o /out/mssql-exporter ./
 
-FROM alpine:3.21
+FROM alpine:3.24
 
 ARG VERSION=dev
 LABEL org.opencontainers.image.title="mssql-exporter" \
