@@ -947,6 +947,9 @@ from the Prometheus image; CI runs it on every pull request.
 - A `/healthz` endpoint returns 200 while the process is alive (liveness);
   use `sqlserver_up` for database reachability.
 - Avoid embedding secrets in source control. Keep the DSN in environment variables or a config file excluded from git.
+- Release binaries and the Docker image are built with the latest patch of a
+  supported Go release, and CI runs `govulncheck` on every pull request.
+  To report a vulnerability, see [SECURITY.md](SECURITY.md).
 
 ## Troubleshooting
 
@@ -966,6 +969,7 @@ make check             # gofmt, go vet and unit tests (go-sqlmock, no SQL Server
 make test-integration  # integration tests against a disposable SQL Server container
 make test-alerts       # promtool check + unit tests of contrib/prometheus/alerts.yml (Docker)
 make scan-secrets      # gitleaks over the whole git history (Docker)
+make vulncheck         # govulncheck: known vulnerabilities reachable from the code
 ```
 
 `make test-integration` starts `mcr.microsoft.com/mssql/server:2025-latest`

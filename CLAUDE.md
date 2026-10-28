@@ -7,7 +7,7 @@ This document provides a comprehensive guide for AI assistants working with the 
 **mssql-exporter** is a Prometheus exporter for Microsoft SQL Server written in Go. It collects instance-level metrics from SQL Server and exposes them via an HTTP endpoint (`:10060/metrics`) for Prometheus to scrape.
 
 ### Key Technologies
-- **Language**: Go 1.25.0 (see `go.mod`)
+- **Language**: Go 1.27.3 minimum (`go.mod`); builds use the latest 1.27.x (`GO_VERSION` in the workflows, `golang:1.27-alpine` in the Dockerfile)
 - **Database Driver**: `microsoft/go-mssqldb` v1.11.2 (replaced the archived `denisenkom/go-mssqldb` in v0.5.0)
 - **Metrics Library**: `prometheus/client_golang` v1.23.2
 - **Configuration**: CLI flags (`spf13/pflag`), environment variables (`.env` via `joho/godotenv`), and an optional YAML config file (`gopkg.in/yaml.v3`) — see `internal/config`
@@ -41,9 +41,13 @@ mssql-exporter/
 ├── prometheus.yml                   # Local scrape config mounted by docker-compose (not committed, example in README)
 ├── config.example.yml               # Example YAML config file (--config.file)
 │
-├── .github/workflows/
-│   ├── ci.yml                       # PR checks: vet, golangci-lint, test, build, alert rules; integration tests on SQL Server 2022/2025
-│   └── release.yml                  # Tag + GoReleaser on merged PRs labeled release:*
+├── SECURITY.md                      # How to report a vulnerability, supported versions
+│
+├── .github/
+│   ├── dependabot.yml               # Weekly updates: Go modules, GitHub Actions, Dockerfile images
+│   └── workflows/
+│       ├── ci.yml                   # PR checks: vet, golangci-lint, test, build, alert rules, govulncheck, gitleaks; integration tests on SQL Server 2022/2025
+│       └── release.yml              # Tag + GoReleaser on merged PRs labeled release:*
 │
 ├── dashboards/
 │   ├── mssql-exporter-grafana-dashboard.json        # Main Grafana dashboard
@@ -292,7 +296,7 @@ Resolved in `internal/config.Load()`. Precedence per field, highest first:
 ## Development Workflow
 
 ### Prerequisites
-- Go 1.25.0 or later
+- Go 1.27.3 or later
 - Access to a SQL Server instance
 - SQL Server login with `VIEW SERVER STATE` permission
 
@@ -306,6 +310,7 @@ make test           # Run unit tests
 make test-integration  # Integration tests against a disposable SQL Server container (Docker)
 make test-alerts    # promtool check + unit tests of contrib/prometheus/alerts.yml (Docker)
 make scan-secrets   # gitleaks over the whole git history (Docker)
+make vulncheck      # govulncheck: known vulnerabilities reachable from the code
 make tidy           # go mod tidy
 make fmt            # Format code with gofmt
 make vet            # Run go vet
@@ -574,8 +579,8 @@ and README):
   the Exporter and every collector (`go-sqlmock`) — run with `make test`
   (196 test functions, 238 runs counting subtests)
 - CI (`.github/workflows/ci.yml`) runs vet, golangci-lint, tests, build and
-  `make test-alerts` on every PR, a gitleaks scan of the whole history
-  (`make scan-secrets`), plus the integration tests on SQL Server 2022
+  `make test-alerts` on every PR, `make vulncheck` (govulncheck), a gitleaks
+  scan of the whole history (`make scan-secrets`), plus the integration tests on SQL Server 2022
   and 2025 service containers. When a metric used in `contrib/prometheus/alerts.yml`
   changes, update the rules (and their unit tests) in the same PR
 - Integration tests (`integration/`, build tag `integration`, `make test-integration`):
