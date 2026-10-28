@@ -19,7 +19,7 @@ LDFLAGS := -s -w \
 help:
 	@echo "Targets:"
 	@echo "  build        Build the exporter binary into bin/"
-	@echo "  run          Build and run the exporter (listens on :9187)"
+	@echo "  run          Build and run the exporter (listens on :10060)"
 	@echo "  test         Run unit tests"
 	@echo "  test-integration  Run the integration tests against a disposable SQL Server container"
 	@echo "  tidy         Run 'go mod tidy'"

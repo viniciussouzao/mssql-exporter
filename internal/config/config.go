@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	defaultWebListenAddress = ":9187"
+	defaultWebListenAddress = ":10060"
 	defaultWebTelemetryPath = "/metrics"
 
 	// maxMaxConnections bounds sqlserver.max-connections: every collector of

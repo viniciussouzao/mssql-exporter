@@ -4,7 +4,7 @@ This document provides a comprehensive guide for AI assistants working with the 
 
 ## Project Overview
 
-**mssql-exporter** is a Prometheus exporter for Microsoft SQL Server written in Go. It collects instance-level metrics from SQL Server and exposes them via an HTTP endpoint (`:9187/metrics`) for Prometheus to scrape.
+**mssql-exporter** is a Prometheus exporter for Microsoft SQL Server written in Go. It collects instance-level metrics from SQL Server and exposes them via an HTTP endpoint (`:10060/metrics`) for Prometheus to scrape.
 
 ### Key Technologies
 - **Language**: Go 1.25.0 (see `go.mod`)
@@ -250,7 +250,7 @@ Resolved in `internal/config.Load()`. Precedence per field, highest first:
 **CLI flag > environment variable > YAML config file (`--config.file`) > default**.
 
 ```bash
---web.listen-address string    Address to listen on for the web interface and metrics. (default ":9187")
+--web.listen-address string    Address to listen on for the web interface and metrics. (default ":10060")
 --web.telemetry-path string    Path under which to expose metrics. (default "/metrics")
 --web.config.file string       exporter-toolkit web config for TLS and basic auth (YAML: web.config_file).
 --collector.<name>             Enable/disable a SQL Server collector (default true for all
@@ -325,7 +325,7 @@ make release-dry-run  # GoReleaser snapshot build (no publish, no tag needed)
 2. Run exporter: `make run` or `./bin/mssql-exporter`
 3. Start monitoring stack: `make compose-up`
 4. Access services:
-   - Exporter metrics: http://localhost:9187/metrics
+   - Exporter metrics: http://localhost:10060/metrics
    - Prometheus: http://localhost:9090
    - Grafana: http://localhost:3000 (admin/admin)
 
@@ -443,8 +443,8 @@ including the enable/disable toggle.
    `testutil_test.go` (covers happy path, query error, scan error, empty result)
 2. Verify SQL query works against your SQL Server instance
 3. Run `make build && make run`
-4. Check metrics: `curl http://localhost:9187/metrics | grep sqlserver_your_metric`
-5. Check self-metrics: `curl http://localhost:9187/metrics | grep 'scrape_collector.*your_collector'`
+4. Check metrics: `curl http://localhost:10060/metrics | grep sqlserver_your_metric`
+5. Check self-metrics: `curl http://localhost:10060/metrics | grep 'scrape_collector.*your_collector'`
 6. Run `make check` to ensure code quality
 7. Document the metrics in README.md and, if useful, the Grafana dashboard
 
@@ -598,7 +598,7 @@ and README):
 
 ### Testing Checklist (for new changes)
 1. Verify connection to SQL Server
-2. Check metrics endpoint: `curl localhost:9187/metrics`
+2. Check metrics endpoint: `curl localhost:10060/metrics`
 3. Validate metric format (Prometheus text exposition format)
 4. Test with Prometheus scraping (use docker-compose setup)
 5. Verify no panics or errors in logs
@@ -674,9 +674,9 @@ items to the "Done" section and keep phases current.
 - Review recent collector changes
 
 ### Metrics not appearing in Prometheus
-- Verify exporter is running: `curl localhost:9187/metrics`
+- Verify exporter is running: `curl localhost:10060/metrics`
 - Check Prometheus targets page (http://localhost:9090/targets)
-- Verify Prometheus can reach `host.docker.internal:9187`
+- Verify Prometheus can reach `host.docker.internal:10060`
 - Check for errors in Prometheus logs
 
 ### High memory usage
