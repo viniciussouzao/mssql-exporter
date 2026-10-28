@@ -182,11 +182,6 @@ first; implement in this order.
   `fedauth`. Not a priority: SQL logins work on both, and the Azure identity
   SDK adds a few MB to every binary (HML-016 kept it out on purpose)
 - Missing indexes (`sys.dm_db_missing_index_*`)
-- Transaction log health from `sys.dm_db_log_stats` (one row per database,
-  works on RDS where the `Percent Log Used` counter misses the system
-  databases): VLF count and log generated since the last log backup
-  (HML-026). The truncation reason is already covered by
-  `sqlserver_database_log_reuse_wait` (Phase 7)
 - Per-query statistics from Query Store (`sys.query_store_runtime_stats`):
   history that survives restarts and plan cache eviction, plan changes, waits
   per query (2017+). Deferred: data is aggregated in intervals (60 min by
@@ -257,3 +252,7 @@ first; implement in this order.
 - [x] `wait_stats` skips idle/background wait types and wait types that never
   happened by default; `--collector.wait_stats.include_idle` keeps
   everything (HML-031, HML-039)
+- [x] Transaction log health: `transaction_log` collector over
+  `sys.dm_db_log_stats` with VLF count, active log and log since the last
+  log backup and checkpoint per database; works on RDS for the system
+  databases (HML-026, HML-055)

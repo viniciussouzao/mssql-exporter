@@ -63,6 +63,7 @@ de 2026-10-20, em outras nuvens (Google Cloud SQL e Azure).
 | HML-052 | Dashboard para Managed Instance: exporter + Azure Monitor (validação) | Azure SQL Managed Instance (GP) | — | resolvido |
 | HML-053 | Reconhecimento do Azure SQL Database: 10 de 19 coletores funcionam; o resto depende de `sys.master_files`, `msdb` e DMVs de servidor (validação) | Azure SQL Database (serverless GP, free offer) | — | adiado (ROADMAP) |
 | HML-054 | Rótulo automático da instância, fila de disco e esperas ociosas (validação) | Laboratório doméstico + Docker local | — | resolvido (v0.15.0) |
+| HML-055 | Coletor `transaction_log` (`sys.dm_db_log_stats`): VLFs e log desde o último backup de log (validação) | Docker local + laboratório doméstico | — | resolvido (v0.16.0) |
 
 ## Encerramento da fase EC2 (2026-10-15)
 
@@ -3138,4 +3139,37 @@ Com `include_idle` o topo do notebook é `SOS_WORK_DISPATCHER`,
 `LOGMGR_QUEUE`, `DISPATCHER_QUEUE_SEMAPHORE` e outras esperas de fundo; no
 padrão passa a ser `PREEMPTIVE_OS_CRYPTOPS`, `PREEMPTIVE_OS_DEVICEOPS`,
 `SOS_SCHEDULER_YIELD` e `ASYNC_NETWORK_IO`.
+
+## HML-055 — Coletor `transaction_log` (`sys.dm_db_log_stats`): VLFs e log desde o último backup de log (validação)
+
+- **Ambiente:** container `mssql-2025-agent` (SQL Server 2025 em Linux, como
+  `sa`) e o notebook doméstico (SQL Server 2025 Developer, login
+  `usr_exporter` com os grants do README); binário da branch
+  `feat/transaction-log-stats`
+- **Encontrado em:** 2026-10-28
+- **Severidade:** — (validação)
+- **Status:** resolvido (v0.16.0)
+
+Item do ROADMAP nascido do HML-026 (no RDS o contador `Percent Log Used` não
+tem instância para os bancos de sistema). Novo coletor `transaction_log`,
+ligado por padrão:
+
+| Métrica | Origem |
+|---|---|
+| `sqlserver_database_log_vlf_count` / `_active_vlf_count` | `total_vlf_count` / `active_vlf_count` |
+| `sqlserver_database_log_active_bytes` | `active_log_size_mb` |
+| `sqlserver_database_log_since_last_log_backup_bytes` | `log_since_last_log_backup_mb` (`NULL` sem cadeia de backup de log → série ausente) |
+| `sqlserver_database_log_since_last_checkpoint_bytes` | `log_since_last_checkpoint_mb` |
+
+- Só bancos `ONLINE` com `HAS_DBACCESS = 1`; réplicas secundárias locais de
+  AG ficam de fora (não validado em AG real nesta fase: os ambientes AWS já
+  foram destruídos).
+- Container: `LogReuseTest` (FULL, motivo `LOG_BACKUP`) com 12 VLFs, 8
+  ativos e ≈87 MB desde o último backup de log; depois de um `BACKUP LOG`
+  (arquivo `/var/opt/mssql/data/LogReuseTest_hml055.trn` no container),
+  ≈76 KB desde o backup e 1 VLF ativo. `master` (SIMPLE) sem a série
+  `since_last_log_backup`, como esperado.
+- Notebook: `success 1` com o login do exporter, 5 bancos, 0,43 s.
+- Dashboard principal: painéis "VLF Count by Database" e "Log Since Last
+  Log Backup" na seção Databases.
 
