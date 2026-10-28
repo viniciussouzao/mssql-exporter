@@ -64,6 +64,8 @@ de 2026-10-20, em outras nuvens (Google Cloud SQL e Azure).
 | HML-053 | Reconhecimento do Azure SQL Database: 10 de 19 coletores funcionam; o resto depende de `sys.master_files`, `msdb` e DMVs de servidor (validação) | Azure SQL Database (serverless GP, free offer) | — | adiado (ROADMAP) |
 | HML-054 | Rótulo automático da instância, fila de disco e esperas ociosas (validação) | Laboratório doméstico + Docker local | — | resolvido (v0.15.0) |
 | HML-055 | Coletor `transaction_log` (`sys.dm_db_log_stats`): VLFs e log desde o último backup de log (validação) | Docker local + laboratório doméstico | — | resolvido (v0.16.0) |
+| HML-056 | Coletor `missing_indexes` (opt-in): sugestões do otimizador (validação) | Docker local + laboratório doméstico | — | resolvido (v0.17.0) |
+| HML-057 | Coletor `replication` (opt-in): agentes da replicação transacional no Distributor (validação) | Docker local (SQL Server 2025 com Agent) | — | resolvido (v0.17.0) |
 
 ## Encerramento da fase EC2 (2026-10-15)
 
@@ -3172,4 +3174,76 @@ ligado por padrão:
 - Notebook: `success 1` com o login do exporter, 5 bancos, 0,43 s.
 - Dashboard principal: painéis "VLF Count by Database" e "Log Since Last
   Log Backup" na seção Databases.
+
+## HML-056 — Coletor `missing_indexes` (opt-in): sugestões do otimizador (validação)
+
+- **Ambiente:** container `mssql-2025-agent` (SQL Server 2025 em Linux) e o
+  notebook doméstico; binário da branch `feat/missing-indexes-replication`
+- **Encontrado em:** 2026-10-28
+- **Severidade:** — (validação)
+- **Status:** resolvido (v0.17.0)
+
+Banco de teste `MissingIdxTest` no container (tabela `dbo.Orders`, 200 mil
+linhas, só a chave primária). Consultas com plano `TRIVIAL` não geram
+sugestão; com `GROUP BY`/`ORDER BY` e um self-join (otimização completa),
+20 execuções de cada geraram duas:
+
+| Colunas sugeridas | Seeks | Impacto | Medida de melhoria |
+|---|---|---|---|
+| igualdade `[CustomerID]` | 20 | 97,3 % | 93,5 |
+| igualdade `[Status]`, desigualdade `[OrderDate]`, inclui `[CustomerID], [Amount]` | 20 | 95,9 % | 92,5 |
+
+- O coletor expôs as duas, com `sqlserver_missing_index_info` trazendo as
+  colunas, `success 1` em 3 ms.
+- Permissão: só `VIEW SERVER STATE` basta para as linhas, mas
+  `OBJECT_NAME`/`OBJECT_SCHEMA_NAME` devolvem `NULL` sem acesso ao banco;
+  com `CONNECT ANY DATABASE` o nome da tabela aparece (README).
+- Notebook (`usr_exporter`): `success 1`, nenhuma sugestão.
+
+---
+
+## HML-057 — Coletor `replication` (opt-in): agentes da replicação transacional no Distributor (validação)
+
+- **Ambiente:** container `mssql-2025-agent` (SQL Server 2025 em Linux, com
+  Agent) configurado como Distributor, Publisher e Subscriber locais:
+  banco `distribution`, publicação transacional `ItemsPub` (`ReplPub.dbo.Items`)
+  e assinatura push para `ReplSub`; binário da branch
+  `feat/missing-indexes-replication`
+- **Encontrado em:** 2026-10-28
+- **Severidade:** — (validação)
+- **Status:** resolvido (v0.17.0)
+
+**Montagem** — `sp_adddistributor`, `sp_adddistributiondb`,
+`sp_adddistpublisher` (pasta `/var/opt/mssql/ReplData`), publicação com
+`immediate_sync`, Log Reader e Snapshot Agent com autenticação SQL (no Linux
+os agentes não usam Windows auth). O snapshot inicial e 500 linhas chegaram
+ao assinante.
+
+**Achados que viraram desenho do coletor**
+
+- `immediate_sync` cria duas assinaturas "virtuais" (`subscriber_id` < 0,
+  `subscriber_db = 'virtual'`) com comandos "pendentes" que nunca são
+  entregues: ficam de fora.
+- Os ids de publisher/subscriber de `MSdistribution_agents` correspondem a
+  `distribution.dbo.MSreplservers`, não a `master.sys.servers` (lá o id 1 é
+  `repl_distributor`).
+- O role `replmonitor` do `distribution` não dá SELECT nas tabelas (só nas
+  procedures de monitoramento): o README pede um usuário com SELECT nas seis
+  tabelas/views, validado com um login de teste `usr_repl_probe`.
+- Um agente parado mantém o último status (2 = succeeded depois de um
+  `sp_stop_job`), então o alerta deve usar os comandos pendentes e a idade
+  do último histórico.
+
+**Validação**
+
+| Momento | Distribution agent: status / latência | Pendentes |
+|---|---|---|
+| Estável | 4 (idle) / 1,7 s | 0 |
+| Agente parado (`sp_stop_job`) + 300 linhas inseridas | 2 | 300 |
+| Agente religado (`sp_start_job`), 25 s depois | 3 (in progress) / 14,8 s | 0, 800 linhas no assinante |
+
+- Log Reader: status 4/3, latência 4 s, sem a série de pendentes.
+- `success 1` com `sa` e com o login de menor privilégio; no notebook (não é
+  Distributor) `success 1` sem séries.
+- Não testado: merge e snapshot, Distributor remoto, publicações Oracle.
 

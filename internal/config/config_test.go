@@ -726,3 +726,33 @@ wait_stats:
 		t.Error("WaitStats.IncludeIdle = true, want the flag to override the config file")
 	}
 }
+
+func TestLoadMissingIndexesLimit(t *testing.T) {
+	t.Setenv("SQL_SERVER_DSN", "")
+
+	path := writeConfigFile(t, `
+dsn: "`+testDSN+`"
+missing_indexes:
+  limit: 50
+`)
+	cfg, err := Load([]string{"--config.file", path})
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.CollectorOptions.MissingIndexes.Limit != 50 {
+		t.Errorf("MissingIndexes.Limit = %d, want yaml value 50", cfg.CollectorOptions.MissingIndexes.Limit)
+	}
+	cfg, err = Load([]string{"--config.file", path, "--collector.missing_indexes.limit", "5"})
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.CollectorOptions.MissingIndexes.Limit != 5 {
+		t.Errorf("MissingIndexes.Limit = %d, want the flag to override the config file", cfg.CollectorOptions.MissingIndexes.Limit)
+	}
+
+	for _, v := range []string{"0", "601"} {
+		if _, err := Load([]string{"--config.file", path, "--collector.missing_indexes.limit", v}); err == nil || !strings.Contains(err.Error(), "missing_indexes.limit") {
+			t.Errorf("Load(limit=%s) error = %v, want a range error", v, err)
+		}
+	}
+}

@@ -94,6 +94,10 @@ type fileConfig struct {
 		MinPageCount *int           `yaml:"min_page_count"`
 		Databases    []string       `yaml:"databases"`
 	} `yaml:"index_fragmentation"`
+	// MissingIndexes holds the missing_indexes collector options.
+	MissingIndexes struct {
+		Limit *int `yaml:"limit"`
+	} `yaml:"missing_indexes"`
 	// QueryStore holds the query_store collector options.
 	QueryStore struct {
 		Interval  *time.Duration `yaml:"interval"`
@@ -126,6 +130,7 @@ func Load(args []string) (*Config, error) {
 	fragMinPageCount := fs.Int("collector.index_fragmentation.min_page_count", defaultOpts.IndexFragmentation.MinPageCount, "Skip indexes with fewer 8 KB pages than this in the index_fragmentation collector.")
 	fragDatabases := fs.StringSlice("collector.index_fragmentation.databases", nil, "Comma-separated databases read by the index_fragmentation collector (default: every accessible user database).")
 	qsInterval := fs.Duration("collector.query_store.interval", defaultOpts.QueryStore.Interval, "Interval between background collections of the query_store collector (minimum 1m).")
+	missingIndexesLimit := fs.Int("collector.missing_indexes.limit", defaultOpts.MissingIndexes.Limit, "Number of missing index suggestions (by estimated improvement) exposed by the missing_indexes collector (1-600).")
 	qsDatabases := fs.StringSlice("collector.query_store.databases", nil, "Comma-separated databases read by the query_store collector (default: every accessible user database).")
 
 	collectorFlags := make(map[string]*bool, len(collector.ScraperNames()))
@@ -297,6 +302,17 @@ func Load(args []string) (*Config, error) {
 	}
 	if qo.Interval < collector.QueryStoreMinInterval {
 		return nil, fmt.Errorf("collector.query_store.interval must be at least %s", collector.QueryStoreMinInterval)
+	}
+
+	mo := &cfg.CollectorOptions.MissingIndexes
+	if fc.MissingIndexes.Limit != nil {
+		mo.Limit = *fc.MissingIndexes.Limit
+	}
+	if fs.Changed("collector.missing_indexes.limit") {
+		mo.Limit = *missingIndexesLimit
+	}
+	if mo.Limit < 1 || mo.Limit > collector.MissingIndexesMaxLimit {
+		return nil, fmt.Errorf("collector.missing_indexes.limit must be between 1 and %d", collector.MissingIndexesMaxLimit)
 	}
 
 	cfg.InstanceLabel = fc.InstanceLabel
