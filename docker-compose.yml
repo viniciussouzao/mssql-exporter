@@ -32,6 +32,7 @@ services:
     image: prom/prometheus:latest
     container_name: prometheus
     volumes:
+      # Local file, not versioned: create it from the example in README.md
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
       - prometheus_data:/prometheus
     ports:
