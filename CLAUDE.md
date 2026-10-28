@@ -305,6 +305,7 @@ make run            # Build and run the exporter
 make test           # Run unit tests
 make test-integration  # Integration tests against a disposable SQL Server container (Docker)
 make test-alerts    # promtool check + unit tests of contrib/prometheus/alerts.yml (Docker)
+make scan-secrets   # gitleaks over the whole git history (Docker)
 make tidy           # go mod tidy
 make fmt            # Format code with gofmt
 make vet            # Run go vet
@@ -573,7 +574,8 @@ and README):
   the Exporter and every collector (`go-sqlmock`) — run with `make test`
   (196 test functions, 238 runs counting subtests)
 - CI (`.github/workflows/ci.yml`) runs vet, golangci-lint, tests, build and
-  `make test-alerts` on every PR, plus the integration tests on SQL Server 2022
+  `make test-alerts` on every PR, a gitleaks scan of the whole history
+  (`make scan-secrets`), plus the integration tests on SQL Server 2022
   and 2025 service containers. When a metric used in `contrib/prometheus/alerts.yml`
   changes, update the rules (and their unit tests) in the same PR
 - Integration tests (`integration/`, build tag `integration`, `make test-integration`):

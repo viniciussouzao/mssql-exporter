@@ -14,7 +14,7 @@ LDFLAGS := -s -w \
 	-X $(MODULE)/internal/version.Commit=$(COMMIT) \
 	-X $(MODULE)/internal/version.Date=$(DATE)
 
-.PHONY: help build run test test-integration test-alerts tidy fmt vet check clean install compose-up compose-down docker-build release-dry-run
+.PHONY: help build run test test-integration test-alerts scan-secrets tidy fmt vet check clean install compose-up compose-down docker-build release-dry-run
 
 help:
 	@echo "Targets:"
@@ -23,6 +23,7 @@ help:
 	@echo "  test         Run unit tests"
 	@echo "  test-integration  Run the integration tests against a disposable SQL Server container"
 	@echo "  test-alerts  Check and unit test contrib/prometheus/alerts.yml with promtool (Docker)"
+	@echo "  scan-secrets Scan the whole git history for secrets with gitleaks (Docker)"
 	@echo "  tidy         Run 'go mod tidy'"
 	@echo "  fmt          Format code (gofmt -s -w .)"
 	@echo "  vet          Run 'go vet'"
@@ -51,6 +52,7 @@ IT_IMAGE ?= mcr.microsoft.com/mssql/server:2025-latest
 IT_PORT ?= 14339
 IT_CONTAINER ?= mssql-exporter-it
 PROMTOOL_IMAGE ?= prom/prometheus:v3.5.0
+GITLEAKS_IMAGE ?= ghcr.io/gitleaks/gitleaks:v8.30.1
 
 test-integration:
 	@pw="It-$$(openssl rand -hex 12)-Aa1"; \
@@ -66,6 +68,12 @@ test-alerts:
 		$(PROMTOOL_IMAGE) check rules alerts.yml
 	docker run --rm -v "$(CURDIR)/contrib/prometheus:/rules:ro" -w /rules --entrypoint promtool \
 		$(PROMTOOL_IMAGE) test rules alerts_test.yml
+
+# Every commit of every local ref, with the findings' values redacted. Run it
+# from the main checkout: a worktree's .git points outside the mounted directory.
+scan-secrets:
+	docker run --rm -v "$(CURDIR):/repo:ro" $(GITLEAKS_IMAGE) \
+		git /repo --redact --verbose --no-banner --log-opts="--all"
 
 tidy:
 	$(GO) mod tidy

@@ -201,7 +201,11 @@ exige `AS CustomerDbRootRole`. Depois do GCP vem a Azure (abaixo).
 - `volumes`: filtro `sys.databases.state IN (0, 1)` (HML-019, ROADMAP).
   Só `ONLINE` faria sumir o volume das secundárias em `RESTORING`.
 - Mirroring com witness: segue como limitação do laboratório.
-- Antes da release pública: varrer o histórico com `gitleaks`; atualizar o
+- Antes da release pública: ~~varrer o histórico com `gitleaks`~~ (2026-10-28,
+  8.30.1 em todas as refs, também nos merges: nada encontrado; os DSNs têm só
+  senhas de exemplo e a do container do CI; ficam públicos apenas nomes de
+  recursos já destruídos, como os hosts `EC2AMAZ-*` e a zona DNS da MI; o CI
+  passou a rodar `make scan-secrets` em todo PR); atualizar o
   `CLAUDE.md` versionado; ~~revisar o `prometheus.yml` versionado~~ (deixou
   de ser versionado em 2026-10-28, exemplo no README); ~~trocar a
   porta 9187 (alocada ao postgres_exporter)~~ (padrão passou a ser 10060 em
