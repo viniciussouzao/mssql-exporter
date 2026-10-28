@@ -5,8 +5,8 @@ on:
     branches: [main]
   workflow_dispatch:
 
-# Builds use the latest patch of a supported Go release. go.mod only holds
-# the minimum version, and setup-go would install exactly that (go1.26.0).
+# Builds use the latest Go 1.27 patch. go.mod only holds the minimum, and
+# setup-go would install exactly that version (go-version-file).
 env:
   GO_VERSION: "1.27.x"
 
@@ -31,7 +31,7 @@ jobs:
       - name: Lint
         uses: golangci/golangci-lint-action@v8
         with:
-          version: v2.12.2
+          version: v2.15.0
 
       - name: Test
         run: go test ./...

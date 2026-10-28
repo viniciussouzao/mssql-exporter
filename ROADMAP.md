@@ -266,7 +266,7 @@ first; implement in this order.
 - [x] Example alerting rules (`contrib/prometheus/alerts.yml`, with
   `promtool` unit tests in CI) and dashboard panels for the opt-in
   `missing_indexes` and `replication` collectors
-- [x] Supply chain: releases built with the latest Go 1.27.x instead of the
-  `go.mod` minimum (v0.18.0 and earlier were built with go1.25.0, with
+- [x] Supply chain: Go 1.27.3 minimum and releases built with the latest
+  Go 1.27.x instead of the `go.mod` minimum (v0.18.0 and earlier were built with go1.25.0, with
   reachable standard library vulnerabilities), `govulncheck` and gitleaks
   in CI, Dependabot and `SECURITY.md`

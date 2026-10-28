@@ -7,7 +7,7 @@ This document provides a comprehensive guide for AI assistants working with the 
 **mssql-exporter** is a Prometheus exporter for Microsoft SQL Server written in Go. It collects instance-level metrics from SQL Server and exposes them via an HTTP endpoint (`:10060/metrics`) for Prometheus to scrape.
 
 ### Key Technologies
-- **Language**: Go 1.26.0 minimum (`go.mod`); builds use the latest 1.27.x (`GO_VERSION` in the workflows, `golang:1.27-alpine` in the Dockerfile)
+- **Language**: Go 1.27.3 minimum (`go.mod`); builds use the latest 1.27.x (`GO_VERSION` in the workflows, `golang:1.27-alpine` in the Dockerfile)
 - **Database Driver**: `microsoft/go-mssqldb` v1.11.2 (replaced the archived `denisenkom/go-mssqldb` in v0.5.0)
 - **Metrics Library**: `prometheus/client_golang` v1.23.2
 - **Configuration**: CLI flags (`spf13/pflag`), environment variables (`.env` via `joho/godotenv`), and an optional YAML config file (`gopkg.in/yaml.v3`) — see `internal/config`
@@ -296,7 +296,7 @@ Resolved in `internal/config.Load()`. Precedence per field, highest first:
 ## Development Workflow
 
 ### Prerequisites
-- Go 1.26.0 or later
+- Go 1.27.3 or later
 - Access to a SQL Server instance
 - SQL Server login with `VIEW SERVER STATE` permission
 
