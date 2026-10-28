@@ -104,6 +104,9 @@ Flags (mirroring the ergonomics of `mysqld_exporter`/`postgres_exporter`):
 --sqlserver.instance-label string
                                Fixed value of the sqlserver_instance label (default: @@SERVERNAME).
                                Env: SQL_SERVER_INSTANCE_LABEL. YAML: instance_label.
+--sqlserver.max-connections int
+                               Connections to SQL Server shared by the collectors of a scrape
+                               (default 5, 1-100). Env: SQL_SERVER_MAX_CONNECTIONS. YAML: max_connections.
 --web.config.file string       Path to an exporter-toolkit web config file enabling TLS and/or basic auth.
 --version                      Print version information and exit.
 ```
@@ -136,7 +139,11 @@ collectors:
 ./mssql-exporter --config.file config.yml
 ```
 
-Connection pool/timeouts: adjust defaults in `internal/db/options.go` (`DefaultOptions()`).
+Connection pool: every enabled collector runs at the same time on each
+scrape, sharing `--sqlserver.max-connections` connections (default 5). Raise
+it when many collectors are enabled and the scrape is slow while SQL Server
+is not busy; lower it to limit the sessions the exporter opens. The query
+timeout (5s) is fixed in `internal/db/options.go` (`DefaultOptions()`).
 
 ### Encrypted connections (`encrypt=strict`)
 
@@ -751,6 +758,14 @@ when the driver hangs on a connection the server stopped answering (seen
 during a Cloud SQL failover): a ping that does not return reports
 `sqlserver_up 0`, and a collector that does not return reports
 `sqlserver_scrape_collector_success 0`.
+
+Simultaneous scrapes (two Prometheus servers in HA, a dashboard or `curl`
+next to Prometheus) share one collection: a scrape that arrives while
+another one is collecting waits for it and gets the same metrics, so SQL
+Server is queried once and the scrapes do not compete for the connection
+pool. Before v0.14.0 each scrape ran every collector again, and from about
+5 simultaneous scrapes collectors failed on the query timeout while waiting
+for a connection.
 
 Ready-to-use dashboards are included in [`dashboards/`](dashboards/): a
 general one, one for **Amazon RDS** that shows the exporter's engine

@@ -74,6 +74,8 @@ func run(ctx context.Context, cfg *config.Config) error {
 	slog.Info("starting mssql-exporter", slog.String("version", version.String()))
 
 	opts := db.DefaultOptions()
+	opts.MaxOpenConns = cfg.MaxConnections
+	opts.MaxIdleConns = cfg.MaxConnections
 
 	if err := db.Connect(cfg.DSN, opts); err != nil {
 		return fmt.Errorf("invalid sql server DSN: %w", err)

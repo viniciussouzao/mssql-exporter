@@ -11,6 +11,7 @@ import (
 
 	"github.com/spf13/pflag"
 	"github.com/viniciussouzao/mssql-exporter/internal/collector"
+	"github.com/viniciussouzao/mssql-exporter/internal/db"
 	"github.com/viniciussouzao/mssql-exporter/internal/version"
 	"gopkg.in/yaml.v3"
 )
@@ -18,6 +19,11 @@ import (
 const (
 	defaultWebListenAddress = ":9187"
 	defaultWebTelemetryPath = "/metrics"
+
+	// maxMaxConnections bounds sqlserver.max-connections: every collector of
+	// a scrape runs at the same time, so a few dozen connections already let
+	// all of them query in parallel; more only adds load on SQL Server.
+	maxMaxConnections = 100
 )
 
 // ErrExitRequested is returned by Load when the requested action was fully
@@ -44,6 +50,10 @@ type Config struct {
 	// metric. Empty means automatic: @@SERVERNAME, read once at startup.
 	InstanceLabel string
 
+	// MaxConnections is the size of the connection pool to SQL Server, shared
+	// by the collectors of a scrape.
+	MaxConnections int
+
 	// EnabledCollectors maps each SQL Server collector name (see
 	// collector.ScraperNames) to whether it should run. Defaults come from
 	// collector.ScraperEnabledByDefault.
@@ -62,6 +72,8 @@ type fileConfig struct {
 	} `yaml:"web"`
 	// InstanceLabel fixes the sqlserver_instance label; empty = @@SERVERNAME.
 	InstanceLabel string `yaml:"instance_label"`
+	// MaxConnections sizes the connection pool; nil keeps the default.
+	MaxConnections *int `yaml:"max_connections"`
 	// Collectors toggles collectors by name; `os_collectors` toggles the
 	// OS-level collectors, every other key must match a SQL Server collector.
 	Collectors map[string]bool `yaml:"collectors"`
@@ -98,6 +110,7 @@ func Load(args []string) (*Config, error) {
 	enableOSCollectors := fs.Bool("collector.os-collectors", false, "Enable OS-level collectors (CPU, memory, disk).")
 	configFile := fs.String("config.file", "", "Path to an optional YAML config file.")
 	instanceLabel := fs.String("sqlserver.instance-label", "", "Fixed value of the sqlserver_instance label (default: @@SERVERNAME, read at startup). Useful on Amazon RDS, whose server name is a generic host name that changes.")
+	maxConnections := fs.Int("sqlserver.max-connections", db.DefaultOptions().MaxOpenConns, "Maximum number of connections to SQL Server, shared by the collectors of a scrape (1-100).")
 	showVersion := fs.Bool("version", false, "Print version information and exit.")
 
 	defaultOpts := collector.DefaultOptions()
@@ -282,6 +295,24 @@ func Load(args []string) (*Config, error) {
 	}
 	if cfg.InstanceLabel != "" && strings.TrimSpace(cfg.InstanceLabel) == "" {
 		return nil, fmt.Errorf("sqlserver.instance-label must not be blank (leave it empty to use @@SERVERNAME)")
+	}
+
+	cfg.MaxConnections = db.DefaultOptions().MaxOpenConns
+	if fc.MaxConnections != nil {
+		cfg.MaxConnections = *fc.MaxConnections
+	}
+	if v := os.Getenv("SQL_SERVER_MAX_CONNECTIONS"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			return nil, fmt.Errorf("invalid SQL_SERVER_MAX_CONNECTIONS value %q: %w", v, err)
+		}
+		cfg.MaxConnections = n
+	}
+	if fs.Changed("sqlserver.max-connections") {
+		cfg.MaxConnections = *maxConnections
+	}
+	if cfg.MaxConnections < 1 || cfg.MaxConnections > maxMaxConnections {
+		return nil, fmt.Errorf("sqlserver.max-connections must be between 1 and %d", maxMaxConnections)
 	}
 
 	cfg.DSN = fc.DSN

@@ -12,6 +12,9 @@ dsn: "sqlserver://sa:MyStrongP%40ss@localhost:1433?database=master&app+name=mssq
 # @@SERVERNAME is a generic host name that changes on stop/start and failover.
 # instance_label: "orders-prod"
 
+# Connections to SQL Server shared by the collectors of a scrape (1-100).
+# max_connections: 5
+
 web:
   listen_address: ":9187"
   telemetry_path: "/metrics"
