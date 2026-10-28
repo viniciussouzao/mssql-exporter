@@ -77,6 +77,10 @@ type fileConfig struct {
 	// Collectors toggles collectors by name; `os_collectors` toggles the
 	// OS-level collectors, every other key must match a SQL Server collector.
 	Collectors map[string]bool `yaml:"collectors"`
+	// WaitStats holds the wait_stats collector options; nil keeps the default.
+	WaitStats struct {
+		IncludeIdle *bool `yaml:"include_idle"`
+	} `yaml:"wait_stats"`
 	// TopQueries holds the top_queries collector options; nil fields keep
 	// the defaults.
 	TopQueries struct {
@@ -114,6 +118,7 @@ func Load(args []string) (*Config, error) {
 	showVersion := fs.Bool("version", false, "Print version information and exit.")
 
 	defaultOpts := collector.DefaultOptions()
+	waitStatsIncludeIdle := fs.Bool("collector.wait_stats.include_idle", defaultOpts.WaitStats.IncludeIdle, "Also expose idle/background wait types (lazy writer, checkpoint, queues) and wait types that never happened in the wait_stats collector.")
 	topQueriesLimit := fs.Int("collector.top_queries.limit", defaultOpts.TopQueries.Limit, "Number of queries (by total CPU time) exposed by the top_queries collector.")
 	topQueriesIncludeText := fs.Bool("collector.top_queries.include_text", defaultOpts.TopQueries.IncludeText, "Expose the statement text of top queries (literals replaced with ?) in sqlserver_top_query_info.")
 	topQueriesTextLength := fs.Int("collector.top_queries.text_length", defaultOpts.TopQueries.TextLength, "Maximum length of the statement text exposed by the top_queries collector.")
@@ -216,6 +221,14 @@ func Load(args []string) (*Config, error) {
 	}
 
 	cfg.CollectorOptions = defaultOpts
+	ws := &cfg.CollectorOptions.WaitStats
+	if fc.WaitStats.IncludeIdle != nil {
+		ws.IncludeIdle = *fc.WaitStats.IncludeIdle
+	}
+	if fs.Changed("collector.wait_stats.include_idle") {
+		ws.IncludeIdle = *waitStatsIncludeIdle
+	}
+
 	tq := &cfg.CollectorOptions.TopQueries
 	if fc.TopQueries.Limit != nil {
 		tq.Limit = *fc.TopQueries.Limit

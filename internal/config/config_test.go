@@ -693,3 +693,36 @@ func TestLoadMaxConnectionsValidation(t *testing.T) {
 		t.Errorf("Load(SQL_SERVER_MAX_CONNECTIONS=ten) error = %v, want a parse error", err)
 	}
 }
+
+func TestLoadWaitStatsIncludeIdle(t *testing.T) {
+	t.Setenv("SQL_SERVER_DSN", "")
+
+	cfg, err := Load([]string{"--config.file", writeConfigFile(t, `dsn: "`+testDSN+`"`)})
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.CollectorOptions.WaitStats.IncludeIdle {
+		t.Error("WaitStats.IncludeIdle = true, want idle waits filtered by default")
+	}
+
+	path := writeConfigFile(t, `
+dsn: "`+testDSN+`"
+wait_stats:
+  include_idle: true
+`)
+	cfg, err = Load([]string{"--config.file", path})
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if !cfg.CollectorOptions.WaitStats.IncludeIdle {
+		t.Error("WaitStats.IncludeIdle = false, want yaml value true")
+	}
+
+	cfg, err = Load([]string{"--config.file", path, "--collector.wait_stats.include_idle=false"})
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.CollectorOptions.WaitStats.IncludeIdle {
+		t.Error("WaitStats.IncludeIdle = true, want the flag to override the config file")
+	}
+}

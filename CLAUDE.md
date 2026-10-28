@@ -24,6 +24,8 @@ This exporter follows the pattern of other official Prometheus database exporter
 ```
 mssql-exporter/
 ├── main.go                          # Entry point: DB connection, collector registration, HTTP server (/metrics, /healthz)
+├── instance_label.go                # sqlserver_instance label registry, retried @@SERVERNAME
+├── service*.go, eventlog_windows.go # Windows service install/run and Event Log handler
 ├── go.mod                           # Go module dependencies
 ├── go.sum                           # Dependency checksums
 ├── Makefile                         # Build, test, docker and release-dry-run targets
@@ -100,7 +102,9 @@ mssql-exporter/
 
 Tests live beside the code as `*_test.go` in `internal/collector` (all collectors and the
 Exporter, using `go-sqlmock`; shared helpers in `testutil_test.go`), `internal/config` and
-`internal/db`. `main.go`, `internal/oscollector` and `internal/version` have no tests.
+`internal/db`, plus the `main` package (`service_test.go`, `instance_label_test.go`).
+`internal/oscollector` and `internal/version` have no tests (the OS collectors are
+validated on the home lab: Windows notebook and the Raspberry Pi for Linux).
 
 ## Architecture & Design Patterns
 
@@ -214,9 +218,11 @@ func (c *CollectorName) Scrape(ctx context.Context, ch chan<- prometheus.Metric)
 2. Resolve configuration with `config.Load(os.Args[1:])` (flags/env/YAML, see below); logs the build version
 3. Initialize connection pool with `db.Connect(cfg.DSN, opts)` (validates the DSN only — does not dial)
 4. Ping database (best effort: logs a warning and continues if unreachable; `sqlserver_up` reports 0 until it recovers)
-5. Register `collector.NewExporterWithOptions(db, cfg.EnabledCollectors, cfg.CollectorOptions)` (runs all enabled scrapers)
-6. Register `mssql_exporter_build_info` (version, commit, date, goversion labels) and,
-   if `cfg.EnableOSCollectors`, `oscollector.Register(reg)`
+5. Build `collector.NewExporterWithOptions(db, cfg.EnabledCollectors, cfg.CollectorOptions)` and
+   register it, plus `oscollector.Register(reg)` if `cfg.EnableOSCollectors`, in an
+   `instanceRegistry` (`instance_label.go`) that adds the `sqlserver_instance` label
+6. Register `mssql_exporter_build_info` (version, commit, date, goversion labels) in the
+   default registry; the handler serves `prometheus.Gatherers{default, instanceRegistry}`
 7. Serve `cfg.WebTelemetryPath` (metrics) and `/healthz` (liveness only — use
    `sqlserver_up` for database reachability) via `web.ListenAndServe` from
    exporter-toolkit, on `cfg.WebListenAddress`, with TLS/basic auth from
@@ -225,8 +231,10 @@ func (c *CollectorName) Scrape(ctx context.Context, ch chan<- prometheus.Metric)
 `--version` prints `version.String()` and exits (handled in `config.Load`).
 
 Note: the `sqlserver_instance` label is `instance_label` when configured,
-otherwise `@@SERVERNAME` resolved once at startup; if SQL Server was down at
-that moment the label stays empty until the process restarts. On Amazon RDS
+otherwise `@@SERVERNAME` read at startup; if SQL Server is down at that
+moment the label starts empty and `resolveInstanceName` retries every 15 s,
+then swaps in a new registry with the name (HML-029, v0.15.0; the name is
+not read again afterwards). On Amazon RDS
 the server name is a generic host name that changes on stop/start and
 failover, so set `instance_label` there. On Google Cloud SQL and Azure SQL
 Managed Instance `@@SERVERNAME` survives failover (a generated host name on
@@ -246,11 +254,14 @@ Resolved in `internal/config.Load()`. Precedence per field, highest first:
                                query_store, see scrapersDisabledByDefault).
                                Names come from collector.ScraperNames(); YAML equivalent is
                                the `collectors:` map keyed by the same names.
+--collector.wait_stats.include_idle
 --collector.top_queries.limit|include_text|text_length
 --collector.index_fragmentation.interval|min_page_count|databases
 --collector.query_store.interval|databases
-                               Collector options (YAML: `top_queries:`, `index_fragmentation:`,
-                               `query_store:` sections); they do not enable the collector.
+                               Collector options (YAML: `wait_stats:`, `top_queries:`,
+                               `index_fragmentation:`, `query_store:` sections); they do not
+                               enable the collector. wait_stats skips idle/background wait
+                               types (`idleWaitTypes`) and never-seen ones unless include_idle.
 --sqlserver.instance-label string
                                Fixed sqlserver_instance label (env SQL_SERVER_INSTANCE_LABEL,
                                YAML instance_label; default @@SERVERNAME).
@@ -544,7 +555,7 @@ and README):
 ### Current State
 - Unit tests for `internal/config` (flag/env/YAML precedence, validation), `internal/db`,
   the Exporter and every collector (`go-sqlmock`) — run with `make test`
-  (174 test functions, 216 runs counting subtests)
+  (181 test functions, 223 runs counting subtests)
 - CI (`.github/workflows/ci.yml`) runs vet, golangci-lint, tests and build on every PR
 - No integration tests against a real SQL Server yet
 - Manual homologation recorded in `BACKLOG-HOMOLOG.md` (HML-001..053), all
@@ -615,7 +626,6 @@ and README):
   A secondary's DMVs only show its own replica, so the same replica series is reported by every exporter
   in the AG (told apart by `sqlserver_instance`); aggregate with `max by (ag_name, replica_server, db_name)`
 - No `--config.file` auto-discovery (must be passed explicitly)
-- `sqlserver_instance` label resolved once at startup unless `instance_label` is set (see note in README)
 
 ### Roadmap
 See `ROADMAP.md` for the authoritative phased plan. Phases 1–7 are done (core

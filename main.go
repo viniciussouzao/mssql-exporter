@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -96,22 +95,42 @@ func run(ctx context.Context, cfg *config.Config) error {
 	// A configured label wins and needs no query: it stays the same when SQL
 	// Server is down at startup or its host name changes (e.g. Amazon RDS).
 	instanceName := cfg.InstanceLabel
+	resolveLater := false
 	switch {
 	case instanceName != "":
 		slog.Info("sql server instance label set by configuration", slog.String("instance", instanceName))
 	case err != nil:
-		slog.Warn("sqlserver_instance label will stay empty until the exporter restarts with sql server reachable (set instance_label to avoid it)")
+		resolveLater = true
 	default:
-		instanceName = queryServerName(conn)
-		slog.Info("sql server instance", slog.String("instance", instanceName))
+		name, err := queryServerName(ctx, conn)
+		switch {
+		case errors.Is(err, errNullServerName):
+			slog.Warn("@@SERVERNAME is NULL, sqlserver_instance label stays empty (set instance_label to avoid it)")
+		case err != nil:
+			slog.Warn("failed to query @@SERVERNAME", slog.Any("error", err))
+			resolveLater = true
+		default:
+			instanceName = name
+			slog.Info("sql server instance", slog.String("instance", instanceName))
+		}
 	}
 
-	reg := prometheus.WrapRegistererWith(
-		prometheus.Labels{"sqlserver_instance": instanceName},
-		prometheus.DefaultRegisterer,
-	)
-
-	reg.MustRegister(collector.NewExporterWithOptions(conn, cfg.EnabledCollectors, cfg.CollectorOptions))
+	// The exporter and the OS collectors carry the sqlserver_instance label.
+	// While @@SERVERNAME cannot be read the label is empty; it is set as soon
+	// as SQL Server answers, without a restart.
+	exporter := collector.NewExporterWithOptions(conn, cfg.EnabledCollectors, cfg.CollectorOptions)
+	labeled := newInstanceRegistry(instanceName, func(reg prometheus.Registerer) {
+		reg.MustRegister(exporter)
+		if cfg.EnableOSCollectors {
+			oscollector.Register(reg)
+		}
+	})
+	if resolveLater {
+		slog.Warn("sqlserver_instance label is empty until sql server answers (set instance_label to avoid it)")
+		go resolveInstanceName(ctx, labeled, instanceNameRetryInterval, func(ctx context.Context) (string, error) {
+			return queryServerName(ctx, conn)
+		})
+	}
 
 	prometheus.MustRegister(prometheus.NewGaugeFunc(
 		prometheus.GaugeOpts{
@@ -128,7 +147,6 @@ func run(ctx context.Context, cfg *config.Config) error {
 	))
 
 	if cfg.EnableOSCollectors {
-		oscollector.Register(reg)
 		slog.Info("os collectors enabled")
 	}
 
@@ -137,7 +155,7 @@ func run(ctx context.Context, cfg *config.Config) error {
 	// would turn every series into a gap.
 	metricsHandler := promhttp.InstrumentMetricHandler(
 		prometheus.DefaultRegisterer,
-		promhttp.HandlerFor(prometheus.DefaultGatherer, promhttp.HandlerOpts{
+		promhttp.HandlerFor(prometheus.Gatherers{prometheus.DefaultGatherer, labeled}, promhttp.HandlerOpts{
 			ErrorLog:      slog.NewLogLogger(slog.Default().Handler(), slog.LevelError),
 			ErrorHandling: promhttp.ContinueOnError,
 		}),
@@ -177,17 +195,4 @@ func run(ctx context.Context, cfg *config.Config) error {
 		return fmt.Errorf("http server: %w", err)
 	}
 	return nil
-}
-
-func queryServerName(conn *sql.DB) string {
-	ctx, cancel := context.WithTimeout(context.Background(), db.CurrentOptions().ConnTimeout)
-	defer cancel()
-
-	var name string
-	err := conn.QueryRowContext(ctx, "SELECT @@SERVERNAME").Scan(&name)
-	if err != nil {
-		slog.Error("failed to query @@SERVERNAME, using empty label", slog.Any("error", err))
-		return ""
-	}
-	return name
 }

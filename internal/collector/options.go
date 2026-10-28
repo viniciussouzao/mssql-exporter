@@ -4,9 +4,17 @@ import "time"
 
 // Options tunes collectors that need more than the on/off toggle.
 type Options struct {
+	WaitStats          WaitStatsOptions
 	TopQueries         TopQueriesOptions
 	IndexFragmentation IndexFragmentationOptions
 	QueryStore         QueryStoreOptions
+}
+
+// WaitStatsOptions configures the wait_stats collector.
+type WaitStatsOptions struct {
+	// IncludeIdle also exposes idle/background wait types and the wait types
+	// that never happened (see idleWaitTypes).
+	IncludeIdle bool
 }
 
 // TopQueriesOptions configures the top_queries collector.

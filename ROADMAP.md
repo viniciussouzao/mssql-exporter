@@ -182,18 +182,6 @@ first; implement in this order.
   `fedauth`. Not a priority: SQL logins work on both, and the Azure identity
   SDK adds a few MB to every binary (HML-016 kept it out on purpose)
 - Missing indexes (`sys.dm_db_missing_index_*`)
-- `wait_stats`: filter idle/background waits in the exporter (today only
-  `SLEEP%`, `XE%` and `BROKER_%` are skipped), e.g. `LAZYWRITER_SLEEP`,
-  `CHECKPOINT_QUEUE`, `HADR_WORK_QUEUE`, `DIRTY_PAGE_POLL`, keeping waits
-  that slow queries such as `HADR_SYNC_COMMIT`; the RDS dashboard applies
-  the same list in PromQL meanwhile (HML-031). On Azure SQL Managed Instance
-  the top waits are all background ones: `SOS_WORK_DISPATCHER`,
-  `HADR_WORK_QUEUE`, `DISPATCHER_QUEUE_SEMAPHORE`, `LOGMGR_QUEUE` (HML-039). Changes the series exposed:
-  make it a documented default, possibly with an option to keep everything
-- Automatic `sqlserver_instance` label resolved on the first successful
-  connection instead of only at startup (today it stays empty until a
-  restart when SQL Server is down at startup; `instance_label` avoids it)
-  (HML-029)
 - Transaction log health from `sys.dm_db_log_stats` (one row per database,
   works on RDS where the `Percent Log Used` counter misses the system
   databases): VLF count and log generated since the last log backup
@@ -205,13 +193,13 @@ first; implement in this order.
   default) and cleanup purges old intervals, so totals can decrease and break
   `rate()`; per-database scans are expensive and series churn is the same as
   `top_queries`. The Query Store UI remains the better tool for analysis
-- Windows OS collector: `os_disk_read_queue_length` / `os_disk_write_queue_length`
-  are exposed as gauges over raw cumulative WMI counters; fixing needs a new
-  name/type aligned with Linux (pending from HML-003)
 - Replication status
 - Integration tests with SQL Server in Docker (every collector already has
   `go-sqlmock` unit tests)
-- Azure SQL Database mode: one exporter per database (the unit is the
+- Azure SQL Database mode, **on demand only** (the Azure environment was
+  destroyed after the homologation and is not recreated just for this; today
+  10 of 19 collectors work and the gaps are documented in the README): one
+  exporter per database (the unit is the
   database, no cross-database queries); detect it with
   `SERVERPROPERTY('EngineEdition') = 5`. The reconnaissance (HML-053) sized
   it: today 10 of 19 collectors work with a contained user (11 with a login
@@ -260,3 +248,12 @@ first; implement in this order.
 - [x] Concurrent scrapes: a scrape that arrives while another one is
   collecting waits for it and shares its result (singleflight), and the pool
   size is configurable with `--sqlserver.max-connections` (HML-034)
+- [x] Automatic `sqlserver_instance` label: when SQL Server is down at
+  startup the exporter retries `@@SERVERNAME` every 15 s and sets the label
+  without a restart (HML-029)
+- [x] Windows disk queues: `os_disk_{read,write}_time_seconds_total`
+  counters (rate = average queue length) replace the gauges over cumulative
+  WMI counters, on Linux too, plus `os_disk_queue_length` on Linux (HML-003)
+- [x] `wait_stats` skips idle/background wait types and wait types that never
+  happened by default; `--collector.wait_stats.include_idle` keeps
+  everything (HML-031, HML-039)
