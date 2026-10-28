@@ -1,0 +1,27 @@
+# Weekly update PRs. Not covered here, update them by hand: the image and tool
+# pins in the Makefile (PROMTOOL_IMAGE, GITLEAKS_IMAGE, GOVULNCHECK_VERSION),
+# the golangci-lint version and GO_VERSION in the workflows.
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      # One PR for every minor and patch bump; majors come one by one.
+      go-modules:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      github-actions:
+        update-types: [minor, patch]
+
+  # Builder and runtime images of the Dockerfile.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly

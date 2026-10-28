@@ -14,7 +14,7 @@ LDFLAGS := -s -w \
 	-X $(MODULE)/internal/version.Commit=$(COMMIT) \
 	-X $(MODULE)/internal/version.Date=$(DATE)
 
-.PHONY: help build run test test-integration test-alerts scan-secrets tidy fmt vet check clean install compose-up compose-down docker-build release-dry-run
+.PHONY: help build run test test-integration test-alerts scan-secrets vulncheck tidy fmt vet check clean install compose-up compose-down docker-build release-dry-run
 
 help:
 	@echo "Targets:"
@@ -24,6 +24,7 @@ help:
 	@echo "  test-integration  Run the integration tests against a disposable SQL Server container"
 	@echo "  test-alerts  Check and unit test contrib/prometheus/alerts.yml with promtool (Docker)"
 	@echo "  scan-secrets Scan the whole git history for secrets with gitleaks (Docker)"
+	@echo "  vulncheck    Report known vulnerabilities reachable from the code (govulncheck)"
 	@echo "  tidy         Run 'go mod tidy'"
 	@echo "  fmt          Format code (gofmt -s -w .)"
 	@echo "  vet          Run 'go vet'"
@@ -53,6 +54,7 @@ IT_PORT ?= 14339
 IT_CONTAINER ?= mssql-exporter-it
 PROMTOOL_IMAGE ?= prom/prometheus:v3.5.0
 GITLEAKS_IMAGE ?= ghcr.io/gitleaks/gitleaks:v8.30.1
+GOVULNCHECK_VERSION ?= v1.9.0
 
 test-integration:
 	@pw="It-$$(openssl rand -hex 12)-Aa1"; \
@@ -74,6 +76,11 @@ test-alerts:
 scan-secrets:
 	docker run --rm -v "$(CURDIR):/repo:ro" $(GITLEAKS_IMAGE) \
 		git /repo --redact --verbose --no-banner --log-opts="--all"
+
+# Fails only on vulnerabilities the code can reach, in the standard library of
+# the Go in use and in the modules. Run it with the Go that builds the releases.
+vulncheck:
+	$(GO) run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
 
 tidy:
 	$(GO) mod tidy
