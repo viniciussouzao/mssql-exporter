@@ -14,7 +14,7 @@ LDFLAGS := -s -w \
 	-X $(MODULE)/internal/version.Commit=$(COMMIT) \
 	-X $(MODULE)/internal/version.Date=$(DATE)
 
-.PHONY: help build run test test-integration tidy fmt vet check clean install compose-up compose-down docker-build release-dry-run
+.PHONY: help build run test test-integration test-alerts tidy fmt vet check clean install compose-up compose-down docker-build release-dry-run
 
 help:
 	@echo "Targets:"
@@ -22,6 +22,7 @@ help:
 	@echo "  run          Build and run the exporter (listens on :10060)"
 	@echo "  test         Run unit tests"
 	@echo "  test-integration  Run the integration tests against a disposable SQL Server container"
+	@echo "  test-alerts  Check and unit test contrib/prometheus/alerts.yml with promtool (Docker)"
 	@echo "  tidy         Run 'go mod tidy'"
 	@echo "  fmt          Format code (gofmt -s -w .)"
 	@echo "  vet          Run 'go vet'"
@@ -49,6 +50,7 @@ test:
 IT_IMAGE ?= mcr.microsoft.com/mssql/server:2025-latest
 IT_PORT ?= 14339
 IT_CONTAINER ?= mssql-exporter-it
+PROMTOOL_IMAGE ?= prom/prometheus:v3.5.0
 
 test-integration:
 	@pw="It-$$(openssl rand -hex 12)-Aa1"; \
@@ -57,6 +59,13 @@ test-integration:
 	MSSQL_EXPORTER_TEST_DSN="sqlserver://sa:$$pw@127.0.0.1:$(IT_PORT)?encrypt=disable" \
 		$(GO) test -tags integration -count=1 -v ./integration/...; \
 	rc=$$?; docker stop -t 10 $(IT_CONTAINER) >/dev/null; exit $$rc
+
+# promtool ships in the Prometheus image; no local install needed.
+test-alerts:
+	docker run --rm -v "$(CURDIR)/contrib/prometheus:/rules:ro" -w /rules --entrypoint promtool \
+		$(PROMTOOL_IMAGE) check rules alerts.yml
+	docker run --rm -v "$(CURDIR)/contrib/prometheus:/rules:ro" -w /rules --entrypoint promtool \
+		$(PROMTOOL_IMAGE) test rules alerts_test.yml
 
 tidy:
 	$(GO) mod tidy

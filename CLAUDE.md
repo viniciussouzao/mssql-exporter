@@ -42,7 +42,7 @@ mssql-exporter/
 ├── config.example.yml               # Example YAML config file (--config.file)
 │
 ├── .github/workflows/
-│   ├── ci.yml                       # PR checks: vet, golangci-lint, test, build; integration tests on SQL Server 2022/2025
+│   ├── ci.yml                       # PR checks: vet, golangci-lint, test, build, alert rules; integration tests on SQL Server 2022/2025
 │   └── release.yml                  # Tag + GoReleaser on merged PRs labeled release:*
 │
 ├── dashboards/
@@ -53,8 +53,11 @@ mssql-exporter/
 │   ├── mssql-exporter-homolog-coverage.json         # Metric coverage view used in homologation
 │   └── README.md                    # Dashboard import guide
 │
-├── contrib/systemd/
-│   └── mssql-exporter.service       # Hardened Linux unit, shipped in the release archives
+├── contrib/
+│   ├── systemd/mssql-exporter.service  # Hardened Linux unit, shipped in the release archives
+│   └── prometheus/
+│       ├── alerts.yml               # Example alerting rules, shipped in the release archives
+│       └── alerts_test.yml          # promtool unit tests (`make test-alerts`, also in CI)
 │
 ├── hack/loadgen/                    # Load generator (main.go, setup.sql, cleanup.sql) for homologation
 ├── integration/                     # Integration tests (build tag `integration`) against a real SQL Server
@@ -301,6 +304,7 @@ make build          # Build binary to bin/mssql-exporter
 make run            # Build and run the exporter
 make test           # Run unit tests
 make test-integration  # Integration tests against a disposable SQL Server container (Docker)
+make test-alerts    # promtool check + unit tests of contrib/prometheus/alerts.yml (Docker)
 make tidy           # go mod tidy
 make fmt            # Format code with gofmt
 make vet            # Run go vet
@@ -568,8 +572,10 @@ and README):
 - Unit tests for `internal/config` (flag/env/YAML precedence, validation), `internal/db`,
   the Exporter and every collector (`go-sqlmock`) — run with `make test`
   (196 test functions, 238 runs counting subtests)
-- CI (`.github/workflows/ci.yml`) runs vet, golangci-lint, tests and build on every PR,
-  plus the integration tests on SQL Server 2022 and 2025 service containers
+- CI (`.github/workflows/ci.yml`) runs vet, golangci-lint, tests, build and
+  `make test-alerts` on every PR, plus the integration tests on SQL Server 2022
+  and 2025 service containers. When a metric used in `contrib/prometheus/alerts.yml`
+  changes, update the rules (and their unit tests) in the same PR
 - Integration tests (`integration/`, build tag `integration`, `make test-integration`):
   as sa they create a database, a backup and a login with exactly the README grants;
   as that login they enable every collector and require `scrape_collector_success 1`

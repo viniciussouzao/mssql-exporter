@@ -3796,6 +3796,18 @@
                 "value": 0
               }
             ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Index"
+            },
+            "properties": [
+              {
+                "id": "noValue",
+                "value": "(heap)"
+              }
+            ]
           }
         ]
       },
@@ -4336,12 +4348,261 @@
       "description": "Transaction log generated since the last log backup (sys.dm_db_log_stats), per database. Absent for databases without a log backup chain (SIMPLE recovery). A line that only grows means log backups stopped."
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "id": 98,
+      "type": "table",
+      "title": "Missing Indexes (top by estimated improvement)",
+      "description": "Requires the opt-in missing_indexes collector (--collector.missing_indexes). Suggestions of the query optimizer since the last restart (top N by avg_total_user_cost * avg_user_impact / 100 * (seeks + scans)). Review before creating: suggestions overlap and ignore the cost of maintaining the index; creating an index or changing the table clears its suggestions.",
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 148
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "noValue": "missing_indexes collector disabled or no suggestions"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Improvement"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Avg impact"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "basic"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 50
+                    },
+                    {
+                      "color": "red",
+                      "value": 80
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Seeks + scans"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Equality columns"
+            },
+            "properties": [
+              {
+                "id": "noValue",
+                "value": "—"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Inequality columns"
+            },
+            "properties": [
+              {
+                "id": "noValue",
+                "value": "—"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Included columns"
+            },
+            "properties": [
+              {
+                "id": "noValue",
+                "value": "—"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "cellHeight": "sm",
+        "showHeader": true,
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "max by (db_name, schema, table, index_handle) (sqlserver_missing_index_improvement_measure{sqlserver_instance=~\"$sqlserver_instance\"}) * on (db_name, schema, table, index_handle) group_left(equality_columns, inequality_columns, included_columns) max by (db_name, schema, table, index_handle, equality_columns, inequality_columns, included_columns) (sqlserver_missing_index_info{sqlserver_instance=~\"$sqlserver_instance\"})",
+          "legendFormat": "__auto",
+          "refId": "A",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "max by (db_name, schema, table, index_handle) (sqlserver_missing_index_avg_user_impact_percent{sqlserver_instance=~\"$sqlserver_instance\"}) * on (db_name, schema, table, index_handle) group_left(equality_columns, inequality_columns, included_columns) max by (db_name, schema, table, index_handle, equality_columns, inequality_columns, included_columns) (sqlserver_missing_index_info{sqlserver_instance=~\"$sqlserver_instance\"})",
+          "legendFormat": "__auto",
+          "refId": "B",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "max by (db_name, schema, table, index_handle) (sqlserver_missing_index_user_seeks_total{sqlserver_instance=~\"$sqlserver_instance\"} + sqlserver_missing_index_user_scans_total{sqlserver_instance=~\"$sqlserver_instance\"}) * on (db_name, schema, table, index_handle) group_left(equality_columns, inequality_columns, included_columns) max by (db_name, schema, table, index_handle, equality_columns, inequality_columns, included_columns) (sqlserver_missing_index_info{sqlserver_instance=~\"$sqlserver_instance\"})",
+          "legendFormat": "__auto",
+          "refId": "C",
+          "format": "table",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "includeByName": {
+              "db_name": true,
+              "schema": true,
+              "table": true,
+              "equality_columns": true,
+              "inequality_columns": true,
+              "included_columns": true,
+              "Value #A": true,
+              "Value #B": true,
+              "Value #C": true
+            },
+            "indexByName": {
+              "db_name": 0,
+              "schema": 1,
+              "table": 2,
+              "equality_columns": 3,
+              "inequality_columns": 4,
+              "included_columns": 5,
+              "Value #A": 6,
+              "Value #B": 7,
+              "Value #C": 8
+            },
+            "renameByName": {
+              "db_name": "Database",
+              "schema": "Schema",
+              "table": "Table",
+              "equality_columns": "Equality columns",
+              "inequality_columns": "Inequality columns",
+              "included_columns": "Included columns",
+              "Value #A": "Improvement",
+              "Value #B": "Avg impact",
+              "Value #C": "Seeks + scans"
+            }
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "sort": [
+              {
+                "field": "Improvement",
+                "desc": true
+              }
+            ]
+          }
+        },
+        {
+          "id": "limit",
+          "options": {
+            "limitField": 20
+          }
+        }
+      ]
+    },
+    {
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 148
+        "y": 157
       },
       "id": 87,
       "panels": [],
@@ -4361,7 +4622,7 @@
         "h": 4,
         "w": 6,
         "x": 0,
-        "y": 149
+        "y": 158
       },
       "fieldConfig": {
         "defaults": {
@@ -4426,7 +4687,7 @@
         "h": 4,
         "w": 6,
         "x": 6,
-        "y": 149
+        "y": 158
       },
       "fieldConfig": {
         "defaults": {
@@ -4491,7 +4752,7 @@
         "h": 4,
         "w": 6,
         "x": 12,
-        "y": 149
+        "y": 158
       },
       "fieldConfig": {
         "defaults": {
@@ -4556,7 +4817,7 @@
         "h": 4,
         "w": 6,
         "x": 18,
-        "y": 149
+        "y": 158
       },
       "fieldConfig": {
         "defaults": {
@@ -4668,7 +4929,7 @@
         "h": 8,
         "w": 16,
         "x": 0,
-        "y": 153
+        "y": 162
       },
       "fieldConfig": {
         "defaults": {
@@ -5048,7 +5309,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 153
+        "y": 162
       },
       "fieldConfig": {
         "defaults": {
@@ -5117,7 +5378,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 161
+        "y": 170
       },
       "id": 44,
       "panels": [],
@@ -5152,7 +5413,7 @@
         "h": 4,
         "w": 6,
         "x": 0,
-        "y": 162
+        "y": 171
       },
       "id": 45,
       "options": {
@@ -5213,7 +5474,7 @@
         "h": 4,
         "w": 6,
         "x": 6,
-        "y": 162
+        "y": 171
       },
       "id": 46,
       "options": {
@@ -5274,7 +5535,7 @@
         "h": 4,
         "w": 6,
         "x": 12,
-        "y": 162
+        "y": 171
       },
       "id": 47,
       "options": {
@@ -5335,7 +5596,7 @@
         "h": 4,
         "w": 6,
         "x": 18,
-        "y": 162
+        "y": 171
       },
       "id": 48,
       "options": {
@@ -5431,7 +5692,7 @@
         "h": 8,
         "w": 16,
         "x": 0,
-        "y": 166
+        "y": 175
       },
       "id": 49,
       "options": {
@@ -5554,7 +5815,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 166
+        "y": 175
       },
       "id": 50,
       "options": {
@@ -5593,7 +5854,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 174
+        "y": 183
       },
       "id": 51,
       "panels": [],
@@ -5636,7 +5897,7 @@
         "h": 6,
         "w": 12,
         "x": 0,
-        "y": 175
+        "y": 184
       },
       "id": 52,
       "options": {
@@ -5733,7 +5994,7 @@
         "h": 6,
         "w": 12,
         "x": 12,
-        "y": 175
+        "y": 184
       },
       "id": 53,
       "options": {
@@ -5802,7 +6063,7 @@
         "h": 6,
         "w": 12,
         "x": 0,
-        "y": 181
+        "y": 190
       },
       "id": 94,
       "options": {
@@ -5900,7 +6161,7 @@
         "h": 6,
         "w": 12,
         "x": 12,
-        "y": 181
+        "y": 190
       },
       "id": 95,
       "options": {
@@ -5953,7 +6214,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 187
+        "y": 196
       }
     },
     {
@@ -5969,7 +6230,7 @@
         "h": 8,
         "w": 10,
         "x": 0,
-        "y": 188
+        "y": 197
       },
       "fieldConfig": {
         "defaults": {
@@ -6138,7 +6399,7 @@
         "h": 8,
         "w": 14,
         "x": 10,
-        "y": 188
+        "y": 197
       },
       "fieldConfig": {
         "defaults": {
@@ -6456,7 +6717,7 @@
         "h": 7,
         "w": 12,
         "x": 0,
-        "y": 196
+        "y": 205
       },
       "fieldConfig": {
         "defaults": {
@@ -6653,7 +6914,7 @@
         "h": 7,
         "w": 12,
         "x": 12,
-        "y": 196
+        "y": 205
       },
       "id": 61,
       "options": {
@@ -6751,7 +7012,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 203
+        "y": 212
       },
       "id": 62,
       "options": {
@@ -6849,7 +7110,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 203
+        "y": 212
       },
       "id": 63,
       "options": {
@@ -6947,7 +7208,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 203
+        "y": 212
       },
       "id": 64,
       "options": {
@@ -6987,7 +7248,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 211
+        "y": 220
       },
       "id": 65,
       "panels": [],
@@ -7007,7 +7268,7 @@
         "h": 7,
         "w": 12,
         "x": 0,
-        "y": 212
+        "y": 221
       },
       "fieldConfig": {
         "defaults": {
@@ -7319,7 +7580,7 @@
         "h": 7,
         "w": 12,
         "x": 12,
-        "y": 212
+        "y": 221
       },
       "fieldConfig": {
         "defaults": {
@@ -7522,7 +7783,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 219
+        "y": 228
       },
       "id": 68,
       "options": {
@@ -7620,7 +7881,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 219
+        "y": 228
       },
       "id": 69,
       "options": {
@@ -7718,7 +7979,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 219
+        "y": 228
       },
       "id": 70,
       "options": {
@@ -7816,7 +8077,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 227
+        "y": 236
       },
       "id": 71,
       "options": {
@@ -7932,7 +8193,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 227
+        "y": 236
       },
       "id": 72,
       "options": {
@@ -7972,7 +8233,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 236
+        "y": 245
       },
       "id": 73,
       "panels": [],
@@ -7992,7 +8253,7 @@
         "h": 7,
         "w": 10,
         "x": 0,
-        "y": 237
+        "y": 246
       },
       "fieldConfig": {
         "defaults": {
@@ -8160,7 +8421,7 @@
         "h": 7,
         "w": 14,
         "x": 10,
-        "y": 237
+        "y": 246
       },
       "fieldConfig": {
         "defaults": {
@@ -8460,7 +8721,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 244
+        "y": 253
       },
       "id": 76,
       "options": {
@@ -8593,7 +8854,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 244
+        "y": 253
       },
       "id": 77,
       "options": {
@@ -8700,7 +8961,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 244
+        "y": 253
       },
       "id": 78,
       "options": {
@@ -8740,7 +9001,634 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 253
+        "y": 262
+      },
+      "id": 99,
+      "panels": [],
+      "title": "Replication",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "id": 100,
+      "type": "table",
+      "title": "Replication Agents",
+      "description": "Requires the opt-in replication collector (--collector.replication), scraped on the Distributor. Transactional replication Log Reader and Distribution agents from the distribution databases. A stopped agent keeps its last status (succeeded after a clean stop): watch the time since its last history entry and the pending commands too.",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 263
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "noValue": "replication collector disabled or this instance is not a Distributor"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Last status"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "1": {
+                        "text": "started",
+                        "color": "blue",
+                        "index": 0
+                      },
+                      "2": {
+                        "text": "succeeded",
+                        "color": "green",
+                        "index": 1
+                      },
+                      "3": {
+                        "text": "in progress",
+                        "color": "green",
+                        "index": 2
+                      },
+                      "4": {
+                        "text": "idle",
+                        "color": "green",
+                        "index": 3
+                      },
+                      "5": {
+                        "text": "retrying",
+                        "color": "orange",
+                        "index": 4
+                      },
+                      "6": {
+                        "text": "failed",
+                        "color": "red",
+                        "index": 5
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "basic"
+                }
+              },
+              {
+                "id": "noValue",
+                "value": "—"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Since last history"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "basic"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 900
+                    },
+                    {
+                      "color": "red",
+                      "value": 3600
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "noValue",
+                "value": "—"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Delivery latency"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              },
+              {
+                "id": "noValue",
+                "value": "—"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Pending commands"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
+                "id": "noValue",
+                "value": "—"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Publication"
+            },
+            "properties": [
+              {
+                "id": "noValue",
+                "value": "—"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Subscriber"
+            },
+            "properties": [
+              {
+                "id": "noValue",
+                "value": "—"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Subscriber DB"
+            },
+            "properties": [
+              {
+                "id": "noValue",
+                "value": "—"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "cellHeight": "sm",
+        "showHeader": true,
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "max by (distribution_db, agent_type, agent_name, publication, subscriber, subscriber_db) (sqlserver_replication_agent_run_status{sqlserver_instance=~\"$sqlserver_instance\"})",
+          "legendFormat": "__auto",
+          "refId": "A",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "time() - max by (distribution_db, agent_type, agent_name, publication, subscriber, subscriber_db) (sqlserver_replication_agent_last_history_timestamp_seconds{sqlserver_instance=~\"$sqlserver_instance\"})",
+          "legendFormat": "__auto",
+          "refId": "B",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "max by (distribution_db, agent_type, agent_name, publication, subscriber, subscriber_db) (sqlserver_replication_agent_delivery_latency_seconds{sqlserver_instance=~\"$sqlserver_instance\"})",
+          "legendFormat": "__auto",
+          "refId": "C",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "max by (distribution_db, agent_type, agent_name, publication, subscriber, subscriber_db) (sqlserver_replication_pending_commands{sqlserver_instance=~\"$sqlserver_instance\"})",
+          "legendFormat": "__auto",
+          "refId": "D",
+          "format": "table",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "includeByName": {
+              "distribution_db": true,
+              "agent_type": true,
+              "agent_name": true,
+              "publication": true,
+              "subscriber": true,
+              "subscriber_db": true,
+              "Value #A": true,
+              "Value #B": true,
+              "Value #C": true,
+              "Value #D": true
+            },
+            "indexByName": {
+              "distribution_db": 0,
+              "agent_type": 1,
+              "agent_name": 2,
+              "publication": 3,
+              "subscriber": 4,
+              "subscriber_db": 5,
+              "Value #A": 6,
+              "Value #B": 7,
+              "Value #C": 8,
+              "Value #D": 9
+            },
+            "renameByName": {
+              "distribution_db": "Distribution DB",
+              "agent_type": "Agent",
+              "agent_name": "Agent name",
+              "publication": "Publication",
+              "subscriber": "Subscriber",
+              "subscriber_db": "Subscriber DB",
+              "Value #A": "Last status",
+              "Value #B": "Since last history",
+              "Value #C": "Delivery latency",
+              "Value #D": "Pending commands"
+            }
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "sort": [
+              {
+                "field": "Pending commands",
+                "desc": true
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "short",
+          "noValue": "No replication data"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 271
+      },
+      "id": 101,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "max by (publication, subscriber, subscriber_db) (sqlserver_replication_pending_commands{sqlserver_instance=~\"$sqlserver_instance\"})",
+          "legendFormat": "{{publication}} → {{subscriber}} / {{subscriber_db}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Replication Pending Commands",
+      "type": "timeseries",
+      "description": "Commands in the distribution database not yet delivered, per subscription. A line that keeps growing means the Distribution agent is stopped or cannot keep up. Requires the opt-in replication collector (--collector.replication)."
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "s",
+          "noValue": "No replication data"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 271
+      },
+      "id": 102,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "time() - max by (agent_type, agent_name) (sqlserver_replication_agent_last_history_timestamp_seconds{sqlserver_instance=~\"$sqlserver_instance\"})",
+          "legendFormat": "{{agent_type}} {{agent_name}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Time Since Last Agent History",
+      "type": "timeseries",
+      "description": "Age of each agent's last history entry. Continuous agents log every few minutes; a line that only grows means the agent stopped. Requires the opt-in replication collector (--collector.replication)."
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "s",
+          "noValue": "No replication data"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 271
+      },
+      "id": 103,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "max by (agent_type, agent_name) (sqlserver_replication_agent_delivery_latency_seconds{sqlserver_instance=~\"$sqlserver_instance\"})",
+          "legendFormat": "{{agent_type}} {{agent_name}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Replication Delivery Latency",
+      "type": "timeseries",
+      "description": "Delivery latency reported in each agent's last history entry. Requires the opt-in replication collector (--collector.replication)."
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 279
       },
       "id": 54,
       "panels": [],
@@ -8785,7 +9673,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 254
+        "y": 280
       },
       "id": 55,
       "options": {
@@ -8861,7 +9749,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 254
+        "y": 280
       },
       "id": 56,
       "options": {

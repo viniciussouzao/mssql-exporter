@@ -814,7 +814,7 @@ Metric names are stable and follow Prometheus best practices. Selected examples:
   - `sqlserver_replication_pending_commands{agent_type="distribution",...} 300`:
     commands in the distribution database not yet delivered to the
     subscription (`MSdistribution_status`). Alert when they keep growing:
-    `deriv(sqlserver_replication_pending_commands[15m]) > 0 and sqlserver_replication_pending_commands > 10000`.
+    `sqlserver_replication_pending_commands > 10000 and deriv(sqlserver_replication_pending_commands[15m]) > 0`.
     On busy distributors that view can take seconds; keep an eye on
     `sqlserver_scrape_collector_duration_seconds{collector="replication"}`
 
@@ -903,6 +903,31 @@ SQL** that does the same with Cloud Monitoring, and one for **Azure SQL
 Managed Instance** with Azure Monitor. See
 [`dashboards/README.md`](dashboards/README.md) for import instructions.
 
+### Alerting rules
+
+[`contrib/prometheus/alerts.yml`](contrib/prometheus/alerts.yml) (also in
+the release archives) has example alerting rules built from the
+expressions of [Exposed Metrics](#exposed-metrics): exporter and SQL Server
+reachability, failing collectors, databases in `SUSPECT`/`RECOVERY_PENDING`,
+a log that cannot be truncated or whose log backups stopped, stale full and
+log backups, many VLFs, full volumes, blocking, long requests and
+transactions, CPU pressure, Availability Groups, mirroring, log shipping,
+failed Agent jobs, replication agents (failed, stale history, growing
+queue, latency) and the Query Store and background collections. Load it
+with `rule_files:` and tune thresholds and `for:` windows to your workload;
+rules over opt-in collectors never fire while they are disabled. The
+`MSSQLExporterDown` rule selects `job="sqlserver_exporter"`, the job name of
+the example above.
+
+```yaml
+rule_files:
+  - alerts.yml
+```
+
+`make test-alerts` validates the file and runs its unit tests
+([`alerts_test.yml`](contrib/prometheus/alerts_test.yml)) with `promtool`
+from the Prometheus image; CI runs it on every pull request.
+
 ## Security
 
 - TLS and basic authentication are supported via
@@ -939,6 +964,7 @@ See [ROADMAP.md](ROADMAP.md) for the phased plan and the next candidates.
 ```bash
 make check             # gofmt, go vet and unit tests (go-sqlmock, no SQL Server needed)
 make test-integration  # integration tests against a disposable SQL Server container
+make test-alerts       # promtool check + unit tests of contrib/prometheus/alerts.yml (Docker)
 ```
 
 `make test-integration` starts `mcr.microsoft.com/mssql/server:2025-latest`

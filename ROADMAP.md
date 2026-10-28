@@ -263,3 +263,6 @@ first; implement in this order.
   covered yet
 - [x] Default port 10060 instead of 9187 (allocated to `postgres_exporter`);
   register it in the Prometheus port list once the repository is public
+- [x] Example alerting rules (`contrib/prometheus/alerts.yml`, with
+  `promtool` unit tests in CI) and dashboard panels for the opt-in
+  `missing_indexes` and `replication` collectors
