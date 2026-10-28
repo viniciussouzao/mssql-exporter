@@ -98,7 +98,9 @@ mssql-exporter/
         ├── top_queries.go           # Top N queries by CPU from the plan cache (opt-in)
         ├── sqlobfuscate.go          # Literal obfuscation for top_queries statement text
         ├── index_fragmentation.go   # Index fragmentation, collected in the background (opt-in)
-        └── query_store.go           # Query Store health per database, in the background (opt-in)
+        ├── query_store.go           # Query Store health per database, in the background (opt-in)
+        ├── missing_indexes.go       # Top N missing index suggestions (opt-in)
+        └── replication.go           # Transactional replication agents on the Distributor (opt-in)
 ```
 
 Tests live beside the code as `*_test.go` in `internal/collector` (all collectors and the
@@ -251,18 +253,21 @@ Resolved in `internal/config.Load()`. Precedence per field, highest first:
 --web.telemetry-path string    Path under which to expose metrics. (default "/metrics")
 --web.config.file string       exporter-toolkit web config for TLS and basic auth (YAML: web.config_file).
 --collector.<name>             Enable/disable a SQL Server collector (default true for all
-                               except log_shipping, top_queries, index_fragmentation and
-                               query_store, see scrapersDisabledByDefault).
+                               except log_shipping, top_queries, index_fragmentation,
+                               query_store, missing_indexes and replication, see
+                               scrapersDisabledByDefault).
                                Names come from collector.ScraperNames(); YAML equivalent is
                                the `collectors:` map keyed by the same names.
 --collector.wait_stats.include_idle
 --collector.top_queries.limit|include_text|text_length
 --collector.index_fragmentation.interval|min_page_count|databases
 --collector.query_store.interval|databases
+--collector.missing_indexes.limit
                                Collector options (YAML: `wait_stats:`, `top_queries:`,
-                               `index_fragmentation:`, `query_store:` sections); they do not
-                               enable the collector. wait_stats skips idle/background wait
-                               types (`idleWaitTypes`) and never-seen ones unless include_idle.
+                               `index_fragmentation:`, `query_store:`, `missing_indexes:`
+                               sections); they do not enable the collector. wait_stats skips
+                               idle/background wait types (`idleWaitTypes`) and never-seen ones
+                               unless include_idle.
 --sqlserver.instance-label string
                                Fixed sqlserver_instance label (env SQL_SERVER_INSTANCE_LABEL,
                                YAML instance_label; default @@SERVERNAME).
@@ -470,6 +475,8 @@ The exporter queries these Dynamic Management Views (DMVs):
 | `sys.dm_exec_query_stats`, `dm_exec_plan_attributes`, `dm_exec_sql_text` | VIEW SERVER STATE | top_queries | Plan cache statistics and statement text |
 | `sys.dm_db_index_physical_stats` + per-database `sys.indexes`/`objects`/`schemas` | VIEW SERVER STATE + database access | index_fragmentation | Index fragmentation and size |
 | Per-database `sys.database_query_store_options` + `sys.query_store_plan` | VIEW SERVER STATE + database access | query_store | Query Store state, storage and forced plans |
+| `sys.dm_db_missing_index_details` + `_groups` + `_group_stats` | VIEW SERVER STATE (+ database access for names) | missing_indexes | Top N missing index suggestions |
+| Each distribution DB's `MSdistribution_agents/_history/_status`, `MSlogreader_agents/_history`, `MSreplservers` | SELECT grants in the distribution DB | replication | Agent status, latency, pending commands |
 | `master.sys.server_resource_stats` | VIEW SERVER STATE | volumes (Azure MI only) | Reserved and used instance storage |
 | `SERVERPROPERTY()` | - | server_info, engine_edition.go | Server properties; `EngineEdition` selects platform-specific queries |
 
@@ -557,7 +564,7 @@ and README):
 ### Current State
 - Unit tests for `internal/config` (flag/env/YAML precedence, validation), `internal/db`,
   the Exporter and every collector (`go-sqlmock`) — run with `make test`
-  (185 test functions, 227 runs counting subtests)
+  (196 test functions, 238 runs counting subtests)
 - CI (`.github/workflows/ci.yml`) runs vet, golangci-lint, tests and build on every PR
 - No integration tests against a real SQL Server yet
 - Manual homologation recorded in `BACKLOG-HOMOLOG.md` (HML-001..053), all

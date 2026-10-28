@@ -8,6 +8,7 @@ type Options struct {
 	TopQueries         TopQueriesOptions
 	IndexFragmentation IndexFragmentationOptions
 	QueryStore         QueryStoreOptions
+	MissingIndexes     MissingIndexesOptions
 }
 
 // WaitStatsOptions configures the wait_stats collector.
@@ -50,6 +51,13 @@ type QueryStoreOptions struct {
 	Databases []string
 }
 
+// MissingIndexesOptions configures the missing_indexes collector.
+type MissingIndexesOptions struct {
+	// Limit is the number of suggestions (by estimated improvement) exposed
+	// per scrape; SQL Server keeps at most 600.
+	Limit int
+}
+
 // Option bounds, enforced by the config package.
 const (
 	TopQueriesMaxLimit      = 1000
@@ -58,6 +66,8 @@ const (
 
 	IndexFragmentationMinInterval = time.Minute
 	QueryStoreMinInterval         = time.Minute
+
+	MissingIndexesMaxLimit = 600
 )
 
 // DefaultOptions returns the options used when none are configured.
@@ -73,6 +83,9 @@ func DefaultOptions() Options {
 		},
 		QueryStore: QueryStoreOptions{
 			Interval: 5 * time.Minute,
+		},
+		MissingIndexes: MissingIndexesOptions{
+			Limit: 20,
 		},
 	}
 }

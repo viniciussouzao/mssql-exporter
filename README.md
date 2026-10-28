@@ -32,6 +32,8 @@ The exporter currently includes these collectors:
 - Log shipping (opt-in): last backup/copy/restore timestamps, restore latency and alert thresholds from the log shipping monitor tables.
 - Top queries (opt-in): top N queries by CPU from the plan cache, per `query_hash`, with optional statement text (literals obfuscated).
 - Index fragmentation (opt-in): logical fragmentation and size per index, collected in the background on its own interval (default 6h).
+- Missing indexes (opt-in): the top N indexes the optimizer reported as missing (`sys.dm_db_missing_index_*`), by estimated improvement, with their columns.
+- Replication (opt-in, on the Distributor): status, last activity and delivery latency of the transactional replication Log Reader and Distribution agents, and the commands still waiting in the distribution database.
 - Query Store health (opt-in): actual vs desired state (catches the silent switch to `READ_ONLY` when the store fills up), storage used and forced plans that fail, per database, collected in the background (default 5m).
 
 ## Quick Start
@@ -76,13 +78,14 @@ Flags (mirroring the ergonomics of `mysqld_exporter`/`postgres_exporter`):
 --web.listen-address string    Address to listen on for the web interface and metrics. (default ":9187")
 --web.telemetry-path string    Path under which to expose metrics. (default "/metrics")
 --collector.<name>             Enable/disable a SQL Server collector (all default to true
-                               except log_shipping, top_queries, index_fragmentation
-                               and query_store).
+                               except log_shipping, top_queries, index_fragmentation,
+                               query_store, missing_indexes and replication).
                                Names: wait_stats, io_file_stats, sessions, server_info,
                                memory_clerks, backups, tempdb, perf_counters, databases,
                                transaction_log, blocking, active_queries, availability_groups, agent_jobs,
                                volumes, schedulers, database_mirroring, log_shipping,
-                               top_queries, index_fragmentation, query_store.
+                               top_queries, index_fragmentation, query_store,
+                               missing_indexes, replication.
                                Example: --collector.backups=false, --collector.log_shipping
 --collector.wait_stats.include_idle
                                Also expose idle/background wait types and wait types that never
@@ -103,6 +106,8 @@ Flags (mirroring the ergonomics of `mysqld_exporter`/`postgres_exporter`):
                                Interval between background Query Store collections (default 5m, min 1m).
 --collector.query_store.databases strings
                                Databases to read, comma-separated (default: all accessible user databases).
+--collector.missing_indexes.limit int
+                               Missing index suggestions exposed (default 20, 1-600).
 --collector.os-collectors      Enable OS-level collectors (CPU, memory, disk).
 --config.file string           Path to an optional YAML config file.
 --sqlserver.instance-label string
@@ -330,6 +335,29 @@ metric with the number of databases you expect (or alert on `== 0`). Besides
 database access, `query_store` needs no grant beyond `VIEW SERVER STATE`
 (validated on SQL Server 2025).
 
+The `missing_indexes` collector is **disabled by default**. It needs only
+`VIEW SERVER STATE`, but the schema and table names come from each
+database's catalog: without access to a database (`CONNECT ANY DATABASE` or
+a user there) its suggestions are still exposed, with empty `schema` and
+`table` labels.
+
+The `replication` collector is **disabled by default** and only emits on a
+**Distributor** (an instance with a distribution database; elsewhere it
+succeeds with no series). It reads the agent tables of each distribution
+database the login can access; the `replmonitor` role is not enough (it
+only grants the monitoring procedures), so grant SELECT on them:
+
+```sql
+USE distribution;
+CREATE USER [your_login] FOR LOGIN [your_login];
+GRANT SELECT ON dbo.MSdistribution_agents TO [your_login];
+GRANT SELECT ON dbo.MSdistribution_history TO [your_login];
+GRANT SELECT ON dbo.MSdistribution_status TO [your_login];
+GRANT SELECT ON dbo.MSlogreader_agents TO [your_login];
+GRANT SELECT ON dbo.MSlogreader_history TO [your_login];
+GRANT SELECT ON dbo.MSreplservers TO [your_login];
+```
+
 On **Amazon RDS** the master user cannot grant `CONNECT ANY DATABASE`
 (`Grantor does not have GRANT permission`). Create a user for the login in
 each database to cover instead (it grants access to the database, not to its
@@ -397,6 +425,8 @@ The exporter reads from (among others):
 - `sys.dm_exec_query_stats`, `sys.dm_exec_plan_attributes`, `sys.dm_exec_sql_text` (top_queries only)
 - `sys.dm_db_index_physical_stats` and each database's `sys.indexes`/`sys.objects`/`sys.schemas` (index_fragmentation only)
 - Each database's `sys.database_query_store_options` and `sys.query_store_plan` (query_store only)
+- `sys.dm_db_missing_index_details`, `_groups`, `_group_stats` (missing_indexes only)
+- Each distribution database's `MSdistribution_agents`/`_history`/`_status`, `MSlogreader_agents`/`_history` and `MSreplservers` (replication only)
 - `SERVERPROPERTY(...)`
 
 ## Availability & Self-Metrics
@@ -749,6 +779,44 @@ Metric names are stable and follow Prometheus best practices. Selected examples:
     `_last_collection_success`, as in index_fragmentation
   - No per-query series: the Query Store UI is the tool for analysis (see
     `ROADMAP.md`)
+
+- Missing indexes (opt-in, `--collector.missing_indexes`): the top
+  `--collector.missing_indexes.limit` (default 20) suggestions of the query
+  optimizer by estimated improvement, labeled by `db_name`, `schema`,
+  `table` and `index_handle`
+  - `sqlserver_missing_index_improvement_measure{db_name="AppDB",schema="dbo",table="Orders",index_handle="3"} 93.4`:
+    `avg_total_user_cost * avg_user_impact / 100 * (user_seeks + user_scans)`,
+    the usual ranking; compare suggestions with each other, not with a fixed
+    threshold
+  - `sqlserver_missing_index_user_seeks_total`, `_user_scans_total`,
+    `sqlserver_missing_index_avg_user_impact_percent` (estimated cost
+    reduction) and `sqlserver_missing_index_avg_total_user_cost`
+  - `sqlserver_missing_index_info{...,equality_columns="[CustomerID]",inequality_columns="",included_columns=""} 1`:
+    the suggested key and included columns
+  - The suggestions are reset when SQL Server restarts, dropped for a table
+    when an index is created on it or its schema changes, and capped at 600
+    by SQL Server, so series come and go. Review them before creating
+    indexes: they overlap and ignore the cost of maintaining the index
+
+- Replication (opt-in, `--collector.replication`; run it against the
+  **Distributor**; transactional replication; merge and snapshot agents
+  are not covered). Labels: `distribution_db`, `agent_type` (`logreader` or
+  `distribution`), `agent_name`, `publisher`, `publisher_db`, `publication`,
+  `subscriber`, `subscriber_db` (the last three are empty for the Log
+  Reader). Virtual subscriptions of `immediate_sync` publications are skipped
+  - `sqlserver_replication_agent_run_status{agent_type="distribution",...} 3`:
+    status of the last history entry: 1 started, 2 succeeded, 3 in
+    progress, 4 idle, 5 retrying, 6 failed. A stopped agent keeps its last
+    status (2 after a clean stop), so also alert on the two metrics below
+  - `sqlserver_replication_agent_last_history_timestamp_seconds{...}` (UTC)
+    and `sqlserver_replication_agent_delivery_latency_seconds{...}` from the
+    same entry
+  - `sqlserver_replication_pending_commands{agent_type="distribution",...} 300`:
+    commands in the distribution database not yet delivered to the
+    subscription (`MSdistribution_status`). Alert when they keep growing:
+    `deriv(sqlserver_replication_pending_commands[15m]) > 0 and sqlserver_replication_pending_commands > 10000`.
+    On busy distributors that view can take seconds; keep an eye on
+    `sqlserver_scrape_collector_duration_seconds{collector="replication"}`
 
 - Volumes
   - `sqlserver_volume_total_bytes{volume_mount_point="C:\\"} 1962694664192`

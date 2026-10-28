@@ -46,6 +46,8 @@ collectors:
   # top_queries: false
   # index_fragmentation: false
   # query_store: false
+  # missing_indexes: false
+  # replication: false
 
 # Options of the wait_stats collector. Idle/background wait types and wait
 # types that never happened are skipped unless include_idle is true.
@@ -66,6 +68,11 @@ collectors:
 #   interval: 6h          # minimum 1m
 #   min_page_count: 1000  # skip smaller indexes (8 KB pages)
 #   databases: []         # default: every accessible user database
+
+# Options of the missing_indexes collector. They do not enable it: set
+# `missing_indexes: true` under `collectors:` above.
+# missing_indexes:
+#   limit: 20             # suggestions by estimated improvement, 1-600
 
 # Options of the query_store collector. They do not enable it: set
 # `query_store: true` under `collectors:` above.

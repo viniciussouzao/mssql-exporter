@@ -181,14 +181,12 @@ first; implement in this order.
   `go-mssqldb/azuread` and use its `azuresql` driver when the DSN sets
   `fedauth`. Not a priority: SQL logins work on both, and the Azure identity
   SDK adds a few MB to every binary (HML-016 kept it out on purpose)
-- Missing indexes (`sys.dm_db_missing_index_*`)
 - Per-query statistics from Query Store (`sys.query_store_runtime_stats`):
   history that survives restarts and plan cache eviction, plan changes, waits
   per query (2017+). Deferred: data is aggregated in intervals (60 min by
   default) and cleanup purges old intervals, so totals can decrease and break
   `rate()`; per-database scans are expensive and series churn is the same as
   `top_queries`. The Query Store UI remains the better tool for analysis
-- Replication status
 - Integration tests with SQL Server in Docker (every collector already has
   `go-sqlmock` unit tests)
 - Azure SQL Database mode, **on demand only** (the Azure environment was
@@ -256,3 +254,8 @@ first; implement in this order.
   `sys.dm_db_log_stats` with VLF count, active log and log since the last
   log backup and checkpoint per database; works on RDS for the system
   databases (HML-026, HML-055)
+- [x] Missing indexes: opt-in `missing_indexes` collector, top N
+  suggestions by estimated improvement with their columns (HML-056)
+- [x] Replication status: opt-in `replication` collector on the Distributor,
+  Log Reader and Distribution agents' status, last activity, delivery
+  latency and pending commands (HML-057)

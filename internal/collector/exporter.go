@@ -46,6 +46,8 @@ var scraperNames = []string{
 	"top_queries",
 	"index_fragmentation",
 	"query_store",
+	"missing_indexes",
+	"replication",
 }
 
 // scrapersDisabledByDefault lists collectors that only run when explicitly
@@ -53,12 +55,17 @@ var scraperNames = []string{
 // enabling it by default would report scrape failures on most instances;
 // top_queries scans the plan cache and its labels churn with the workload;
 // index_fragmentation reads index pages (heavy I/O on large objects);
-// query_store reads every database and needs access to each of them.
+// query_store reads every database and needs access to each of them;
+// missing_indexes labels series with table and column names; replication
+// only applies to a Distributor and needs a user in the distribution
+// database.
 var scrapersDisabledByDefault = map[string]bool{
 	"log_shipping":        true,
 	"top_queries":         true,
 	"index_fragmentation": true,
 	"query_store":         true,
+	"missing_indexes":     true,
+	"replication":         true,
 }
 
 var scraperFactories = map[string]func(*sql.DB, Options) Scraper{
@@ -84,7 +91,9 @@ var scraperFactories = map[string]func(*sql.DB, Options) Scraper{
 	"index_fragmentation": func(db *sql.DB, o Options) Scraper {
 		return NewIndexFragmentationCollector(db, o.IndexFragmentation)
 	},
-	"query_store": func(db *sql.DB, o Options) Scraper { return NewQueryStoreCollector(db, o.QueryStore) },
+	"query_store":     func(db *sql.DB, o Options) Scraper { return NewQueryStoreCollector(db, o.QueryStore) },
+	"missing_indexes": func(db *sql.DB, o Options) Scraper { return NewMissingIndexesCollector(db, o.MissingIndexes) },
+	"replication":     func(db *sql.DB, _ Options) Scraper { return NewReplicationCollector(db) },
 }
 
 // ScraperNames returns the names of all available collectors in
