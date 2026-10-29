@@ -2038,7 +2038,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "topk(10, sum by (wait_type) (increase(sqlserver_wait_time_ms{sqlserver_instance=~\"$sqlserver_instance\"}[$__range])))",
+          "expr": "topk(10, sum by (wait_type) (increase(sqlserver_wait_time_ms_total{sqlserver_instance=~\"$sqlserver_instance\"}[$__range])))",
           "instant": true,
           "legendFormat": "{{wait_type}}",
           "refId": "A"

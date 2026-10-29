@@ -70,22 +70,22 @@ func NewWaitStatsCollector(db *sql.DB, opts WaitStatsOptions) *SQLServerWaitStat
 		db:    db,
 		query: waitStatsQuery(opts),
 		waitTimeMs: prometheus.NewDesc(
-			"sqlserver_wait_time_ms",
-			"wait time in milliseconds for SQL Server",
+			"sqlserver_wait_time_ms_total",
+			"Wait time in milliseconds by wait type since SQL Server started (or the wait statistics were cleared)",
 			[]string{"wait_type"},
 			nil,
 		),
 
 		waitingTasks: prometheus.NewDesc(
-			"sqlserver_waiting_tasks",
-			"number of waiting tasks in SQL Server",
+			"sqlserver_waiting_tasks_total",
+			"Waits by wait type since SQL Server started (or the wait statistics were cleared)",
 			[]string{"wait_type"},
 			nil,
 		),
 
 		maxWaitTimeMs: prometheus.NewDesc(
 			"sqlserver_max_wait_time_ms",
-			"maximum wait time in milliseconds for SQL Server",
+			"Longest single wait in milliseconds by wait type since SQL Server started (or the wait statistics were cleared)",
 			[]string{"wait_type"},
 			nil,
 		),
@@ -126,14 +126,14 @@ func (c *SQLServerWaitStats) Scrape(ctx context.Context, ch chan<- prometheus.Me
 
 		ch <- prometheus.MustNewConstMetric(
 			c.waitTimeMs,
-			prometheus.GaugeValue,
+			prometheus.CounterValue,
 			waitTimeMs,
 			waitType,
 		)
 
 		ch <- prometheus.MustNewConstMetric(
 			c.waitingTasks,
-			prometheus.GaugeValue,
+			prometheus.CounterValue,
 			waitingTasks,
 			waitType,
 		)

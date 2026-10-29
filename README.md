@@ -496,9 +496,12 @@ Metric names are stable and follow Prometheus best practices. Selected examples:
   - `sqlserver_io_file_stall_write_ms_total{...} ...`
 
 - Wait stats
-  - `sqlserver_wait_time_ms{wait_type="PAGEIOLATCH_SH"} 123456`
-  - `sqlserver_waiting_tasks{wait_type="PAGEIOLATCH_SH"} 789`
+  - `sqlserver_wait_time_ms_total{wait_type="PAGEIOLATCH_SH"} 123456`
+  - `sqlserver_waiting_tasks_total{wait_type="PAGEIOLATCH_SH"} 789`
   - `sqlserver_max_wait_time_ms{wait_type="PAGEIOLATCH_SH"} 1024`
+  - The first two are counters since SQL Server started; use `rate()`.
+    Up to v0.18 they were gauges named `sqlserver_wait_time_ms` and
+    `sqlserver_waiting_tasks`: update queries and dashboards built on them
   - Idle and background waits (lazy writer, checkpoint, Always On and
     mirroring queues, Query Store and trace flushes, `SOS_WORK_DISPATCHER`
     and others that only accumulate while SQL Server is idle) and wait types
