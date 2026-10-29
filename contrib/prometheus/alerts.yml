@@ -80,7 +80,13 @@ groups:
           summary: "Last full backup of {{ $labels.database_name }} on {{ $labels.sqlserver_instance }} is older than 8 days"
 
       - alert: SQLServerLogBackupTooOld
-        expr: time() - sqlserver_backup_last_completed_timestamp_seconds{backup_type="log"} > 4 * 3600
+        # Only databases still in FULL or BULK_LOGGED recovery: msdb keeps the
+        # history of a database switched to SIMPLE. Needs the databases
+        # collector (on by default) for the recovery model.
+        expr: |
+          time() - sqlserver_backup_last_completed_timestamp_seconds{backup_type="log"} > 4 * 3600
+            and on (instance, sqlserver_instance, database_name)
+              label_replace(sqlserver_database_recovery_model{recovery_model=~"FULL|BULK_LOGGED"}, "database_name", "$1", "db_name", "(.*)")
         for: 15m
         labels:
           severity: warning
@@ -188,8 +194,9 @@ groups:
           summary: "{{ $labels.db_name }} has more than 1 GB of log not sent to {{ $labels.replica_server }}"
 
       - alert: SQLServerMirroringNotSynchronized
-        # 4 = synchronized. Reported by the principal only.
-        expr: sqlserver_mirroring_state != 4
+        # 4 = synchronized, 6 = synchronized with failover possible. Reported
+        # by the principal only.
+        expr: sqlserver_mirroring_state != 4 and sqlserver_mirroring_state != 6
         for: 5m
         labels:
           severity: critical
@@ -309,21 +316,40 @@ groups:
         # Two missed runs at the default intervals (index_fragmentation 6h,
         # query_store 5m); adjust if you changed them.
         expr: |
-          time() - sqlserver_index_fragmentation_last_collection_timestamp_seconds > 2 * 6 * 3600
-            or time() - sqlserver_query_store_last_collection_timestamp_seconds > 2 * 5 * 60
+          label_replace(time() - sqlserver_index_fragmentation_last_collection_timestamp_seconds > 2 * 6 * 3600,
+              "collector", "index_fragmentation", "", "")
+            or label_replace(time() - sqlserver_query_store_last_collection_timestamp_seconds > 2 * 5 * 60,
+              "collector", "query_store", "", "")
         for: 10m
         labels:
           severity: warning
         annotations:
-          summary: "A background collection on {{ $labels.sqlserver_instance }} has not run on time"
+          summary: "The {{ $labels.collector }} background collection on {{ $labels.sqlserver_instance }} has not run on time"
+
+      - alert: SQLServerBackgroundCollectionFailing
+        # The background collectors never fail the scrape, so
+        # SQLServerCollectorFailing does not see them; the exporter log has the
+        # error (often one database without access).
+        expr: |
+          label_replace(sqlserver_index_fragmentation_last_collection_success == 0,
+              "collector", "index_fragmentation", "", "")
+            or label_replace(sqlserver_query_store_last_collection_success == 0,
+              "collector", "query_store", "", "")
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "The last {{ $labels.collector }} background collection on {{ $labels.sqlserver_instance }} failed"
 
       - alert: SQLServerBackgroundCollectionNoDatabases
         # No accessible database: usually a missing CONNECT ANY DATABASE.
         expr: |
-          sqlserver_index_fragmentation_last_collection_databases == 0
-            or sqlserver_query_store_last_collection_databases == 0
+          label_replace(sqlserver_index_fragmentation_last_collection_databases == 0,
+              "collector", "index_fragmentation", "", "")
+            or label_replace(sqlserver_query_store_last_collection_databases == 0,
+              "collector", "query_store", "", "")
         for: 30m
         labels:
           severity: warning
         annotations:
-          summary: "A background collection on {{ $labels.sqlserver_instance }} reaches no database"
+          summary: "The {{ $labels.collector }} background collection on {{ $labels.sqlserver_instance }} reaches no database"

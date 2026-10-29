@@ -2038,13 +2038,14 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "topk(10, sqlserver_wait_time_ms{sqlserver_instance=~\"$sqlserver_instance\"})",
+          "expr": "topk(10, sum by (wait_type) (increase(sqlserver_wait_time_ms{sqlserver_instance=~\"$sqlserver_instance\"}[$__range])))",
           "instant": true,
           "legendFormat": "{{wait_type}}",
           "refId": "A"
         }
       ],
       "title": "Top 10 Wait Types (ms)",
+      "description": "Wait time accumulated in the selected time range, not since SQL Server started.",
       "type": "bargauge"
     },
     {
@@ -6939,7 +6940,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "max by (sqlserver_instance, db_name) (sqlserver_database_log_used_percent) and on (db_name) max by (db_name) (sqlserver_hadr_database_synchronization_state{ag_name=~\"$ag\"})",
+          "expr": "max by (sqlserver_instance, db_name) (sqlserver_database_log_used_percent) and on (sqlserver_instance, db_name) max by (sqlserver_instance, db_name) (sqlserver_hadr_database_synchronization_state{ag_name=~\"$ag\"})",
           "legendFormat": "{{sqlserver_instance}} / {{db_name}}",
           "refId": "A"
         }

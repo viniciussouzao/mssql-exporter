@@ -127,3 +127,66 @@ tests:
           - exp_labels: {severity: warning, instance: "db1:10060", sqlserver_instance: DB1, db_name: app}
             exp_annotations:
               summary: "app on DB1 has 10 GB+ of log since the last log backup, still growing"
+
+  # Mirroring: 4 and 6 are both synchronized.
+  - interval: 1m
+    input_series:
+      - series: 'sqlserver_mirroring_state{instance="db1:10060",sqlserver_instance="DB1",db_name="sync"}'
+        values: '4x10'
+      - series: 'sqlserver_mirroring_state{instance="db1:10060",sqlserver_instance="DB1",db_name="witness"}'
+        values: '6x10'
+      - series: 'sqlserver_mirroring_state{instance="db1:10060",sqlserver_instance="DB1",db_name="lost"}'
+        values: '1x10'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: SQLServerMirroringNotSynchronized
+        exp_alerts:
+          - exp_labels: {severity: critical, instance: "db1:10060", sqlserver_instance: DB1, db_name: lost}
+            exp_annotations:
+              summary: "Mirroring of lost on DB1 is not synchronized"
+
+  # Old log backup: only databases still in FULL or BULK_LOGGED recovery
+  # (msdb keeps the history after a switch to SIMPLE).
+  - interval: 1m
+    input_series:
+      - series: 'sqlserver_backup_last_completed_timestamp_seconds{instance="db1:10060",sqlserver_instance="DB1",database_name="app",backup_type="log"}'
+        values: '0x300'
+      - series: 'sqlserver_database_recovery_model{instance="db1:10060",sqlserver_instance="DB1",db_name="app",recovery_model="FULL"}'
+        values: '1x300'
+      - series: 'sqlserver_backup_last_completed_timestamp_seconds{instance="db1:10060",sqlserver_instance="DB1",database_name="was_full",backup_type="log"}'
+        values: '0x300'
+      - series: 'sqlserver_database_recovery_model{instance="db1:10060",sqlserver_instance="DB1",db_name="was_full",recovery_model="SIMPLE"}'
+        values: '1x300'
+    alert_rule_test:
+      - eval_time: 5h
+        alertname: SQLServerLogBackupTooOld
+        exp_alerts:
+          - exp_labels: {severity: warning, instance: "db1:10060", sqlserver_instance: DB1, database_name: app, backup_type: log}
+            exp_annotations:
+              summary: "Last log backup of app on DB1 is older than 4 hours"
+
+  # Background collections: one alert per collector, and a failed run alerts
+  # even when it ran on time.
+  - interval: 1m
+    input_series:
+      - series: 'sqlserver_index_fragmentation_last_collection_timestamp_seconds{instance="db1:10060",sqlserver_instance="DB1"}'
+        values: '0x30'
+      - series: 'sqlserver_query_store_last_collection_timestamp_seconds{instance="db1:10060",sqlserver_instance="DB1"}'
+        values: '0x30'
+      - series: 'sqlserver_index_fragmentation_last_collection_success{instance="db1:10060",sqlserver_instance="DB1"}'
+        values: '1x30'
+      - series: 'sqlserver_query_store_last_collection_success{instance="db1:10060",sqlserver_instance="DB1"}'
+        values: '0x30'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: SQLServerBackgroundCollectionStale
+        exp_alerts:
+          - exp_labels: {severity: warning, instance: "db1:10060", sqlserver_instance: DB1, collector: query_store}
+            exp_annotations:
+              summary: "The query_store background collection on DB1 has not run on time"
+      - eval_time: 30m
+        alertname: SQLServerBackgroundCollectionFailing
+        exp_alerts:
+          - exp_labels: {severity: warning, instance: "db1:10060", sqlserver_instance: DB1, collector: query_store}
+            exp_annotations:
+              summary: "The last query_store background collection on DB1 failed"
