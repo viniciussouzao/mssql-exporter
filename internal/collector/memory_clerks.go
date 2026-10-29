@@ -36,8 +36,11 @@ func (c *SQLServerMemoryClerks) Describe(ch chan<- *prometheus.Desc) {
 }
 
 func (c *SQLServerMemoryClerks) Scrape(ctx context.Context, ch chan<- prometheus.Metric) error {
+	// pages_kb holds what the clerks allocate through the page allocator
+	// (most of the memory since SQL Server 2012: buffer pool pages, plan
+	// cache); virtual_memory_committed_kb only what they reserve directly.
 	rows, err := c.db.QueryContext(ctx, `
-		SELECT type, name, memory_node_id, SUM(virtual_memory_committed_kb) AS memory_used_kb
+		SELECT type, name, memory_node_id, SUM(pages_kb + virtual_memory_committed_kb) AS memory_used_kb
 		FROM sys.dm_os_memory_clerks
 		GROUP BY type, name, memory_node_id
 	`)

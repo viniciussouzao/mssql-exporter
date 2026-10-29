@@ -22,27 +22,27 @@ func NewSchedulersCollector(db *sql.DB) *SQLServerSchedulers {
 		db: db,
 		runnableTasks: prometheus.NewDesc(
 			"sqlserver_schedulers_runnable_tasks",
-			"Number of tasks waiting for CPU across all visible schedulers (sustained values indicate CPU pressure)",
+			"Number of tasks waiting for CPU across the online visible schedulers (sustained values indicate CPU pressure)",
 			nil, nil,
 		),
 		currentTasks: prometheus.NewDesc(
 			"sqlserver_schedulers_current_tasks",
-			"Number of current tasks across all visible schedulers",
+			"Number of current tasks across the online visible schedulers",
 			nil, nil,
 		),
 		activeWorkers: prometheus.NewDesc(
 			"sqlserver_schedulers_active_workers",
-			"Number of active workers across all visible schedulers",
+			"Number of active workers across the online visible schedulers",
 			nil, nil,
 		),
 		workQueue: prometheus.NewDesc(
 			"sqlserver_schedulers_work_queue",
-			"Number of tasks waiting for a worker across all visible schedulers",
+			"Number of tasks waiting for a worker across the online visible schedulers",
 			nil, nil,
 		),
 		online: prometheus.NewDesc(
 			"sqlserver_schedulers_online",
-			"Number of visible schedulers",
+			"Number of online visible schedulers (the ones that run user work)",
 			nil, nil,
 		),
 	}
@@ -61,6 +61,9 @@ func (c *SQLServerSchedulers) Describe(ch chan<- *prometheus.Desc) {
 }
 
 func (c *SQLServerSchedulers) Scrape(ctx context.Context, ch chan<- prometheus.Metric) error {
+	// VISIBLE ONLINE: hidden schedulers (DAC, internal work) do not run
+	// user queries, and VISIBLE OFFLINE ones are kept out by affinity or
+	// licensing limits; counting them would dilute runnable tasks per CPU.
 	row := c.db.QueryRowContext(ctx, `
 		SELECT
 			SUM(runnable_tasks_count),
@@ -69,7 +72,7 @@ func (c *SQLServerSchedulers) Scrape(ctx context.Context, ch chan<- prometheus.M
 			SUM(work_queue_count),
 			COUNT(*)
 		FROM sys.dm_os_schedulers
-		WHERE scheduler_id < 255
+		WHERE status = 'VISIBLE ONLINE'
 	`)
 
 	var runnable, current, workers, workQueue, online float64

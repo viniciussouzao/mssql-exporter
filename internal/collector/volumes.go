@@ -102,7 +102,8 @@ func (c *SQLServerVolumes) scrapeInstanceStorage(ctx context.Context, ch chan<- 
 func (c *SQLServerVolumes) scrapeVolumes(ctx context.Context, ch chan<- prometheus.Metric) error {
 	// SQL Server on Linux (Cloud SQL, the Docker images) returns NULL mount
 	// point, volume id and logical volume name; fall back to the directory of
-	// the database file so the series still has a usable label. Files in
+	// the database file (cut at the last / or \) so the series still has a
+	// usable label. Files in
 	// different directories of the same file system then report the same
 	// bytes under separate labels.
 	// dm_os_volume_stats is evaluated once per database file, so under write
@@ -120,7 +121,7 @@ func (c *SQLServerVolumes) scrapeVolumes(ctx context.Context, ch chan<- promethe
 				COALESCE(
 					NULLIF(vs.volume_mount_point, ''),
 					NULLIF(vs.logical_volume_name, ''),
-					LEFT(mf.physical_name, LEN(mf.physical_name) - CHARINDEX('/', REVERSE(mf.physical_name)) + 1)
+					LEFT(mf.physical_name, LEN(mf.physical_name) - CHARINDEX('/', REVERSE(REPLACE(mf.physical_name, '\', '/'))) + 1)
 				) AS mount_point,
 				vs.total_bytes,
 				vs.available_bytes

@@ -20,7 +20,7 @@ The exporter currently includes these collectors:
 - Sessions: number of sessions grouped by state and user sessions per login.
 - IO file stats: per-database file IO counters and stalls.
 - Wait stats: wait time and counts by wait type.
-- Memory clerks: memory usage by clerk type.
+- Memory clerks: memory usage by clerk type (`pages_kb` + `virtual_memory_committed_kb`).
 - Backups: last backup timestamp (UTC, correct for servers in any time zone), duration and size per database, counting only backups taken by the instance itself (restores recorded in `backupset`, e.g. on a log shipping secondary, are ignored) and skipping backups written to the `NUL` device, which are discarded (Amazon RDS takes such backups at instance creation). On Amazon RDS, automated backups show up as daily snapshot FULL backups (duration ~1s, size = database size) and log backups every 5 minutes. On Azure SQL Managed Instance, the automatic backups of user databases are reported (recorded with a NULL `server_name`); system databases have no backup history there.
 - TempDB: space usage and temp table activity.
 - Performance counters: batch requests, compilations, page life expectancy, buffer cache hit ratio, deadlocks, lock waits, user connections and more.
@@ -691,7 +691,11 @@ Metric names are stable and follow Prometheus best practices. Selected examples:
   `VIEW SERVER STATE`)
   - The top N queries (`--collector.top_queries.limit`, default 50) by total
     CPU time in the plan cache (`sys.dm_exec_query_stats`), aggregated by
-    `query_hash`; `db_name` is the database the statement ran in
+    `query_hash` and `db_name`, the database the statement ran in: a query
+    that runs in several databases (one per tenant) has one series per
+    database. The N queries with the most CPU are picked first and the top N
+    of their (query, database) pairs is exposed, so the series stay bounded
+    by the limit
   - `sqlserver_top_query_executions_total{db_name="app",query_hash="0x1A2B3C4D5E6F7081"} 72600`
   - `sqlserver_top_query_cpu_seconds_total{...}`,
     `sqlserver_top_query_elapsed_seconds_total{...}`,
@@ -702,7 +706,9 @@ Metric names are stable and follow Prometheus best practices. Selected examples:
     `rate(sqlserver_top_query_elapsed_seconds_total[5m]) / rate(sqlserver_top_query_executions_total[5m])`
   - `sqlserver_top_query_info{db_name="app",query_hash="0x1A2B...",query_text="SELECT p.parcela FROM dbo.t p WHERE p.id = ?"} 1`
     only with `--collector.top_queries.include_text`: the statement text with
-    string, numeric and hex literals replaced by `?`, comments removed and
+    string, numeric, hex and money (`$12.50`) literals replaced by `?`
+    (`"..."` too when the plan was compiled with `QUOTED_IDENTIFIER OFF`,
+    where it is a string), comments removed and
     cut to `--collector.top_queries.text_length` characters. Ad hoc
     statements carry real values (customer data, IDs) in their text, so it
     is off by default; join it in queries with
@@ -838,7 +844,8 @@ Metric names are stable and follow Prometheus best practices. Selected examples:
       size of the instance)
     - `sqlserver_instance_storage_used_bytes 352321536`
 
-- Schedulers
+- Schedulers (the `VISIBLE ONLINE` ones, which run user work; schedulers kept
+  offline by affinity or licensing limits are left out)
   - `sqlserver_schedulers_runnable_tasks 1`
   - `sqlserver_schedulers_current_tasks 53`
   - `sqlserver_schedulers_active_workers 49`

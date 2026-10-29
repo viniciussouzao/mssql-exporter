@@ -10,9 +10,11 @@ import (
 // removes its comments, so statement text can be exposed as a label without
 // leaking the values ad hoc queries carry (customer data, IDs). Whitespace
 // runs collapse to one space and the result is cut to maxLen characters
-// ("..." marks a cut). Identifiers, including [bracketed] and "quoted"
-// ones, and @variables are kept.
-func obfuscateSQL(sql string, maxLen int) string {
+// ("..." marks a cut). Identifiers, including [bracketed] ones, and
+// @variables are kept. "Quoted" text is kept as an identifier only when
+// quotedIdentifier is true: with SET QUOTED_IDENTIFIER OFF it is a string
+// literal.
+func obfuscateSQL(sql string, maxLen int, quotedIdentifier bool) string {
 	sql = strings.ToValidUTF8(sql, "")
 	var b strings.Builder
 	b.Grow(len(sql))
@@ -67,12 +69,18 @@ func obfuscateSQL(sql string, maxLen int) string {
 			space, identChar = true, false
 			i = j
 
-		case r == '\'' || ((r == 'N' || r == 'n') && !identChar && strings.HasPrefix(sql[i+1:], "'")):
-			// 'string' and N'unicode string'; '' is an escaped quote.
-			j := i + strings.IndexByte(sql[i:], '\'') + 1
+		case r == '\'' || ((r == 'N' || r == 'n') && !identChar && strings.HasPrefix(sql[i+1:], "'")) ||
+			(r == '"' && !quotedIdentifier):
+			// 'string', N'unicode string' and "string" (QUOTED_IDENTIFIER
+			// OFF); a doubled quote is an escaped one.
+			quote := byte('\'')
+			if r == '"' {
+				quote = '"'
+			}
+			j := i + strings.IndexByte(sql[i:], quote) + 1
 			for j < len(sql) {
-				if sql[j] == '\'' {
-					if j+1 < len(sql) && sql[j+1] == '\'' {
+				if sql[j] == quote {
+					if j+1 < len(sql) && sql[j+1] == quote {
 						j += 2
 						continue
 					}
@@ -106,9 +114,19 @@ func obfuscateSQL(sql string, maxLen int) string {
 			identChar = true
 			i = j
 
-		case !identChar && (isDigit(sql[i]) || (sql[i] == '.' && i+1 < len(sql) && isDigit(sql[i+1]))):
+		case !identChar && (isNumberStart(sql, i) || isMoneyStart(sql, i)):
 			j := i
-			if strings.HasPrefix(sql[i:], "0x") || strings.HasPrefix(sql[i:], "0X") {
+			if isMoneyStart(sql, i) {
+				// $12.50, $-3: the $ would otherwise start an identifier
+				// and keep the digits after it.
+				j++
+				if sql[j] == '+' || sql[j] == '-' {
+					j++
+				}
+				for j < len(sql) && (isDigit(sql[j]) || sql[j] == '.') {
+					j++
+				}
+			} else if strings.HasPrefix(sql[i:], "0x") || strings.HasPrefix(sql[i:], "0X") {
 				j += 2
 				for j < len(sql) && isHexDigit(sql[j]) {
 					j++
@@ -165,6 +183,25 @@ func isIdentRune(r rune) bool {
 }
 
 func isDigit(c byte) bool { return c >= '0' && c <= '9' }
+
+// isNumberStart reports whether a numeric literal starts at sql[i]: a digit
+// or a dot followed by a digit.
+func isNumberStart(sql string, i int) bool {
+	return isDigit(sql[i]) || (sql[i] == '.' && i+1 < len(sql) && isDigit(sql[i+1]))
+}
+
+// isMoneyStart reports whether a money literal starts at sql[i]: $, an
+// optional sign, then a number. $action and $partition stay identifiers.
+func isMoneyStart(sql string, i int) bool {
+	if sql[i] != '$' {
+		return false
+	}
+	j := i + 1
+	if j < len(sql) && (sql[j] == '+' || sql[j] == '-') {
+		j++
+	}
+	return j < len(sql) && isNumberStart(sql, j)
+}
 
 func isHexDigit(c byte) bool {
 	return isDigit(c) || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
