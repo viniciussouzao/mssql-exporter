@@ -922,7 +922,9 @@ transactions, CPU pressure, Availability Groups, mirroring, log shipping,
 failed Agent jobs, replication agents (failed, stale history, growing
 queue, latency) and the Query Store and background collections. Load it
 with `rule_files:` and tune thresholds and `for:` windows to your workload;
-rules over opt-in collectors never fire while they are disabled. The
+rules over opt-in collectors never fire while they are disabled, and the log
+backup age rule also needs the `databases` collector (it skips databases in
+`SIMPLE` recovery). The
 `MSSQLExporterDown` rule selects `job="sqlserver_exporter"`, the job name of
 the example above.
 

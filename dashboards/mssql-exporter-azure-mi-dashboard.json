@@ -1344,7 +1344,7 @@
       "type": "timeseries",
       "id": 22,
       "title": "IO bytes written (Azure Monitor) vs SQL Server file writes (exporter)",
-      "description": "Azure Monitor reports bytes per time grain and the exporter bytes per second, so compare the shapes, not the values.",
+      "description": "Azure Monitor reports bytes per time grain and the exporter bytes per second, so compare the shapes, not the values (each has its own axis).",
       "datasource": {
         "type": "datasource",
         "uid": "-- Mixed --"
@@ -1401,7 +1401,20 @@
             "axisSoftMin": 0
           }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "A"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "bytes"
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "legend": {
