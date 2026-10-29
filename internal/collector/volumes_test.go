@@ -36,7 +36,7 @@ func TestVolumesScrapeLinuxFallbackAndStateFilter(t *testing.T) {
 
 	rows := sqlmock.NewRows([]string{"mount_point", "total_bytes", "available_bytes"}).
 		AddRow("/var/opt/mssql/data/", 1000.0, 400.0)
-	mock.ExpectQuery(`(?s)NULLIF\(vs\.logical_volume_name, ''\),\s*LEFT\(mf\.physical_name, .*CHARINDEX\('/', REVERSE\(mf\.physical_name\)\).*WHERE d\.state IN \(0, 1\).*GROUP BY mount_point`).
+	mock.ExpectQuery(`(?s)NULLIF\(vs\.logical_volume_name, ''\),\s*LEFT\(mf\.physical_name, .*CHARINDEX\('/', REVERSE\(REPLACE\(mf\.physical_name, '\\', '/'\)\)\).*WHERE d\.state IN \(0, 1\).*GROUP BY mount_point`).
 		WillReturnRows(rows)
 
 	c := NewVolumesCollector(db)

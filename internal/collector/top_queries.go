@@ -10,7 +10,8 @@ import (
 )
 
 // SQLServerTopQueries exposes the top N queries by total CPU time from the
-// plan cache (sys.dm_exec_query_stats), aggregated by query_hash, modeled on
+// plan cache (sys.dm_exec_query_stats), aggregated by query_hash and
+// database, modeled on
 // postgres_exporter's stat_statements and mysqld_exporter's
 // perf_schema.eventsstatements collectors. Disabled by default: it scans the
 // plan cache on every scrape and its series come and go as queries enter and
@@ -84,12 +85,14 @@ func (c *SQLServerTopQueries) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.info
 }
 
-// Scrape reads the plan cache once: the window functions aggregate every
-// plan of a query_hash and pick its most expensive plan as the
-// representative for the database and the statement text, and the TOP is
-// applied before the per-row APPLYs so they only run N times. dbid comes
-// from the plan attributes (the database the statement ran in), since
-// dm_exec_sql_text only has it for module code.
+// Scrape picks the top N query_hash by total CPU in one pass over the plan
+// cache, then reads the plan attributes of those queries' plans only: dbid
+// (the database the statement ran in; dm_exec_sql_text only has it for
+// module code) and set_options. Counters are summed per query_hash and
+// database, so a query that runs in several databases (one per tenant) is
+// not reported under a single one, and the top N of those pairs is exposed,
+// keeping the series bounded by the limit. The most expensive plan of each
+// pair gives the statement text, read only for the rows returned.
 func (c *SQLServerTopQueries) Scrape(ctx context.Context, ch chan<- prometheus.Metric) error {
 	includeText := 0
 	if c.opts.IncludeText {
@@ -97,45 +100,65 @@ func (c *SQLServerTopQueries) Scrape(ctx context.Context, ch chan<- prometheus.M
 	}
 
 	rows, err := c.db.QueryContext(ctx, `
-		WITH per_hash AS (
+		WITH top_hashes AS (
+			SELECT TOP (@p1) query_hash
+			FROM sys.dm_exec_query_stats
+			GROUP BY query_hash
+			ORDER BY SUM(total_worker_time) DESC
+		),
+		plans AS (
+			SELECT
+				qs.*,
+				ISNULL(DB_NAME(pa.dbid), N'') AS database_name,
+				pa.set_options
+			FROM sys.dm_exec_query_stats qs
+			JOIN top_hashes th ON th.query_hash = qs.query_hash
+			OUTER APPLY (
+				SELECT
+					MAX(CASE WHEN attribute = N'dbid' THEN CONVERT(int, value) END) AS dbid,
+					MAX(CASE WHEN attribute = N'set_options' THEN CONVERT(int, value) END) AS set_options
+				FROM sys.dm_exec_plan_attributes(qs.plan_handle)
+				WHERE attribute IN (N'dbid', N'set_options')
+			) pa
+		),
+		per_db AS (
 			SELECT
 				query_hash,
-				plan_handle,
+				database_name,
+				set_options,
 				sql_handle,
 				statement_start_offset,
 				statement_end_offset,
-				SUM(execution_count) OVER (PARTITION BY query_hash) AS executions,
-				SUM(total_worker_time) OVER (PARTITION BY query_hash) AS worker_time_us,
-				SUM(total_elapsed_time) OVER (PARTITION BY query_hash) AS elapsed_time_us,
-				SUM(total_logical_reads) OVER (PARTITION BY query_hash) AS logical_reads,
-				SUM(total_physical_reads) OVER (PARTITION BY query_hash) AS physical_reads,
-				SUM(total_logical_writes) OVER (PARTITION BY query_hash) AS logical_writes,
-				ROW_NUMBER() OVER (PARTITION BY query_hash ORDER BY total_worker_time DESC) AS rn
-			FROM sys.dm_exec_query_stats
+				SUM(execution_count) OVER (PARTITION BY query_hash, database_name) AS executions,
+				SUM(total_worker_time) OVER (PARTITION BY query_hash, database_name) AS worker_time_us,
+				SUM(total_elapsed_time) OVER (PARTITION BY query_hash, database_name) AS elapsed_time_us,
+				SUM(total_logical_reads) OVER (PARTITION BY query_hash, database_name) AS logical_reads,
+				SUM(total_physical_reads) OVER (PARTITION BY query_hash, database_name) AS physical_reads,
+				SUM(total_logical_writes) OVER (PARTITION BY query_hash, database_name) AS logical_writes,
+				ROW_NUMBER() OVER (PARTITION BY query_hash, database_name ORDER BY total_worker_time DESC) AS rn
+			FROM plans
 		)
 		SELECT
 			CONVERT(varchar(18), top_n.query_hash, 1),
-			ISNULL(DB_NAME(pa.dbid), ''),
+			top_n.database_name,
 			top_n.executions,
 			top_n.worker_time_us,
 			top_n.elapsed_time_us,
 			top_n.logical_reads,
 			top_n.physical_reads,
 			top_n.logical_writes,
+			-- QUOTED_IDENTIFIER is bit 64 of set_options; unknown counts as OFF
+			-- so "..." is obfuscated.
+			CASE WHEN top_n.set_options & 64 = 64 THEN 1 ELSE 0 END,
 			CASE WHEN @p2 = 1 THEN LEFT(SUBSTRING(st.text, top_n.statement_start_offset / 2 + 1,
 				(CASE top_n.statement_end_offset WHEN -1 THEN DATALENGTH(st.text) ELSE top_n.statement_end_offset END
 					- top_n.statement_start_offset) / 2 + 1), 4000) END
 		FROM (
 			SELECT TOP (@p1) *
-			FROM per_hash
+			FROM per_db
 			WHERE rn = 1
 			ORDER BY worker_time_us DESC
 		) top_n
-		OUTER APPLY (
-			SELECT CONVERT(int, value) AS dbid
-			FROM sys.dm_exec_plan_attributes(top_n.plan_handle)
-			WHERE attribute = N'dbid'
-		) pa
 		OUTER APPLY sys.dm_exec_sql_text(top_n.sql_handle) st
 	`, c.opts.Limit, includeText)
 	if err != nil {
@@ -147,9 +170,10 @@ func (c *SQLServerTopQueries) Scrape(ctx context.Context, ch chan<- prometheus.M
 	for rows.Next() {
 		var queryHash, dbName string
 		var executions, workerTimeUs, elapsedTimeUs, logicalReads, physicalReads, logicalWrites float64
+		var quotedIdentifier bool
 		var text sql.NullString
 		if err := rows.Scan(&queryHash, &dbName, &executions, &workerTimeUs, &elapsedTimeUs,
-			&logicalReads, &physicalReads, &logicalWrites, &text); err != nil {
+			&logicalReads, &physicalReads, &logicalWrites, &quotedIdentifier, &text); err != nil {
 			scanErrs = append(scanErrs, fmt.Errorf("failed to scan top queries row: %w", err))
 			continue
 		}
@@ -161,7 +185,7 @@ func (c *SQLServerTopQueries) Scrape(ctx context.Context, ch chan<- prometheus.M
 		ch <- prometheus.MustNewConstMetric(c.physicalReads, prometheus.CounterValue, physicalReads, dbName, queryHash)
 		ch <- prometheus.MustNewConstMetric(c.logicalWrites, prometheus.CounterValue, logicalWrites, dbName, queryHash)
 		if c.opts.IncludeText && text.Valid {
-			ch <- prometheus.MustNewConstMetric(c.info, prometheus.GaugeValue, 1, dbName, queryHash, obfuscateSQL(text.String, c.opts.TextLength))
+			ch <- prometheus.MustNewConstMetric(c.info, prometheus.GaugeValue, 1, dbName, queryHash, obfuscateSQL(text.String, c.opts.TextLength, quotedIdentifier))
 		}
 	}
 

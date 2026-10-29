@@ -109,10 +109,11 @@ func (c *SQLServerIOFileStats) Scrape(ctx context.Context, ch chan<- prometheus.
 	var scanErrs []error
 	for rows.Next() {
 		var (
-			dbName, fileName, fileType, physicalName string
-			reads, writes                            float64
-			readBytes, writeBytes                    float64
-			stallRead, stallWrite                    float64
+			dbName                           sql.NullString
+			fileName, fileType, physicalName string
+			reads, writes                    float64
+			readBytes, writeBytes            float64
+			stallRead, stallWrite            float64
 		)
 
 		if err := rows.Scan(
@@ -131,7 +132,12 @@ func (c *SQLServerIOFileStats) Scrape(ctx context.Context, ch chan<- prometheus.
 			continue
 		}
 
-		labels := []string{dbName, fileName, fileType, physicalName}
+		// DB_NAME is NULL while the database is being dropped or restored.
+		if !dbName.Valid {
+			continue
+		}
+
+		labels := []string{dbName.String, fileName, fileType, physicalName}
 
 		ch <- prometheus.MustNewConstMetric(c.reads, prometheus.CounterValue, reads, labels...)
 		ch <- prometheus.MustNewConstMetric(c.writes, prometheus.CounterValue, writes, labels...)

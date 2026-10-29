@@ -12,7 +12,7 @@ func TestSchedulersScrapeHappyPath(t *testing.T) {
 
 	row := sqlmock.NewRows([]string{"runnable", "current", "workers", "work_queue", "online"}).
 		AddRow(2.0, 10.0, 8.0, 0.0, 4.0)
-	mock.ExpectQuery("SELECT(.|\n)*FROM sys.dm_os_schedulers").WillReturnRows(row)
+	mock.ExpectQuery("SELECT(.|\n)*FROM sys.dm_os_schedulers\\s+WHERE status = 'VISIBLE ONLINE'").WillReturnRows(row)
 
 	c := NewSchedulersCollector(db)
 	families := gatherScraper(t, c)

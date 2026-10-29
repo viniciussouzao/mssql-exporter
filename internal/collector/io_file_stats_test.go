@@ -119,3 +119,28 @@ func TestIOFileStatsScrapeEmpty(t *testing.T) {
 		t.Error("io_file_reads_total present, want no metrics for empty result set (e.g. missing VIEW ANY DEFINITION)")
 	}
 }
+
+func TestIOFileStatsScrapeSkipsNullDatabaseName(t *testing.T) {
+	db, mock := newSQLMock(t)
+
+	// DB_NAME is NULL for a database being dropped or restored: the row is
+	// skipped without failing the collector.
+	rows := sqlmock.NewRows([]string{
+		"db_name", "file_name", "file_type", "physical_name",
+		"num_of_reads", "num_of_writes", "num_of_bytes_read", "num_of_bytes_written",
+		"io_stall_read_ms", "io_stall_write_ms",
+	}).
+		AddRow(nil, "Gone_Data", "ROWS", "C:\\data\\Gone.mdf", 1.0, 1.0, 1.0, 1.0, 1.0, 1.0).
+		AddRow("AppDB", "AppDB_Data", "ROWS", "C:\\data\\AppDB.mdf", 100.0, 50.0, 8192.0, 4096.0, 10.0, 5.0)
+	mock.ExpectQuery("FROM sys.dm_io_virtual_file_stats").WillReturnRows(rows)
+
+	c := NewIOFileStatsCollector(db)
+	families := gatherScraper(t, c)
+
+	if v, ok := counterValue(families, "sqlserver_io_file_reads_total", map[string]string{"db_name": "AppDB"}); !ok || v != 100 {
+		t.Errorf("io_file_reads_total{AppDB} = %v (found=%v), want 100", v, ok)
+	}
+	if _, ok := counterValue(families, "sqlserver_io_file_reads_total", map[string]string{"file_name": "Gone_Data"}); ok {
+		t.Error("io_file_reads_total{Gone_Data} present, want the row with a NULL database name skipped")
+	}
+}

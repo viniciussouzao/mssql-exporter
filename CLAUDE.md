@@ -577,7 +577,7 @@ and README):
 ### Current State
 - Unit tests for `internal/config` (flag/env/YAML precedence, validation), `internal/db`,
   the Exporter and every collector (`go-sqlmock`) — run with `make test`
-  (196 test functions, 238 runs counting subtests)
+  (200 test functions, 247 runs counting subtests)
 - CI (`.github/workflows/ci.yml`) runs vet, golangci-lint, tests, build and
   `make test-alerts` on every PR, `make vulncheck` (govulncheck), a gitleaks
   scan of the whole history (`make scan-secrets`), plus the integration tests on SQL Server 2022
