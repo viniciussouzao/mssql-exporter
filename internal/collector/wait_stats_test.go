@@ -29,10 +29,10 @@ func TestWaitStatsScrapeHappyPath(t *testing.T) {
 	families := gatherScraper(t, c)
 
 	labels := map[string]string{"wait_type": "PAGEIOLATCH_SH"}
-	if v, ok := metricValue(families, "sqlserver_wait_time_ms", labels); !ok || v != 1500 {
+	if v, ok := counterValue(families, "sqlserver_wait_time_ms_total", labels); !ok || v != 1500 {
 		t.Errorf("wait_time_ms = %v (found=%v), want 1500", v, ok)
 	}
-	if v, ok := metricValue(families, "sqlserver_waiting_tasks", labels); !ok || v != 42 {
+	if v, ok := counterValue(families, "sqlserver_waiting_tasks_total", labels); !ok || v != 42 {
 		t.Errorf("waiting_tasks = %v (found=%v), want 42", v, ok)
 	}
 	if v, ok := metricValue(families, "sqlserver_max_wait_time_ms", labels); !ok || v != 200 {
@@ -66,7 +66,7 @@ func TestWaitStatsScrapeScanError(t *testing.T) {
 	if err == nil {
 		t.Error("Scrape() error = nil, want error from bad row")
 	}
-	if v, ok := metricValue(families, "sqlserver_wait_time_ms", map[string]string{"wait_type": "PAGEIOLATCH_SH"}); !ok || v != 1500 {
+	if v, ok := counterValue(families, "sqlserver_wait_time_ms_total", map[string]string{"wait_type": "PAGEIOLATCH_SH"}); !ok || v != 1500 {
 		t.Errorf("wait_time_ms = %v (found=%v), want 1500 despite earlier scan error", v, ok)
 	}
 }
@@ -87,7 +87,7 @@ func TestWaitStatsScrapeRowIterationError(t *testing.T) {
 	if !errors.Is(err, rowErr) {
 		t.Errorf("Scrape() error = %v, want it to wrap %v (rows.Err())", err, rowErr)
 	}
-	if v, ok := metricValue(families, "sqlserver_wait_time_ms", map[string]string{"wait_type": "PAGEIOLATCH_SH"}); !ok || v != 1500 {
+	if v, ok := counterValue(families, "sqlserver_wait_time_ms_total", map[string]string{"wait_type": "PAGEIOLATCH_SH"}); !ok || v != 1500 {
 		t.Errorf("wait_time_ms = %v (found=%v), want 1500 despite the later iteration error", v, ok)
 	}
 }
@@ -100,7 +100,7 @@ func TestWaitStatsScrapeEmpty(t *testing.T) {
 
 	c := NewWaitStatsCollector(db, WaitStatsOptions{})
 	families := gatherScraper(t, c)
-	if _, ok := metricValue(families, "sqlserver_wait_time_ms", nil); ok {
+	if _, ok := counterValue(families, "sqlserver_wait_time_ms_total", nil); ok {
 		t.Error("wait_time_ms present, want no metrics for empty result set")
 	}
 }
@@ -139,7 +139,7 @@ func TestWaitStatsScrapeDefaultQueryFiltersIdle(t *testing.T) {
 
 	c := NewWaitStatsCollector(db, DefaultOptions().WaitStats)
 	families := gatherScraper(t, c)
-	if _, ok := metricValue(families, "sqlserver_wait_time_ms", map[string]string{"wait_type": "PAGEIOLATCH_SH"}); !ok {
+	if _, ok := counterValue(families, "sqlserver_wait_time_ms_total", map[string]string{"wait_type": "PAGEIOLATCH_SH"}); !ok {
 		t.Error("wait_time_ms{PAGEIOLATCH_SH} missing")
 	}
 }

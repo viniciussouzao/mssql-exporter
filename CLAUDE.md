@@ -551,7 +551,7 @@ and README):
 ### Metric Naming
 - Prefix: `sqlserver_`
 - Pattern: `sqlserver_{component}_{metric}[_{unit}]`
-- Examples: `sqlserver_sessions_total`, `sqlserver_wait_time_ms`
+- Examples: `sqlserver_sessions_total`, `sqlserver_wait_time_ms_total`
 - Use `_total` suffix for counters
 - Include unit in name if not obvious (e.g., `_ms`, `_kb`, `_bytes`)
 

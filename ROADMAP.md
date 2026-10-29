@@ -270,3 +270,8 @@ first; implement in this order.
   Go 1.27.x instead of the `go.mod` minimum (v0.18.0 and earlier were built with go1.25.0, with
   reachable standard library vulnerabilities), `govulncheck` and gitleaks
   in CI, Dependabot and `SECURITY.md`
+- [x] Pre-release review by three external models: corrected memory clerk
+  usage, top queries per database, money and `QUOTED_IDENTIFIER OFF`
+  literals in the statement text, online schedulers, alerts on failed
+  background collections, strict YAML config; wait statistics renamed to
+  counters (`sqlserver_wait_time_ms_total`, `sqlserver_waiting_tasks_total`)
