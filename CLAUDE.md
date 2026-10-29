@@ -113,7 +113,7 @@ mssql-exporter/
 
 Tests live beside the code as `*_test.go` in `internal/collector` (all collectors and the
 Exporter, using `go-sqlmock`; shared helpers in `testutil_test.go`), `internal/config` and
-`internal/db`, plus the `main` package (`service_test.go`, `instance_label_test.go`).
+`internal/db`, plus the `main` package (`service_test.go`, `instance_label_test.go`, `main_test.go`).
 `internal/oscollector` and `internal/version` have no tests (the OS collectors are
 validated on the home lab: Windows notebook and the Raspberry Pi for Linux).
 
@@ -579,7 +579,7 @@ and README):
 ### Current State
 - Unit tests for `internal/config` (flag/env/YAML precedence, validation), `internal/db`,
   the Exporter and every collector (`go-sqlmock`) — run with `make test`
-  (200 test functions, 247 runs counting subtests)
+  (208 test functions, 255 runs counting subtests)
 - CI (`.github/workflows/ci.yml`) runs vet, golangci-lint, tests, build and
   `make test-alerts` on every PR, `make vulncheck` (govulncheck), a gitleaks
   scan of the whole history (`make scan-secrets`), plus the integration tests on SQL Server 2022
@@ -718,7 +718,9 @@ items to the "Done" section and keep phases current.
 Merging a PR into `main` with a label publishes a release (`release.yml` tags the
 next version and runs GoReleaser): `release:patch` (or legacy `release`),
 `release:minor`, `release:major`. The largest label wins; with no `vX.Y.Z` tag
-yet the first release is `v0.1.0`. v0.1.0 was published manually with
+yet the first release is `v0.1.0`. Releases run one at a time (`concurrency`
+group): merge release PRs one at a time, or two in a row at most, since a third
+pending run cancels the waiting one. v0.1.0 was published manually with
 `goreleaser release --clean`. Never add a release label unless a release is intended.
 
 ### Pull Requests
