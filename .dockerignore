@@ -10,3 +10,12 @@ CODE_REVIEW_PHASE3_REPORT.md
 docker-compose.yml
 prometheus.yml
 .vscode/
+dist/
+# Local only: Terraform state of the homologation, review notes, tool state.
+hml_resources_*/
+*.tfstate
+*.tfstate.*
+*.tfvars
+.claude/
+.crush/
+review-findings/

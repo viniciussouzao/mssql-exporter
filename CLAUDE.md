@@ -225,10 +225,12 @@ func (c *CollectorName) Scrape(ctx context.Context, ch chan<- prometheus.Metric)
 
 ### 3. Main Application Flow (`main.go`)
 
-1. Load `.env` file (using `godotenv.Load()`)
+1. Load `.env` file (using `godotenv.Load()`), only in the foreground (not for `service` or as a Windows service)
 2. Resolve configuration with `config.Load(os.Args[1:])` (flags/env/YAML, see below); logs the build version
 3. Initialize connection pool with `db.Connect(cfg.DSN, opts)` (validates the DSN only — does not dial)
-4. Ping database (best effort: logs a warning and continues if unreachable; `sqlserver_up` reports 0 until it recovers)
+4. Ping database (best effort: logs a warning and continues if unreachable; `sqlserver_up` reports 0 until it recovers).
+   The ping and the `@@SERVERNAME` read go through `bounded`, which gives up after the query timeout plus
+   `startupGrace` even if the driver ignores the cancelled context, so the HTTP listener always starts
 5. Build `collector.NewExporterWithOptions(db, cfg.EnabledCollectors, cfg.CollectorOptions)` and
    register it, plus `oscollector.Register(reg)` if `cfg.EnableOSCollectors`, in an
    `instanceRegistry` (`instance_label.go`) that adds the `sqlserver_instance` label

@@ -756,3 +756,66 @@ missing_indexes:
 		}
 	}
 }
+
+func TestLoadTelemetryPathRejectedBeforeServeMuxPanics(t *testing.T) {
+	t.Setenv("SQL_SERVER_DSN", testDSN)
+
+	for path, want := range map[string]string{
+		"/healthz": "the health endpoint",
+		"/{":       "invalid web.telemetry-path",
+	} {
+		_, err := Load([]string{"--web.telemetry-path", path})
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("Load(telemetry path %q) error = %v, want it to contain %q", path, err, want)
+		}
+	}
+	if _, err := Load([]string{"--web.telemetry-path", "/healthz/metrics"}); err != nil {
+		t.Errorf("Load(telemetry path /healthz/metrics) error = %v, want nil", err)
+	}
+}
+
+func TestLoadMaxConnectionsFlagIgnoresInvalidEnv(t *testing.T) {
+	t.Setenv("SQL_SERVER_DSN", testDSN)
+	t.Setenv("SQL_SERVER_MAX_CONNECTIONS", "invalid")
+
+	cfg, err := Load([]string{"--sqlserver.max-connections", "10"})
+	if err != nil {
+		t.Fatalf("Load() error = %v, want the flag to win over the invalid variable", err)
+	}
+	if cfg.MaxConnections != 10 {
+		t.Errorf("MaxConnections = %d, want 10", cfg.MaxConnections)
+	}
+	if _, err := Load(nil); err == nil || !strings.Contains(err.Error(), "SQL_SERVER_MAX_CONNECTIONS") {
+		t.Errorf("Load() without the flag error = %v, want the invalid variable reported", err)
+	}
+}
+
+func TestLoadConfigFileUnknownKey(t *testing.T) {
+	t.Setenv("SQL_SERVER_DSN", "")
+
+	path := writeConfigFile(t, `
+dsn: "`+testDSN+`"
+web:
+  listen_adress: "127.0.0.1:10060"
+`)
+	_, err := Load([]string{"--config.file", path})
+	if err == nil || !strings.Contains(err.Error(), "listen_adress") {
+		t.Errorf("Load() error = %v, want the misspelled key reported", err)
+	}
+}
+
+func TestLoadEmptyConfigFile(t *testing.T) {
+	t.Setenv("SQL_SERVER_DSN", testDSN)
+
+	if _, err := Load([]string{"--config.file", writeConfigFile(t, "# only comments\n")}); err != nil {
+		t.Errorf("Load(empty config file) error = %v, want nil", err)
+	}
+}
+
+func TestLoadExampleConfigFile(t *testing.T) {
+	t.Setenv("SQL_SERVER_DSN", "")
+
+	if _, err := Load([]string{"--config.file", "../../config.example.yml"}); err != nil {
+		t.Errorf("Load(config.example.yml) error = %v", err)
+	}
+}

@@ -122,8 +122,9 @@ Flags (mirroring the ergonomics of `mysqld_exporter`/`postgres_exporter`):
 
 The database DSN has **no CLI flag on purpose**: process arguments are visible
 via `ps`/task manager, which would leak credentials. Set it via the
-`SQL_SERVER_DSN` environment variable (a `.env` file is loaded automatically)
-or via the config file. Any DSN format supported by the `go-mssqldb` driver
+`SQL_SERVER_DSN` environment variable (a `.env` file in the current directory
+is loaded automatically when running in the foreground, not as a Windows
+service) or via the config file. Any DSN format supported by the `go-mssqldb` driver
 works, e.g.:
 
 ```
@@ -132,7 +133,9 @@ SQL_SERVER_DSN=sqlserver://sa:MyStrongP%40ss@localhost:1433?database=master&app+
 
 Alternatively, use a YAML config file (handy for Windows services, where
 editing environment variables is more cumbersome than pointing at a file next
-to the executable). See `config.example.yml`:
+to the executable). Unknown keys are an error, so a misspelled key (for
+example `web.config_file`) stops the exporter instead of being ignored. See
+`config.example.yml`:
 
 ```yaml
 dsn: "sqlserver://sa:MyStrongP%40ss@localhost:1433?database=master"
@@ -952,7 +955,12 @@ from the Prometheus image; CI runs it on every pull request.
 - For encrypted connections to SQL Server (including TDS 8.0 strict
   encryption), see [Encrypted connections](#encrypted-connections-encryptstrict).
 - A `/healthz` endpoint returns 200 while the process is alive (liveness);
-  use `sqlserver_up` for database reachability.
+  use `sqlserver_up` for database reachability. It is served by the same
+  listener as the metrics, so TLS and basic auth apply to it too. The Docker
+  image's `HEALTHCHECK` probes `http://localhost:10060/healthz`: with TLS,
+  basic auth or another listen address, override it (`healthcheck:` in
+  Compose, `--health-cmd` in `docker run`) or disable it
+  (`--no-healthcheck`).
 - Avoid embedding secrets in source control. Keep the DSN in environment variables or a config file excluded from git.
 - Release binaries and the Docker image are built with the latest patch of a
   supported Go release, and CI runs `govulncheck` on every pull request.
