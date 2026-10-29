@@ -1,9 +1,12 @@
 package config
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
+	"net/http"
 	"os"
 	"strconv"
 	"strings"
@@ -19,6 +22,9 @@ import (
 const (
 	defaultWebListenAddress = ":10060"
 	defaultWebTelemetryPath = "/metrics"
+
+	// HealthPath is the liveness endpoint, served next to the metrics.
+	HealthPath = "/healthz"
 
 	// maxMaxConnections bounds sqlserver.max-connections: every collector of
 	// a scrape runs at the same time, so a few dozen connections already let
@@ -156,7 +162,12 @@ func Load(args []string) (*Config, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to read config file: %w", err)
 		}
-		if err := yaml.Unmarshal(data, &fc); err != nil {
+		// Unknown keys are errors: a misspelled web.config_file or
+		// listen_address would otherwise silently drop TLS, basic auth or
+		// the bind address.
+		dec := yaml.NewDecoder(bytes.NewReader(data))
+		dec.KnownFields(true)
+		if err := dec.Decode(&fc); err != nil && !errors.Is(err, io.EOF) {
 			return nil, fmt.Errorf("failed to parse config file: %w", err)
 		}
 	}
@@ -181,8 +192,8 @@ func Load(args []string) (*Config, error) {
 	if fs.Changed("web.telemetry-path") {
 		cfg.WebTelemetryPath = *webTelemetryPath
 	}
-	if !strings.HasPrefix(cfg.WebTelemetryPath, "/") {
-		return nil, fmt.Errorf("web.telemetry-path must start with '/'")
+	if err := validateTelemetryPath(cfg.WebTelemetryPath); err != nil {
+		return nil, err
 	}
 
 	cfg.WebConfigFile = fc.Web.ConfigFile
@@ -330,7 +341,8 @@ func Load(args []string) (*Config, error) {
 	if fc.MaxConnections != nil {
 		cfg.MaxConnections = *fc.MaxConnections
 	}
-	if v := os.Getenv("SQL_SERVER_MAX_CONNECTIONS"); v != "" {
+	// The flag wins, so a malformed variable it overrides is not an error.
+	if v := os.Getenv("SQL_SERVER_MAX_CONNECTIONS"); v != "" && !fs.Changed("sqlserver.max-connections") {
 		n, err := strconv.Atoi(v)
 		if err != nil {
 			return nil, fmt.Errorf("invalid SQL_SERVER_MAX_CONNECTIONS value %q: %w", v, err)
@@ -353,4 +365,26 @@ func Load(args []string) (*Config, error) {
 	}
 
 	return cfg, nil
+}
+
+// validateTelemetryPath rejects paths that would make the HTTP server panic
+// at startup: the health endpoint, and patterns http.ServeMux refuses (e.g.
+// an unclosed wildcard). It registers them the way main does, on a
+// throwaway mux.
+func validateTelemetryPath(path string) (err error) {
+	if !strings.HasPrefix(path, "/") {
+		return fmt.Errorf("web.telemetry-path must start with '/'")
+	}
+	if path == HealthPath {
+		return fmt.Errorf("web.telemetry-path must not be %s, the health endpoint", HealthPath)
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("invalid web.telemetry-path %q: %v", path, r)
+		}
+	}()
+	mux := http.NewServeMux()
+	mux.Handle(path, http.NotFoundHandler())
+	mux.Handle(HealthPath, http.NotFoundHandler())
+	return nil
 }

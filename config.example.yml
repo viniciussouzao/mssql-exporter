@@ -21,9 +21,10 @@ web:
   # Optional exporter-toolkit web config file enabling TLS and/or basic auth:
   # config_file: "web-config.yml"
 
-# Toggle individual collectors (SQL Server collectors default to enabled
-# except log_shipping, which needs extra msdb grants; os_collectors defaults
-# to disabled).
+# Toggle individual collectors. SQL Server collectors default to enabled
+# except log_shipping (extra msdb grants), top_queries, index_fragmentation,
+# query_store, missing_indexes and replication (opt-in); os_collectors
+# defaults to disabled.
 collectors:
   os_collectors: false
   # wait_stats: true
@@ -42,6 +43,7 @@ collectors:
   # volumes: true
   # schedulers: true
   # database_mirroring: true
+  # transaction_log: true
   # log_shipping: false
   # top_queries: false
   # index_fragmentation: false
