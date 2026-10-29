@@ -25,13 +25,11 @@ import (
 	"github.com/viniciussouzao/mssql-exporter/internal/version"
 )
 
-func init() {
-	// .env is a local-development convenience; its absence is the normal case
-	// when running from --config.file or environment variables (e.g. as a service).
-	if err := godotenv.Load(); err != nil && !errors.Is(err, fs.ErrNotExist) {
-		slog.Warn("failed to load .env file", slog.Any("error", err))
-	}
-}
+// startupGrace is how long startup waits past the query timeout for the
+// ping or @@SERVERNAME to return. The driver can block well past a
+// cancelled context (HML-037); startup must still reach the HTTP listener so
+// the exporter serves sqlserver_up 0 instead of hanging.
+const startupGrace = 500 * time.Millisecond
 
 // shutdownTimeout bounds how long in-flight scrapes may take to finish once a
 // stop is requested (Ctrl+C, SIGTERM or a Windows service stop).
@@ -46,6 +44,14 @@ func main() {
 
 	if isWindowsService() {
 		os.Exit(runAsWindowsService(args))
+	}
+
+	// .env is a local-development convenience, read from the current
+	// directory only when running in the foreground: a service, or the
+	// validation of `service install`, must not depend on the directory it
+	// was started from.
+	if err := godotenv.Load(); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		slog.Warn("failed to load .env file", slog.Any("error", err))
 	}
 
 	cfg, err := config.Load(args)
@@ -82,9 +88,9 @@ func run(ctx context.Context, cfg *config.Config) error {
 
 	conn := db.DB()
 
-	pingCtx, cancelPing := context.WithTimeout(ctx, db.CurrentOptions().ConnTimeout)
-	err := conn.PingContext(pingCtx)
-	cancelPing()
+	_, err := bounded(ctx, db.CurrentOptions().ConnTimeout, func(ctx context.Context) (struct{}, error) {
+		return struct{}{}, conn.PingContext(ctx)
+	})
 
 	if err != nil {
 		slog.Warn("sql server is unreachable at startup, retrying on every scrape (sqlserver_up will report 0)", slog.Any("error", err))
@@ -102,7 +108,9 @@ func run(ctx context.Context, cfg *config.Config) error {
 	case err != nil:
 		resolveLater = true
 	default:
-		name, err := queryServerName(ctx, conn)
+		name, err := bounded(ctx, db.CurrentOptions().ConnTimeout, func(ctx context.Context) (string, error) {
+			return queryServerName(ctx, conn)
+		})
 		switch {
 		case errors.Is(err, errNullServerName):
 			slog.Warn("@@SERVERNAME is NULL, sqlserver_instance label stays empty (set instance_label to avoid it)")
@@ -163,7 +171,7 @@ func run(ctx context.Context, cfg *config.Config) error {
 
 	mux := http.NewServeMux()
 	mux.Handle(cfg.WebTelemetryPath, metricsHandler)
-	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc(config.HealthPath, func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
@@ -195,4 +203,34 @@ func run(ctx context.Context, cfg *config.Config) error {
 		return fmt.Errorf("http server: %w", err)
 	}
 	return nil
+}
+
+// bounded runs call with a timeout and returns its result, or an error once
+// the timeout plus startupGrace passes or ctx is done, even if call is still
+// blocked in the driver; it then finishes in the background.
+func bounded[T any](ctx context.Context, timeout time.Duration, call func(context.Context) (T, error)) (T, error) {
+	type result struct {
+		v   T
+		err error
+	}
+	callCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	// Buffered so an abandoned call can still deliver its result and exit.
+	done := make(chan result, 1)
+	go func() {
+		v, err := call(callCtx)
+		done <- result{v, err}
+	}()
+
+	timer := time.NewTimer(timeout + startupGrace)
+	defer timer.Stop()
+	var zero T
+	select {
+	case r := <-done:
+		return r.v, r.err
+	case <-timer.C:
+		return zero, errors.New("sql server did not answer before the timeout")
+	case <-ctx.Done():
+		return zero, ctx.Err()
+	}
 }

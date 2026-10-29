@@ -10,6 +10,10 @@ builds:
     binary: mssql-exporter
     env:
       - CGO_ENABLED=0
+    # Same as the Makefile and the Dockerfile: no build machine paths in the
+    # binaries.
+    flags:
+      - -trimpath
     goos:
       - linux
       - darwin
