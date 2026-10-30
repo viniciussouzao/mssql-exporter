@@ -12,6 +12,8 @@ updates:
       go-modules:
         update-types: [minor, patch]
 
+  # The workflows pin actions to a commit SHA with the version in a comment;
+  # Dependabot updates both.
   - package-ecosystem: github-actions
     directory: /
     schedule:
