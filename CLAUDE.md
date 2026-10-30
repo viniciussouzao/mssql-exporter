@@ -720,7 +720,10 @@ next version and runs GoReleaser): `release:patch` (or legacy `release`),
 `release:minor`, `release:major`. The largest label wins; with no `vX.Y.Z` tag
 yet the first release is `v0.1.0`. Releases run one at a time (`concurrency`
 group): merge release PRs one at a time, or two in a row at most, since a third
-pending run cancels the waiting one. v0.1.0 was published manually with
+pending run cancels the waiting one. The workflow triggers on
+`pull_request_target` so merged PRs from forks release too; it must never
+check out the PR head or expand PR fields inside `run:` (see the comment in
+`release.yml`). v0.1.0 was published manually with
 `goreleaser release --clean`. Never add a release label unless a release is intended.
 
 ### Pull Requests
