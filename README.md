@@ -629,7 +629,10 @@ Metric names are stable and follow Prometheus best practices. Selected examples:
   - `sqlserver_agent_job_enabled{job_name="nightly-backup"} 1`
   - `sqlserver_agent_job_last_run_status{job_name="nightly-backup"} 1`
   - `sqlserver_agent_job_last_run_timestamp_seconds{job_name="nightly-backup"} 1789344000`
-    (UTC Unix time, converted from the server's local time with its current offset)
+    (UTC Unix time, converted from the server's local time with its current
+    offset, since `sysjobhistory` keeps none: a run from before a daylight
+    saving or time zone change is off by the size of the change until the job
+    runs again)
   - `sqlserver_agent_job_last_run_duration_seconds{job_name="nightly-backup"} 42`
 
   There is intentionally no aggregate "failed jobs" metric — derive it in
@@ -820,7 +823,11 @@ Metric names are stable and follow Prometheus best practices. Selected examples:
     status of the last history entry: 1 started, 2 succeeded, 3 in
     progress, 4 idle, 5 retrying, 6 failed. A stopped agent keeps its last
     status (2 after a clean stop), so also alert on the two metrics below
-  - `sqlserver_replication_agent_last_history_timestamp_seconds{...}` (UTC)
+  - `sqlserver_replication_agent_last_history_timestamp_seconds{...}` (UTC,
+    converted from the Distributor's local time with its current offset: an
+    entry from before a daylight saving or time zone change is off by the size
+    of the change until the agent logs again, which can move the stale history
+    alert by that much)
     and `sqlserver_replication_agent_delivery_latency_seconds{...}` from the
     same entry
   - `sqlserver_replication_pending_commands{agent_type="distribution",...} 300`:

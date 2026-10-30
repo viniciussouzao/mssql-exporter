@@ -594,7 +594,7 @@ and README):
   collector is covered automatically (it iterates `collector.ScraperNames()`); if it
   needs a grant, add it to the fixture AND to the README. Not covered: AG, mirroring,
   log shipping and replication topologies, Windows, managed platforms
-- Manual homologation recorded in `BACKLOG-HOMOLOG.md` (HML-001..057), all
+- Manual homologation recorded in `BACKLOG-HOMOLOG.md` (HML-001..059), all
   cloud resources destroyed after each phase:
   - AWS: EC2 Windows (2019 → 2022 → 2025, AG, mirroring, log shipping) and
     RDS for SQL Server 2025 SE (Single/Multi-AZ)
@@ -663,6 +663,13 @@ and README):
   A secondary's DMVs only show its own replica, so the same replica series is reported by every exporter
   in the AG (told apart by `sqlserver_instance`); aggregate with `max by (ag_name, replica_server, db_name)`
 - No `--config.file` auto-discovery (must be passed explicitly)
+- `agent_jobs` and `replication` convert history times to UTC with the server's
+  current offset (those tables keep none): an event from before a daylight saving
+  or time zone change is off by the size of the change until the next event
+  (HML-058). `backups` uses the offset stored per backup and `log_shipping` reads
+  UTC columns, so they are not affected
+- `dashboards/mssql-exporter-homolog-coverage.json` lacks the metrics of the newest
+  collectors (HML-059)
 
 ### Roadmap
 See `ROADMAP.md` for the authoritative phased plan. Phases 1–7 are done (core

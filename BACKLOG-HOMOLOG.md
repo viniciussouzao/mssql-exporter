@@ -66,6 +66,8 @@ de 2026-10-20, em outras nuvens (Google Cloud SQL e Azure).
 | HML-055 | Coletor `transaction_log` (`sys.dm_db_log_stats`): VLFs e log desde o último backup de log (validação) | Docker local + laboratório doméstico | — | resolvido (v0.16.0) |
 | HML-056 | Coletor `missing_indexes` (opt-in): sugestões do otimizador (validação) | Docker local + laboratório doméstico | — | resolvido (v0.17.0) |
 | HML-057 | Coletor `replication` (opt-in): agentes da replicação transacional no Distributor (validação) | Docker local (SQL Server 2025 com Agent) | — | resolvido (v0.17.0) |
+| HML-058 | `agent_jobs` e `replication` convertem horários antigos com o offset atual do servidor | Qualquer servidor com horário de verão | baixa | não será feito (documentado) |
+| HML-059 | Dashboard de cobertura sem as métricas dos coletores mais novos | Grafana (homologação) | baixa | aberto |
 
 ## Encerramento da fase EC2 (2026-10-15)
 
@@ -3254,3 +3256,53 @@ ao assinante.
   Distributor) `success 1` sem séries.
 - Não testado: merge e snapshot, Distributor remoto, publicações Oracle.
 
+---
+
+## HML-058 — `agent_jobs` e `replication` convertem horários antigos com o offset atual do servidor
+
+- **Ambiente:** qualquer servidor cujo fuso tenha horário de verão, ou que
+  tenha trocado de fuso; encontrado na revisão externa do código (não
+  reproduzido em um servidor real)
+- **Encontrado em:** 2026-10-28
+- **Severidade:** baixa
+- **Status:** não será feito (documentado no README e no `CLAUDE.md`)
+
+`sysjobhistory` e `MSdistribution_history`/`MSlogreader_history` guardam
+horário local sem offset. Os coletores aplicam
+`DATEPART(TZOFFSET, SYSDATETIMEOFFSET())`, o offset de agora, a um evento que
+pode ser de antes da mudança. O erro é do tamanho da mudança (1 h no horário
+de verão) e só vale para o último evento exposto: some na próxima execução do
+job ou no próximo registro do agente. Um agente contínuo registra a cada
+poucos minutos; um job semanal pode ficar até uma semana com o erro.
+
+**Por que não corrigir:** a conversão correta por evento pede o fuso do
+servidor (`AT TIME ZONE`), e `CURRENT_TIMEZONE_ID()` só existe a partir do
+SQL Server 2022 e no Azure SQL. Em 2016 e 2019 sobraria ler o registro com
+`xp_regread`, que pede mais permissão, e a versão precisaria de um desvio no
+código. O ganho não paga essa complexidade. `backups` não sofre disso: usa o
+`time_zone` gravado em cada backup (HML-010). `log_shipping` lê colunas em UTC.
+
+---
+
+## HML-059 — Dashboard de cobertura sem as métricas dos coletores mais novos
+
+- **Ambiente:** `dashboards/mssql-exporter-homolog-coverage.json`
+- **Encontrado em:** 2026-10-28, nas revisões externas; contagem conferida em
+  2026-10-30 (nomes dos descritores do código contra o JSON)
+- **Severidade:** baixa (só afeta a homologação, os dashboards de uso não)
+- **Status:** aberto
+
+O painel "Métricas com dados (de 142)" tem denominador fixo e diz cobrir todas
+as métricas, mas 29 das 170 dos descritores ficaram de fora, então um coletor
+novo quebrado não baixa a cobertura:
+
+- `transaction_log`: `sqlserver_database_log_{vlf_count,active_vlf_count,active_bytes,since_last_log_backup_bytes,since_last_checkpoint_bytes}`
+- `databases`: `sqlserver_database_log_reuse_wait`
+- `volumes` no Azure SQL MI: `sqlserver_instance_storage_{reserved,used}_bytes`
+- `missing_indexes`: as 6 séries `sqlserver_missing_index_*`
+- `query_store`: as 11 séries `sqlserver_query_store_*`
+- `replication`: `sqlserver_replication_agent_{run_status,last_history_timestamp_seconds,delivery_latency_seconds}` e `sqlserver_replication_pending_commands`
+
+**Próximo passo:** incluir essas séries e o denominador certo na próxima rodada
+de homologação que usar o dashboard. Vale gerar a lista a partir dos descritores
+para ela não envelhecer de novo.
