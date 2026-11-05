@@ -118,6 +118,19 @@ The exporter currently includes these collectors:
    and compare its SHA-256 (`Get-FileHash`) with `checksums.txt`. macOS
    archives are there too.
 
+   Or use the container image (linux/amd64 and linux/arm64) instead of the
+   archive: put the `SQL_SERVER_DSN=...` line of step 3 in
+   `mssql-exporter.env`, run the container and check it with the `curl` of
+   step 4:
+
+   ```bash
+   docker run -d --name mssql-exporter -p 10060:10060 --env-file mssql-exporter.env \
+     ghcr.io/viniciussouzao/mssql-exporter:latest
+   ```
+
+   See [Running in Docker](#running-in-docker) for pinning a version and
+   using a config file.
+
 3. Point it at SQL Server (URL-encode special characters in the password,
    e.g. `@` as `%40`):
 
