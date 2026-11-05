@@ -1,0 +1,30 @@
+name: Feature request
+description: A metric, collector, platform or option you need
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Check [ROADMAP.md](https://github.com/viniciussouzao/mssql-exporter/blob/main/ROADMAP.md)
+        first: it may already be planned or deliberately left out.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What do you want to monitor or change, and why?
+      description: The problem or question you want to answer, not only the solution
+    validations:
+      required: true
+  - type: textarea
+    id: source
+    attributes:
+      label: Where the data comes from
+      description: DMV, catalog view, performance counter or query, if you know it
+  - type: input
+    id: platforms
+    attributes:
+      label: SQL Server versions and platforms it should work on
+      placeholder: 2019+, Amazon RDS, Azure SQL Managed Instance
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered

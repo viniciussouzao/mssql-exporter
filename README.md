@@ -1011,6 +1011,9 @@ the run. To use your own disposable instance, set
 `go test` command above. CI runs them on every pull request against SQL
 Server 2022 and 2025.
 
+To contribute, see [CONTRIBUTING.md](CONTRIBUTING.md): development setup, pull
+request checklist and how to add a collector.
+
 ## Releases
 
 Merging a PR into `main` with one of these labels tags and publishes a new
