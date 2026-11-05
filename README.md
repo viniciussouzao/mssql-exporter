@@ -1,16 +1,62 @@
 # mssql-exporter
 
-Prometheus exporter for Microsoft SQL Server. It collects a handful of instance-level metrics and exposes them on an HTTP endpoint for Prometheus to scrape, following a similar structure and naming style to other official database exporters (e.g. `mysqld_exporter`).
+[![CI](https://github.com/viniciussouzao/mssql-exporter/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/viniciussouzao/mssql-exporter/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/viniciussouzao/mssql-exporter)](https://github.com/viniciussouzao/mssql-exporter/releases/latest)
+[![License](https://img.shields.io/github/license/viniciussouzao/mssql-exporter)](LICENSE)
+[![Go version](https://img.shields.io/github/go-mod/go-version/viniciussouzao/mssql-exporter)](go.mod)
 
-- Endpoint: `:10060/metrics`. Up to v0.17 the default port was 9187, which
-  the [Prometheus port registry](https://github.com/prometheus/prometheus/wiki/Default-port-allocations)
-  assigns to `postgres_exporter`. When upgrading, either point the scrape
-  targets (and firewall rules) at 10060 or keep the old port with
-  `--web.listen-address=:9187`
-- Driver: [`microsoft/go-mssqldb`](https://github.com/microsoft/go-mssqldb)
-- Validated against SQL Server 2019 (CU32), 2022 (RTM) and 2025 (RTM) on Windows,
-  including rolling upgrades of an Availability Group, database mirroring and
-  log shipping across those versions
+A Prometheus exporter for Microsoft SQL Server, for DBAs and SREs who run SQL
+Server on Windows, on Linux or as a managed cloud service and want instance
+health, HA/DR state and workload signals in Prometheus and Grafana.
+
+- **23 collectors** (17 enabled by default, 6 opt-in): sessions, waits, I/O,
+  memory, backups, transaction log, blocking, Availability Groups, database
+  mirroring, log shipping, transactional replication, Query Store, SQL Agent
+  jobs and more
+- **Validated** on SQL Server on Windows (Amazon EC2), Amazon RDS, Google
+  Cloud SQL and Azure SQL Managed Instance, including failovers and a rolling
+  upgrade 2019 → 2022 → 2025 of an Availability Group, database mirroring and
+  log shipping
+- **Remote collection**: it connects over TDS like any client, so nothing is
+  installed on the database host; runs as a native Windows service or with the
+  hardened systemd unit shipped in the release archives
+- **Grafana dashboards** for each platform: general, Amazon RDS + CloudWatch,
+  Cloud SQL + Cloud Monitoring, Managed Instance + Azure Monitor
+- **Alerting rules** with `promtool` unit tests that run in CI
+- **Least-privilege login**: the CI integration tests run every collector with
+  exactly the [documented grants](#permissions)
+
+## Why another SQL Server exporter?
+
+Good options exist: the `mssql` collector of
+[`windows_exporter`](https://github.com/prometheus-community/windows_exporter)
+reads SQL Server performance counters on the Windows host, and generic SQL
+exporters such as [`sql_exporter`](https://github.com/burningalchemist/sql_exporter)
+run the queries you write. This one focuses on what they leave to you:
+collectors for HA/DR (Availability Groups, mirroring, log shipping,
+replication), the differences of managed platforms already handled (RDS,
+Cloud SQL, Managed Instance), remote collection without an agent on the
+database host, and dashboards and alerts that come with it.
+
+## Supported platforms
+
+| Platform | Validated | TLS | Notes |
+|---|---|---|---|
+| SQL Server on Windows (Amazon EC2) | 2019 CU32, 2022, 2025 | `encrypt=strict` (2022+) with a certificate configured on the instance | Availability Group, mirroring, log shipping, rolling upgrade |
+| SQL Server on Linux / Docker | 2022 and 2025 (CI integration tests), Express | — | — |
+| Amazon RDS for SQL Server | 2025 Standard, Single-AZ and Multi-AZ | `encrypt=true` or `encrypt=strict` with the AWS CA bundle | no `CONNECT ANY DATABASE`; set `instance_label` |
+| Google Cloud SQL for SQL Server | 2022 Standard (Linux), zonal and regional HA | `encrypt=true` only (`strict` fails) | grants need `AS [CustomerDbRootRole]`; `agent_jobs` unavailable (msdb is closed) |
+| Azure SQL Managed Instance | General Purpose (Gen5) | `encrypt=true` or `encrypt=strict` with the system CAs | run inside the virtual network (the gateway redirects to the node) |
+| Azure SQL Database | not supported yet | — | see [ROADMAP.md](ROADMAP.md) |
+
+Validated on SQL Server 2019, 2022 and 2025. 2016 SP2 and 2017 should work
+(same DMVs) but are untested. Earlier versions are not supported:
+`transaction_log`, enabled by default, needs 2016 SP2 (`sys.dm_db_log_stats`),
+as do the opt-in `replication` (2016 SP2) and `query_store` (2016). Details
+per platform: [Permissions](#permissions) and
+[Encrypted connections](#encrypted-connections-encryptstrict).
+
+<!-- screenshot: dashboards/img/overview.png -->
 
 ## Features
 
@@ -42,26 +88,69 @@ The exporter currently includes these collectors:
 
 ## Quick Start
 
-1) Ensure you have access to a SQL Server instance and a login with permissions listed in "Permissions" below.
+1. Create the monitoring login (on Amazon RDS, Google Cloud SQL and for the
+   opt-in collectors, see [Permissions](#permissions)):
 
-2) Build and run the exporter:
+   ```sql
+   CREATE LOGIN [mssql_exporter] WITH PASSWORD = '<strong password>', CHECK_POLICY = ON;
+   GRANT VIEW SERVER STATE TO [mssql_exporter];
+   GRANT VIEW ANY DEFINITION TO [mssql_exporter];
+   USE msdb;
+   CREATE USER [mssql_exporter] FOR LOGIN [mssql_exporter];
+   GRANT SELECT ON dbo.sysjobs TO [mssql_exporter];
+   GRANT SELECT ON dbo.sysjobhistory TO [mssql_exporter];
+   ```
 
-```bash
-# Build
-go build -o mssql-exporter ./
+2. Download the latest release and check it. On Linux (`ARCH=arm64` on ARM):
 
-# Run (binary listens on :10060)
-./mssql-exporter
-```
+   ```bash
+   VERSION=$(curl -fsSL https://api.github.com/repos/viniciussouzao/mssql-exporter/releases/latest | sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p')
+   ARCH=amd64
+   URL=https://github.com/viniciussouzao/mssql-exporter/releases/download/v${VERSION}
+   curl -fsSLO ${URL}/mssql-exporter_${VERSION}_linux_${ARCH}.tar.gz
+   curl -fsSLO ${URL}/checksums.txt
+   sha256sum --check --ignore-missing checksums.txt
+   tar xzf mssql-exporter_${VERSION}_linux_${ARCH}.tar.gz mssql-exporter
+   ```
 
-3) Scrape with Prometheus (example snippet):
+   On Windows, download `mssql-exporter_<version>_windows_amd64.zip` from the
+   [releases page](https://github.com/viniciussouzao/mssql-exporter/releases/latest)
+   and compare its SHA-256 (`Get-FileHash`) with `checksums.txt`. macOS
+   archives are there too.
 
-```yaml
-scrape_configs:
-  - job_name: 'sqlserver_exporter'
-    static_configs:
-      - targets: ['localhost:10060']
-```
+3. Point it at SQL Server (URL-encode special characters in the password,
+   e.g. `@` as `%40`):
+
+   ```bash
+   export SQL_SERVER_DSN='sqlserver://mssql_exporter:<password>@sqlhost:1433?database=master&app+name=mssql-exporter'
+   ```
+
+4. Run it and check that it reaches SQL Server (`sqlserver_up 1`):
+
+   ```bash
+   ./mssql-exporter
+   curl -s localhost:10060/metrics | grep sqlserver_up
+   ```
+
+   The default port is 10060. Up to v0.17 it was 9187, which the
+   [Prometheus port registry](https://github.com/prometheus/prometheus/wiki/Default-port-allocations)
+   assigns to `postgres_exporter`: when upgrading, point the scrape targets
+   (and firewall rules) at 10060 or keep the old port with
+   `--web.listen-address=:9187`.
+
+5. Scrape it with Prometheus, with a `scrape_timeout` above the exporter's 5s
+   query timeout:
+
+   ```yaml
+   scrape_configs:
+     - job_name: 'sqlserver_exporter'
+       scrape_timeout: 10s
+       static_configs:
+         - targets: ['exporter-host:10060']
+   ```
+
+6. Keep it running as a [Windows service](#running-as-a-windows-service) or a
+   [Linux service (systemd)](#running-as-a-linux-service-systemd).
 
 A `docker-compose.yml` for Prometheus and Grafana is included; it mounts a
 local `prometheus.yml` that you create first (see
@@ -128,7 +217,7 @@ service) or via the config file. Any DSN format supported by the `go-mssqldb` dr
 works, e.g.:
 
 ```
-SQL_SERVER_DSN=sqlserver://sa:MyStrongP%40ss@localhost:1433?database=master&app+name=mssql-exporter
+SQL_SERVER_DSN=sqlserver://mssql_exporter:MyStrongP%40ss@localhost:1433?database=master&app+name=mssql-exporter
 ```
 
 Alternatively, use a YAML config file (handy for Windows services, where
@@ -138,7 +227,7 @@ example `web.config_file`) stops the exporter instead of being ignored. See
 `config.example.yml`:
 
 ```yaml
-dsn: "sqlserver://sa:MyStrongP%40ss@localhost:1433?database=master"
+dsn: "sqlserver://mssql_exporter:MyStrongP%40ss@localhost:1433?database=master"
 web:
   listen_address: ":10060"
   telemetry_path: "/metrics"
@@ -240,7 +329,8 @@ system user with no login shell and no home directory, and reads
 `/etc/mssql-exporter/config.yml`. As root, or with `sudo` on each command:
 
 ```bash
-VERSION=0.9.1   # release to install (archives from v0.9.1 include the unit)
+# Latest release (archives include the unit since v0.9.1); or set VERSION by hand
+VERSION=$(curl -fsSL https://api.github.com/repos/viniciussouzao/mssql-exporter/releases/latest | sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p')
 ARCH=amd64      # arm64 on Graviton
 URL=https://github.com/viniciussouzao/mssql-exporter/releases/download/v${VERSION}
 curl -fsSLO ${URL}/mssql-exporter_${VERSION}_linux_${ARCH}.tar.gz
@@ -1015,7 +1105,6 @@ from the Prometheus image; CI runs it on every pull request.
 
 - Cannot connect / ping fails: verify host, port, authentication mode, and that the SQL Server accepts TCP connections.
 - Permission errors or empty metrics: ensure the login has `VIEW SERVER STATE` and access to the queried DMVs.
-- Panic on scrape: fixed in current code by aligning metric labels and descriptors. If you see a panic, check the logs and validate label counts vs. descriptors.
 - No metrics in Prometheus: confirm Prometheus can reach `:10060/metrics` and that the scrape job is correctly targeted.
 
 ## Roadmap
@@ -1023,6 +1112,9 @@ from the Prometheus image; CI runs it on every pull request.
 See [ROADMAP.md](ROADMAP.md) for the phased plan and the next candidates.
 
 ## Development
+
+Build from source (Go 1.27.3 or later): `make build` (binary in
+`bin/mssql-exporter`) or `go build -o mssql-exporter ./`.
 
 ```bash
 make check             # gofmt, go vet and unit tests (go-sqlmock, no SQL Server needed)
@@ -1038,8 +1130,8 @@ password on `127.0.0.1:14339`, runs `go test -tags integration ./integration/...
 and stops the container (it is removed on stop). The tests create a database,
 a backup and a monitoring login with exactly the grants of
 [Permissions](#permissions), enable **every** collector as that login and
-require each one to succeed, so a missing grant in the documentation fails
-the run. To use your own disposable instance, set
+require each one to succeed: a collector that needs a grant the fixture (and
+the documentation) does not have fails the run. To use your own disposable instance, set
 `MSSQL_EXPORTER_TEST_DSN` to a sysadmin `sqlserver://` DSN and run the
 `go test` command above. CI runs them on every pull request against SQL
 Server 2022 and 2025.
@@ -1061,7 +1153,3 @@ the first release is `v0.1.0` regardless of the label.
 ## License
 
 Apache License 2.0 — see [LICENSE](LICENSE).
-
----
-
-This project is a work-in-progress exporter tailored for SQL Server, aiming for parity in usability and quality with other database exporters in the Prometheus ecosystem.
