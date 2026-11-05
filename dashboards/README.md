@@ -22,11 +22,50 @@ collector (`--collector.query_store`), the Replication row the opt-in
 (`--collector.replication`) and the Missing Indexes table the opt-in
 `missing_indexes` collector (`--collector.missing_indexes`).
 
+**Contents:** [Screenshots](#screenshots) · [Requirements](#requirements) ·
+[Importing](#importing) · [Using the dashboard](#using-the-dashboard) ·
+[Troubleshooting](#troubleshooting) ·
+[Amazon RDS](#amazon-rds-dashboard-exporter--cloudwatch) ·
+[Google Cloud SQL](#google-cloud-sql-dashboard-exporter--cloud-monitoring) ·
+[Azure SQL Managed Instance](#azure-sql-managed-instance-dashboard-exporter--azure-monitor) ·
+[Updating](#updating)
+
+## Screenshots
+
+The general dashboard on a standalone SQL Server 2025 on Windows (the
+maintainer's home lab), so the HA/DR rows are not shown.
+
+**Overview:** reachability, connections, requests, blocking, deadlocks,
+batch requests and memory health at a glance.
+
+![Overview row](img/overview.jpg)
+
+**Concurrency & Blocking:** requests by status, blocking, lock waits,
+connections, sessions by state and the top wait types of the selected
+range.
+
+![Concurrency and blocking row](img/concurrency.jpg)
+
+**Top Queries:** the plan cache's top statements by CPU, with the
+(obfuscated) statement text when `top_queries.include_text` is on. Here the
+busiest statements are the exporter's own collection queries.
+
+![Top queries by CPU](img/top-queries.jpg)
+
+**Databases:** data and log file sizes and log used per database.
+
+![Databases row](img/databases.jpg)
+
+**Transaction log:** why each log cannot be truncated, and how long a
+non-routine reason has held it.
+
+![Log reuse wait and log held](img/transaction-log.jpg)
+
 ## Requirements
 
-- A Prometheus data source scraping this exporter (see the root
-  [`README.md`](../docs/install.md#running-with-prometheus-and-grafana) for the
-  local Prometheus + Grafana stack via `docker-compose.yml`).
+- A Prometheus data source scraping this exporter (see
+  [Running With Prometheus and Grafana](../docs/install.md#running-with-prometheus-and-grafana)
+  for the local Prometheus + Grafana stack via `docker-compose.yml`).
 - The `databases`, `tempdb`, `volumes` and `schedulers` collectors enabled
   (default) — several panels rely on their metrics.
 - At least one successful scrape with SQL Server reachable, so the

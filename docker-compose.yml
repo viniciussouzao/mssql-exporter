@@ -32,8 +32,10 @@ services:
     image: prom/prometheus:latest
     container_name: prometheus
     volumes:
-      # Local file, not versioned: create it from the example in README.md
+      # Local file, not versioned: create it from the example in docs/install.md
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      # Example alerting rules, loaded by the rule_files of that example
+      - ./contrib/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
       - prometheus_data:/prometheus
     ports:
       - "9090:9090"

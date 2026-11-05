@@ -26,6 +26,14 @@ health, HA/DR state and workload signals in Prometheus and Grafana.
 - **Least-privilege login**: the CI integration tests run every collector with
   exactly the [documented grants](docs/permissions.md)
 
+![Overview row of the main Grafana dashboard](dashboards/img/overview.jpg)
+
+**Contents:** [Why another exporter?](#why-another-sql-server-exporter) ·
+[Supported platforms](#supported-platforms) ·
+[What's included](#whats-included) · [Quick Start](#quick-start) ·
+[Documentation](#documentation) · [Troubleshooting](#troubleshooting) ·
+[Roadmap](#roadmap) · [Contributing](#contributing)
+
 ## Why another SQL Server exporter?
 
 Good options exist: the `mssql` collector of
@@ -56,7 +64,25 @@ as do the opt-in `replication` (2016 SP2) and `query_store` (2016). Details
 per platform: [Permissions](docs/permissions.md) and
 [Encrypted connections](docs/tls.md).
 
-<!-- screenshot: dashboards/img/overview.png -->
+## What's included
+
+Batteries included: besides the binary, the repository ships what you need
+to go from scrape to dashboards and alerts.
+
+| | What | Where |
+|---|---|---|
+| Dashboard | General: overview, throughput, memory, blocking and waits, top queries, CPU, I/O, databases and transaction log, Query Store, TempDB, volumes, Availability Groups, mirroring, log shipping, replication, collector health | [`dashboards/mssql-exporter-grafana-dashboard.json`](dashboards/mssql-exporter-grafana-dashboard.json) |
+| Dashboard | Amazon RDS: exporter + CloudWatch | [`dashboards/mssql-exporter-rds-cloudwatch-dashboard.json`](dashboards/mssql-exporter-rds-cloudwatch-dashboard.json) |
+| Dashboard | Google Cloud SQL: exporter + Cloud Monitoring | [`dashboards/mssql-exporter-cloudsql-dashboard.json`](dashboards/mssql-exporter-cloudsql-dashboard.json) |
+| Dashboard | Azure SQL Managed Instance: exporter + Azure Monitor | [`dashboards/mssql-exporter-azure-mi-dashboard.json`](dashboards/mssql-exporter-azure-mi-dashboard.json) |
+| Alerting rules | 34 rules in 6 groups (exporter, databases and backups, workload, HA/DR, replication, background collections), with `promtool` unit tests run in CI | [`contrib/prometheus/alerts.yml`](contrib/prometheus/alerts.yml), also in the release archives |
+| Service | Native Windows service (`mssql-exporter service install`) and a hardened systemd unit | [Installation](docs/install.md), unit in the release archives |
+| Container | Multi-arch image (linux/amd64, linux/arm64) | `ghcr.io/viniciussouzao/mssql-exporter` |
+| Local stack | Prometheus + Grafana with `docker compose` | [`docker-compose.yml`](docker-compose.yml) |
+
+Import a dashboard with [`dashboards/README.md`](dashboards/README.md) (with
+screenshots of each row) and load the rules as in
+[Dashboards and alerts](docs/install.md#dashboards-and-alerts).
 
 ## Quick Start
 
@@ -151,7 +177,8 @@ local `prometheus.yml` that you create first (see
   certificates per platform
 - [Metrics](docs/metrics.md): collectors, self-metrics and every exposed
   metric
-- [Alerting rules](docs/alerting.md) and [dashboards](dashboards/README.md)
+- [Dashboards](dashboards/README.md): import guide, panels and screenshots
+- [Alerting rules](docs/alerting.md): the rules and how to load them
 - [Upgrading](docs/upgrading.md): changes to check per version
 - [Validation](docs/validation.md): where and how the exporter was tested
 

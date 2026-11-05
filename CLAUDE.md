@@ -68,6 +68,7 @@ mssql-exporter/
 │   ├── mssql-exporter-cloudsql-dashboard.json       # Google Cloud SQL: exporter + Cloud Monitoring
 │   ├── mssql-exporter-azure-mi-dashboard.json       # Azure SQL Managed Instance: exporter + Azure Monitor
 │   ├── mssql-exporter-homolog-coverage.json         # Metric coverage view used in homologation
+│   ├── img/                         # Screenshots used by README.md, docs/install.md and dashboards/README.md
 │   └── README.md                    # Dashboard import guide
 │
 ├── contrib/
