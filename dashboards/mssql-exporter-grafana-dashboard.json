@@ -3608,11 +3608,15 @@
         {
           "id": "organize",
           "options": {
-            "excludeByName": {
-              "Time": true,
-              "Value": true,
-              "__name__": true,
-              "sqlserver_instance": false
+            "includeByName": {
+              "sqlserver_instance": true,
+              "db_name": true,
+              "state": true
+            },
+            "indexByName": {
+              "sqlserver_instance": 0,
+              "db_name": 1,
+              "state": 2
             },
             "renameByName": {
               "db_name": "Database",
@@ -3696,11 +3700,15 @@
         {
           "id": "organize",
           "options": {
-            "excludeByName": {
-              "Time": true,
-              "Value": true,
-              "__name__": true,
-              "sqlserver_instance": false
+            "includeByName": {
+              "sqlserver_instance": true,
+              "db_name": true,
+              "recovery_model": true
+            },
+            "indexByName": {
+              "sqlserver_instance": 0,
+              "db_name": 1,
+              "recovery_model": 2
             },
             "renameByName": {
               "db_name": "Database",
@@ -9708,9 +9716,15 @@
         {
           "id": "organize",
           "options": {
-            "excludeByName": {
-              "Time": true,
-              "__name__": true
+            "includeByName": {
+              "sqlserver_instance": true,
+              "collector": true,
+              "Value": true
+            },
+            "indexByName": {
+              "sqlserver_instance": 0,
+              "collector": 1,
+              "Value": 2
             },
             "renameByName": {
               "collector": "Collector",
