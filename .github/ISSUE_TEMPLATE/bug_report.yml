@@ -1,0 +1,77 @@
+name: Bug report
+description: Something does not work as documented
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. **Do not paste DSNs, passwords, host names or
+        other private data**: replace them with placeholders. For a security
+        vulnerability, use the private report described in SECURITY.md instead.
+  - type: input
+    id: version
+    attributes:
+      label: Exporter version
+      description: 'Output of `mssql-exporter --version`'
+      placeholder: 'mssql-exporter 0.19.1 (commit: abc1234, built: ..., go1.27.3)'
+    validations:
+      required: true
+  - type: textarea
+    id: sqlserver
+    attributes:
+      label: SQL Server version and edition
+      description: 'Output of `SELECT @@VERSION`'
+      render: text
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - Self-managed SQL Server on Windows
+        - Self-managed SQL Server on Linux
+        - SQL Server in a container
+        - Amazon RDS for SQL Server
+        - Google Cloud SQL for SQL Server
+        - Azure SQL Managed Instance
+        - Azure SQL Database
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: How the exporter runs
+      options:
+        - On the SQL Server host, as a Windows service
+        - On the SQL Server host, with systemd
+        - On another host (remote collection)
+        - Docker container
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: collectors
+    attributes:
+      label: Enabled collectors and options
+      description: 'Flags or the `collectors:` section of the config file, without the DSN'
+      render: yaml
+  - type: textarea
+    id: success
+    attributes:
+      label: Collector status
+      description: 'Output of `curl -s localhost:10060/metrics | grep sqlserver_scrape_collector_success`'
+      render: text
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what you expected
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Exporter log
+      description: The relevant lines (journalctl, Windows Event Log or container log)
+      render: text
