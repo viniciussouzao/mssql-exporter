@@ -12,15 +12,15 @@ body:
     id: version
     attributes:
       label: Exporter version
-      description: Output of `mssql-exporter --version`
-      placeholder: mssql-exporter 0.19.1 (commit: abc1234, built: ..., go1.27.3)
+      description: 'Output of `mssql-exporter --version`'
+      placeholder: 'mssql-exporter 0.19.1 (commit: abc1234, built: ..., go1.27.3)'
     validations:
       required: true
   - type: textarea
     id: sqlserver
     attributes:
       label: SQL Server version and edition
-      description: Output of `SELECT @@VERSION`
+      description: 'Output of `SELECT @@VERSION`'
       render: text
     validations:
       required: true
@@ -55,13 +55,13 @@ body:
     id: collectors
     attributes:
       label: Enabled collectors and options
-      description: Flags or the `collectors:` section of the config file, without the DSN
+      description: 'Flags or the `collectors:` section of the config file, without the DSN'
       render: yaml
   - type: textarea
     id: success
     attributes:
       label: Collector status
-      description: Output of `curl -s localhost:10060/metrics | grep sqlserver_scrape_collector_success`
+      description: 'Output of `curl -s localhost:10060/metrics | grep sqlserver_scrape_collector_success`'
       render: text
   - type: textarea
     id: what

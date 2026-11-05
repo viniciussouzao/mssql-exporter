@@ -23,7 +23,7 @@ body:
     id: platforms
     attributes:
       label: SQL Server versions and platforms it should work on
-      placeholder: 2019+, Amazon RDS, Azure SQL Managed Instance
+      placeholder: '2019+, Amazon RDS, Azure SQL Managed Instance'
   - type: textarea
     id: alternatives
     attributes:
