@@ -29,9 +29,8 @@ mssql-exporter/
 ├── go.mod                           # Go module dependencies
 ├── go.sum                           # Dependency checksums
 ├── Makefile                         # Build, test, docker and release-dry-run targets
-├── README.md                        # User-facing documentation
+├── README.md                        # Pitch, support matrix, Quick Start and links to docs/
 ├── ROADMAP.md                       # Phased feature roadmap (authoritative)
-├── BACKLOG-HOMOLOG.md               # Homologation findings (HML-NNN): EC2 Windows, RDS, Cloud SQL, Azure, home lab
 ├── LICENSE                          # Apache-2.0
 ├── Dockerfile                       # Multi-stage build from source (make docker-build), non-root, /healthz HEALTHCHECK
 ├── Dockerfile.release               # Image published to ghcr.io: copies the binary GoReleaser built (dockers_v2)
@@ -43,6 +42,16 @@ mssql-exporter/
 ├── config.example.yml               # Example YAML config file (--config.file)
 │
 ├── SECURITY.md                      # How to report a vulnerability, supported versions
+├── docs/                            # User documentation (shipped in the release archives, except validation/)
+│   ├── install.md                   # Windows service, systemd, Docker, docker-compose stack
+│   ├── configuration.md             # Flags, env vars, config file, precedence, pool, web security
+│   ├── permissions.md               # Grants per collector and platform, DMVs read
+│   ├── tls.md                       # encrypt=true/strict per platform
+│   ├── metrics.md                   # Collectors, self-metrics, every exposed metric
+│   ├── alerting.md                  # contrib/prometheus/alerts.yml
+│   ├── upgrading.md                 # Changes to check per version, newest first
+│   ├── validation.md                # English summary of the homologation
+│   └── validation/BACKLOG-HOMOLOG.md # Homologation findings (HML-NNN), in Portuguese
 ├── CONTRIBUTING.md                  # Development setup, PR checklist, adding a collector
 │
 ├── .github/
@@ -337,7 +346,7 @@ make release-dry-run  # GoReleaser snapshot build (no publish, no tag needed)
 ### Local Testing Setup
 
 1. Create `.env` file with SQL Server credentials, and `prometheus.yml` from
-   the example in README ("Running With Prometheus and Grafana")
+   the example in `docs/install.md` ("Running With Prometheus and Grafana")
 2. Run exporter: `make run` or `./bin/mssql-exporter`
 3. Start monitoring stack: `make compose-up`
 4. Access services:
@@ -416,8 +425,8 @@ platform keeps the exact same query results. Current MI-only branches:
 | active_queries | The always-running `TdService` telemetry session (`NT AUTHORITY\SYSTEM`) is excluded (v0.13.2) |
 | server_info | `MachineName` and other properties may be NULL (handled on every platform, v0.12.2) |
 
-Other platform facts from the homologation (details in `BACKLOG-HOMOLOG.md`
-and README):
+Other platform facts from the homologation (details in
+`docs/validation/BACKLOG-HOMOLOG.md` and `docs/`):
 - **Cloud SQL** is SQL Server on **Linux**; grants only work as
   `GRANT ... TO [x] AS [CustomerDbRootRole]`, msdb is closed (agent_jobs
   fails on permission), `encrypt=strict` is refused (`encrypt=true` with the
@@ -478,15 +487,16 @@ and README):
   and 2025 service containers. When a metric used in `contrib/prometheus/alerts.yml`
   changes, update the rules (and their unit tests) in the same PR
 - Integration tests (`integration/`, build tag `integration`, `make test-integration`):
-  as sa they create a database, a backup and a login with exactly the README grants;
+  as sa they create a database, a backup and a login with exactly the grants of `docs/permissions.md`;
   as that login they enable every collector and require `scrape_collector_success 1`
   for each (and the first background collection of index_fragmentation/query_store),
   check fixture values (database state, recovery model, backup timestamp in UTC,
   non-empty volume label) and `sqlserver_up 0` for an unreachable server. A new
   collector is covered automatically (it iterates `collector.ScraperNames()`); if it
-  needs a grant, add it to the fixture AND to the README. Not covered: AG, mirroring,
+  needs a grant, add it to the fixture AND to `docs/permissions.md`. Not covered: AG, mirroring,
   log shipping and replication topologies, Windows, managed platforms
-- Manual homologation recorded in `BACKLOG-HOMOLOG.md` (HML-001..059), all
+- Manual homologation recorded in `docs/validation/BACKLOG-HOMOLOG.md` (HML-001..059,
+  summarised in English in `docs/validation.md`), all
   cloud resources destroyed after each phase:
   - AWS: EC2 Windows (2019 → 2022 → 2025, AG, mirroring, log shipping) and
     RDS for SQL Server 2025 SE (Single/Multi-AZ)
@@ -529,7 +539,7 @@ and README):
 2. Initialize descriptor in constructor with proper labels
 3. Add to `Describe()` method
 4. Query and emit metric in `Scrape()` method
-5. Update README.md with new metric documentation
+5. Update `docs/metrics.md` with new metric documentation
 
 ### Task: Update Dependencies
 1. Edit `go.mod` if needed
@@ -549,7 +559,7 @@ and README):
 - Query timeout (5s) and connection lifetimes are not configurable; only the
   pool size is (`--sqlserver.max-connections`)
 - Integration tests cover a standalone SQL Server on Linux only; HA/DR topologies, Windows and
-  managed platforms rely on the manual homologation in `BACKLOG-HOMOLOG.md`
+  managed platforms rely on the manual homologation in `docs/validation/BACKLOG-HOMOLOG.md`
 - Azure SQL Database is not supported (see "Managed platforms")
 - availability_groups was validated against a real 2-replica Always On AG on EC2 (SQL Server 2019, 2026-10-12).
   A secondary's DMVs only show its own replica, so the same replica series is reported by every exporter
@@ -630,7 +640,8 @@ The image build reuses the linux binaries; keep the runtime stage of `Dockerfile
 
 ### Pull Requests
 - Ensure `make check` passes
-- Update README.md if adding/changing metrics
+- Update `docs/metrics.md` if adding/changing metrics (and `docs/upgrading.md` for
+  renames or value changes users must act on)
 - Test locally with real SQL Server instance
 - Include example metric output in PR description
 
@@ -666,7 +677,7 @@ make test
 - Consider filtering or sampling for large deployments
 
 ### Scrape Interval
-- Default: 15 seconds (`scrape_interval` of the README's `prometheus.yml` example)
+- Default: 15 seconds (`scrape_interval` of the `prometheus.yml` example in `docs/install.md`)
 - Balance freshness vs. SQL Server load
 - For high-cardinality metrics, consider longer intervals
 

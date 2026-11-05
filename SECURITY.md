@@ -28,7 +28,7 @@ systemd unit shipped in the release archives, and the example configuration.
 
 Out of scope: SQL Server itself, Prometheus and Grafana, and deployments that
 expose the metrics endpoint to untrusted networks without TLS and basic
-authentication (see Security in the README).
+authentication (see [Security](docs/configuration.md#security)).
 
 Never include real credentials, DSNs or metric dumps with private data in a
 report.

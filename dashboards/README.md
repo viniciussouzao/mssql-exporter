@@ -25,13 +25,13 @@ collector (`--collector.query_store`), the Replication row the opt-in
 ## Requirements
 
 - A Prometheus data source scraping this exporter (see the root
-  [`README.md`](../README.md#running-with-prometheus-and-grafana) for the
+  [`README.md`](../docs/install.md#running-with-prometheus-and-grafana) for the
   local Prometheus + Grafana stack via `docker-compose.yml`).
 - The `databases`, `tempdb`, `volumes` and `schedulers` collectors enabled
   (default) — several panels rely on their metrics.
 - At least one successful scrape with SQL Server reachable, so the
   `sqlserver_instance` label is populated (it's resolved once at exporter
-  startup; see the note in the root README).
+  startup; see [Availability & Self-Metrics](../docs/metrics.md#availability--self-metrics)).
 
 ## Importing
 
@@ -67,7 +67,7 @@ you haven't already, then follow the steps above.
 - **Database-scoped panels empty but instance panels work**: the
   `databases` collector may be disabled (`--collector.databases=false` or
   `collectors.databases: false` in YAML), or the login is missing
-  `VIEW ANY DEFINITION` (see the DMV reference table in the root README).
+  `VIEW ANY DEFINITION` (see [Permissions](../docs/permissions.md)).
 
 ## Amazon RDS dashboard (exporter + CloudWatch)
 
@@ -104,8 +104,8 @@ Requirements and import:
    **RDS instance** (CloudWatch `DBInstanceIdentifier`) and the
    **sqlserver_instance** (exporter label).
 
-Set `instance_label` in the exporter to the DB instance identifier (see the
-root README): both selectors then use the same name, and the series do not
+Set `instance_label` in the exporter to the DB instance identifier (see
+[Configuration](../docs/configuration.md)): both selectors then use the same name, and the series do not
 change when RDS moves the instance to another host. CloudWatch does not
 publish `SwapUsage` for SQL Server, and RDS needs Enhanced Monitoring (not
 used here) for OS process metrics.
@@ -150,7 +150,7 @@ Requirements and import:
 3. Pick the **GCP project**, the **Cloud SQL instance** (`database_id`, as
    `<project>:<instance>`) and the **sqlserver_instance** (exporter label).
 
-Set `instance_label` in the exporter (see the root README): the host name
+Set `instance_label` in the exporter (see [Configuration](../docs/configuration.md)): the host name
 behind a Cloud SQL instance is generated and not meaningful as a label.
 
 ## Azure SQL Managed Instance dashboard (exporter + Azure Monitor)
