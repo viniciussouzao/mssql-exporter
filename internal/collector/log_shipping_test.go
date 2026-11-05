@@ -9,7 +9,7 @@ import (
 )
 
 // The *_utc columns must be the ones read: the plain date columns are local
-// server time (see HML-010 in BACKLOG-HOMOLOG.md).
+// server time (see HML-010 in docs/validation/BACKLOG-HOMOLOG.md).
 var logShippingPrimaryQueryRegex = sqlContainsInOrder(
 	"last_backup_date_utc",
 	"FROM msdb.dbo.log_shipping_monitor_primary",

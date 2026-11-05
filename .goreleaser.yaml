@@ -40,6 +40,9 @@ archives:
     files:
       - README.md
       - LICENSE
+      # The README links to these; the validation backlog stays out (it is
+      # long, in Portuguese, and only useful in the repository).
+      - docs/*.md
       - config.example.yml
       - contrib/systemd/mssql-exporter.service
       - contrib/prometheus/alerts.yml

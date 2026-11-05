@@ -17,17 +17,27 @@ requests are all welcome.
 You need Go 1.27.3 or later, and Docker for the integration and alert tests.
 
 ```bash
-make build             # bin/mssql-exporter
+make build             # bin/mssql-exporter (or: go build -o mssql-exporter ./)
 make check             # gofmt, go vet and unit tests (go-sqlmock, no SQL Server needed)
 make test-integration  # integration tests against a disposable SQL Server container
-make test-alerts       # promtool check + unit tests of contrib/prometheus/alerts.yml
-make vulncheck         # govulncheck
+make test-alerts       # promtool check + unit tests of contrib/prometheus/alerts.yml (Docker)
+make scan-secrets      # gitleaks over the whole git history (Docker)
+make vulncheck         # govulncheck: known vulnerabilities reachable from the code
 ```
 
-`make test-integration` creates a monitoring login with exactly the grants of
-the README's [Permissions](README.md#permissions) section and requires every
-collector to succeed as that login. If your collector needs another grant,
-add it to the fixture in `integration/` **and** to the README.
+`make test-integration` starts `mcr.microsoft.com/mssql/server:2025-latest`
+(`IT_IMAGE=...:2022-latest` for another version) with a random `sa`
+password on `127.0.0.1:14339`, runs `go test -tags integration ./integration/...`
+and stops the container (it is removed on stop). The tests create a database,
+a backup and a monitoring login with exactly the grants of
+[Permissions](docs/permissions.md), enable **every** collector as that login
+and require each one to succeed: a collector that needs a grant the fixture
+(and the documentation) does not have fails the run. If your collector needs
+another grant, add it to the fixture in `integration/` **and** to
+`docs/permissions.md`. To use your own disposable instance, set
+`MSSQL_EXPORTER_TEST_DSN` to a sysadmin `sqlserver://` DSN and run the
+`go test` command above. CI runs them on every pull request against SQL
+Server 2022 and 2025.
 
 The architecture (Exporter, `Scraper` interface, shared scrape deadline),
 the coding conventions and the platform notes are described in
@@ -41,7 +51,8 @@ complete description of the code.
 - `make check` must pass; CI also runs golangci-lint, govulncheck, gitleaks,
   the alert tests and the integration tests on SQL Server 2022 and 2025.
 - New or changed collectors come with `go-sqlmock` tests (happy path, query
-  error, scan error, empty result) and the README's metric documentation.
+  error, scan error, empty result) and the metric documentation in
+  [docs/metrics.md](docs/metrics.md).
 - If a metric used in `contrib/prometheus/alerts.yml` changes, update the
   rule and its tests in `alerts_test.yml` in the same PR.
 - Say how you tested it: SQL Server version and platform, and a sample of
@@ -49,6 +60,23 @@ complete description of the code.
 - Releases are cut by the maintainer by adding a `release:patch`,
   `release:minor` or `release:major` label before merging; you don't need to
   bump versions.
+
+## Releases (maintainers)
+
+Merging a PR into `main` with one of these labels tags and publishes a new
+release (archives and the ghcr.io image via GoReleaser):
+
+| Label | Bump | Example |
+|-------|------|---------|
+| `release:patch` (or `release`) | patch | `v0.1.0` → `v0.1.1` |
+| `release:minor` | minor | `v0.1.1` → `v0.2.0` |
+| `release:major` | major | `v0.2.0` → `v1.0.0` |
+
+With several labels the largest bump wins. When no `vX.Y.Z` tag exists yet,
+the first release is `v0.1.0` regardless of the label.
+
+Release PRs run one at a time: merge them one by one, or two in a row at
+most (a third waiting run cancels the second).
 
 ## Adding a New Collector
 
@@ -167,4 +195,4 @@ including the enable/disable toggle.
 4. Check metrics: `curl http://localhost:10060/metrics | grep sqlserver_your_metric`
 5. Check self-metrics: `curl http://localhost:10060/metrics | grep 'scrape_collector.*your_collector'`
 6. Run `make check` to ensure code quality
-7. Document the metrics in README.md and, if useful, the Grafana dashboard
+7. Document the metrics in `docs/metrics.md` and, if useful, the Grafana dashboard
