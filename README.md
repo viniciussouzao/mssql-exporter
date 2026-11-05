@@ -285,6 +285,39 @@ curl -s localhost:10060/metrics | grep sqlserver_up
 - To upgrade, replace `/usr/local/bin/mssql-exporter` and run
   `systemctl restart mssql-exporter`.
 
+### Running in Docker
+
+Each release from v0.19.1 publishes a multi-arch image (`linux/amd64`,
+`linux/arm64`) to GitHub Container Registry, tagged `vX.Y.Z`, `X.Y` and
+`latest`:
+
+```bash
+docker run -d --name mssql-exporter -p 10060:10060 \
+  --env-file mssql-exporter.env \
+  ghcr.io/viniciussouzao/mssql-exporter:latest
+```
+
+where `mssql-exporter.env` holds the DSN (an `-e` flag would leave it in the
+shell history; both remain visible to `docker inspect`):
+
+```
+SQL_SERVER_DSN=sqlserver://mssql_exporter:<password>@sqlhost:1433?database=master&app+name=mssql-exporter
+```
+
+- Pin a version tag (`:vX.Y.Z`) instead of `latest` in production.
+- To use a config file, mount it and pass `--config.file`, with absolute
+  paths for the files it references (web config, certificates); the
+  container user `exporter` must be able to read them:
+  `-v /etc/mssql-exporter:/etc/mssql-exporter:ro ghcr.io/viniciussouzao/mssql-exporter:latest --config.file /etc/mssql-exporter/config.yml`
+- The image runs as the non-root user `exporter` and has a `HEALTHCHECK` on
+  `/healthz`; with TLS, basic auth or another listen address override it (see
+  [Security](#security)).
+- Leave `os_collectors` disabled: they would describe the container, not the
+  database server.
+- `make docker-build` builds an image from source with the `Dockerfile`; the
+  published one uses `Dockerfile.release`, which copies the binary GoReleaser
+  built.
+
 ## Permissions
 
 For **all default collectors** to succeed, the monitoring login needs the

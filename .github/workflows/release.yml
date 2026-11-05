@@ -5,7 +5,7 @@ name: Release
 #   patch). With several labels, the largest bump wins.
 # Bumps the version from the latest vX.Y.Z tag (v0.1.0 when there is none),
 # pushes the new tag, and runs GoReleaser to publish a GitHub Release with
-# cross-platform binaries.
+# cross-platform binaries and the multi-arch image on ghcr.io.
 #
 # pull_request_target, not pull_request: for a PR from a fork, pull_request
 # runs with a read-only token and the tag push fails. pull_request_target runs
@@ -21,6 +21,8 @@ on:
 
 permissions:
   contents: write
+  # Push the image to ghcr.io (GoReleaser dockers_v2).
+  packages: write
 
 # One release at a time: two runs in parallel read the same latest tag, and
 # the one that publishes last becomes "Latest" even with the lower version
@@ -90,6 +92,20 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           check-latest: true
           cache: true
+
+      # QEMU runs the arm64 stage of the image build on the amd64 runner.
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Log in to ghcr.io
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0

@@ -22,7 +22,7 @@ updates:
       github-actions:
         update-types: [minor, patch]
 
-  # Builder and runtime images of the Dockerfile.
+  # Builder and runtime images of Dockerfile and Dockerfile.release.
   - package-ecosystem: docker
     directory: /
     schedule:
