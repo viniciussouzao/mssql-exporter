@@ -44,6 +44,31 @@ archives:
       - contrib/systemd/mssql-exporter.service
       - contrib/prometheus/alerts.yml
 
+# Multi-arch image on ghcr.io from the linux binaries above (Dockerfile.release
+# only copies them). The OCI labels link the package to this repository.
+dockers_v2:
+  - id: mssql-exporter
+    ids: [mssql-exporter]
+    dockerfile: Dockerfile.release
+    images:
+      - "ghcr.io/viniciussouzao/mssql-exporter"
+    tags:
+      - "v{{ .Version }}"
+      - "{{ .Major }}.{{ .Minor }}"
+      - "latest"
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    labels:
+      "org.opencontainers.image.title": "mssql-exporter"
+      "org.opencontainers.image.description": "Prometheus exporter for Microsoft SQL Server"
+      "org.opencontainers.image.source": "https://github.com/viniciussouzao/mssql-exporter"
+      "org.opencontainers.image.url": "https://github.com/viniciussouzao/mssql-exporter"
+      "org.opencontainers.image.version": "{{ .Version }}"
+      "org.opencontainers.image.revision": "{{ .FullCommit }}"
+      "org.opencontainers.image.created": "{{ .Date }}"
+      "org.opencontainers.image.licenses": "Apache-2.0"
+
 checksum:
   name_template: "checksums.txt"
 

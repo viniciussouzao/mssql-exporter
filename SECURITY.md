@@ -22,7 +22,8 @@ is published with credit to the reporter, unless you prefer otherwise.
 
 ## Scope
 
-In scope: the exporter binary, the Docker image, the Windows service and the
+In scope: the exporter binary, the Docker image
+(`ghcr.io/viniciussouzao/mssql-exporter`), the Windows service and the
 systemd unit shipped in the release archives, and the example configuration.
 
 Out of scope: SQL Server itself, Prometheus and Grafana, and deployments that

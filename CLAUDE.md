@@ -14,7 +14,7 @@ This document provides a comprehensive guide for AI assistants working with the 
 - **Logging**: Standard library `log/slog`
 - **HTTP server / TLS / basic auth**: `prometheus/exporter-toolkit/web` (`--web.config.file`)
 - **Tests**: standard `testing` + `DATA-DOG/go-sqlmock` for collectors
-- **Release**: GoReleaser (`.goreleaser.yaml`) driven by the GitHub Actions release workflow
+- **Release**: GoReleaser (`.goreleaser.yaml`) driven by the GitHub Actions release workflow: archives for Linux, macOS and Windows, and a multi-arch image on `ghcr.io/viniciussouzao/mssql-exporter` (`dockers_v2`, experimental in GoReleaser 2.x)
 
 ### Purpose
 This exporter follows the pattern of other official Prometheus database exporters (e.g., `mysqld_exporter`), providing SQL Server monitoring capabilities with Prometheus best practices.
@@ -33,7 +33,8 @@ mssql-exporter/
 ├── ROADMAP.md                       # Phased feature roadmap (authoritative)
 ├── BACKLOG-HOMOLOG.md               # Homologation findings (HML-NNN): EC2 Windows, RDS, Cloud SQL, Azure, home lab
 ├── LICENSE                          # Apache-2.0
-├── Dockerfile                       # Multi-stage build, non-root, /healthz HEALTHCHECK
+├── Dockerfile                       # Multi-stage build from source (make docker-build), non-root, /healthz HEALTHCHECK
+├── Dockerfile.release               # Image published to ghcr.io: copies the binary GoReleaser built (dockers_v2)
 ├── .goreleaser.yaml                 # Cross-platform binaries, checksums, changelog
 ├── .gitignore                       # Git ignore patterns
 ├── .env                             # Environment variables (not committed, create locally)
@@ -732,6 +733,9 @@ pending run cancels the waiting one. The workflow triggers on
 check out the PR head or expand PR fields inside `run:` (see the comment in
 `release.yml`). v0.1.0 was published manually with
 `goreleaser release --clean`. Never add a release label unless a release is intended.
+The image build reuses the linux binaries; keep the runtime stage of `Dockerfile` and
+`Dockerfile.release` in sync. `make release-dry-run` also builds the images locally
+(per-platform tags with an `-amd64`/`-arm64` suffix, nothing pushed; needs Docker buildx).
 
 ### Pull Requests
 - Ensure `make check` passes

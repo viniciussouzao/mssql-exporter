@@ -1,0 +1,23 @@
+# syntax=docker/dockerfile:1
+
+# Image published to ghcr.io by GoReleaser (dockers_v2): it copies the binary
+# GoReleaser already built for each platform instead of compiling again. The
+# Dockerfile next to this one builds from source (make docker-build). Keep the
+# runtime stage of both in sync.
+FROM alpine:3.24
+
+ARG TARGETPLATFORM
+
+RUN apk add --no-cache ca-certificates && \
+    addgroup -S exporter && adduser -S -G exporter -h /app exporter
+
+WORKDIR /app
+COPY --chown=exporter:exporter $TARGETPLATFORM/mssql-exporter .
+
+USER exporter
+EXPOSE 10060
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+    CMD wget -qO- http://localhost:10060/healthz || exit 1
+
+ENTRYPOINT ["./mssql-exporter"]
