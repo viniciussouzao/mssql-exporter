@@ -1,5 +1,8 @@
 # Backlog de Homologação
 
+Versão em inglês: [BACKLOG-HOMOLOG.en.md](BACKLOG-HOMOLOG.en.md). Ao registrar
+um achado novo, atualize as duas.
+
 Pontos encontrados durante a homologação do mssql-exporter em ambientes
 simulando produção (AWS EC2 Windows/Linux e RDS for SQL Server) e, a partir
 de 2026-10-20, em outras nuvens (Google Cloud SQL e Azure).

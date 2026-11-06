@@ -7,8 +7,9 @@ from the load generator in `hack/loadgen`. Each environment was destroyed at
 the end of its phase; a Windows notebook and a Raspberry Pi stay as a
 permanent lab. This page summarises that work. The full log, with every
 finding (HML-001 to HML-059), is in
-[validation/BACKLOG-HOMOLOG.md](validation/BACKLOG-HOMOLOG.md), in
-Portuguese.
+[validation/BACKLOG-HOMOLOG.en.md](validation/BACKLOG-HOMOLOG.en.md)
+(translated from the original in Portuguese,
+[validation/BACKLOG-HOMOLOG.md](validation/BACKLOG-HOMOLOG.md)).
 
 ## Environments
 
