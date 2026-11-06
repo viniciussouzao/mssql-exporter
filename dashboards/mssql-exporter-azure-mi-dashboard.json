@@ -4500,9 +4500,15 @@
             {
               "id": "organize",
               "options": {
-                "excludeByName": {
-                  "Time": true,
-                  "__name__": true
+                "includeByName": {
+                  "sqlserver_instance": true,
+                  "collector": true,
+                  "Value": true
+                },
+                "indexByName": {
+                  "sqlserver_instance": 0,
+                  "collector": 1,
+                  "Value": 2
                 },
                 "renameByName": {
                   "collector": "Collector",
