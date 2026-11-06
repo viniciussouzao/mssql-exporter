@@ -4,6 +4,12 @@ How to run the exporter as a service or a container, and a local Prometheus
 and Grafana stack to try it. For a first run see the
 [Quick Start](../README.md#quick-start).
 
+**Contents:** [Windows service](#running-as-a-windows-service) ·
+[systemd](#running-as-a-linux-service-systemd) ·
+[Docker](#running-in-docker) ·
+[Prometheus and Grafana](#running-with-prometheus-and-grafana) ·
+[Dashboards and alerts](#dashboards-and-alerts)
+
 ## Running as a Windows service
 
 The exporter runs natively under the Windows Service Control Manager; no
@@ -130,6 +136,10 @@ services. It mounts `./prometheus.yml`, which is not versioned (it is in
 global:
   scrape_interval: 5s
 
+# contrib/prometheus/alerts.yml, mounted by docker-compose.yml
+rule_files:
+  - alerts.yml
+
 scrape_configs:
   - job_name: 'sqlserver_exporter'
     scrape_interval: 15s
@@ -149,7 +159,7 @@ Steps:
 3) Prometheus UI: http://localhost:9090
 4) Grafana UI: http://localhost:3000 (admin/admin by default; password set in `docker-compose.yml`).
 
-Add Prometheus (http://prometheus:9090 inside Compose network or http://localhost:9090 from your browser) as a Grafana data source and build dashboards from the metric names above.
+Add Prometheus (http://prometheus:9090 inside Compose network or http://localhost:9090 from your browser) as a Grafana data source, then import the dashboards and load the alerting rules (next section).
 
 Set the job's `scrape_timeout` above the exporter's 5s query timeout (the
 example uses 10s). With a global `scrape_interval` below 10s, Prometheus
@@ -168,9 +178,40 @@ another one is collecting waits for it and gets the same metrics, so SQL
 Server is queried once and the scrapes do not compete for the connection
 pool (since v0.14.0, see [Upgrading](upgrading.md#v0140)).
 
-Ready-to-use dashboards are included in [`dashboards/`](../dashboards/): a
-general one, one for **Amazon RDS** that shows the exporter's engine
-metrics next to the host metrics from CloudWatch, one for **Google Cloud
-SQL** that does the same with Cloud Monitoring, and one for **Azure SQL
-Managed Instance** with Azure Monitor. See
-[`dashboards/README.md`](../dashboards/README.md) for import instructions.
+## Dashboards and alerts
+
+The repository ships dashboards and alerting rules, so the last step of an
+installation is to import and load them.
+
+1. **Dashboards.** In Grafana, **Dashboards → New → Import**, upload a JSON
+   from [`dashboards/`](../dashboards/) and map the `DS_PROMETHEUS` input to
+   your Prometheus data source:
+
+   | Dashboard | For | Extra data source |
+   |---|---|---|
+   | `mssql-exporter-grafana-dashboard.json` | Any platform | — |
+   | `mssql-exporter-rds-cloudwatch-dashboard.json` | Amazon RDS | CloudWatch |
+   | `mssql-exporter-cloudsql-dashboard.json` | Google Cloud SQL | Google Cloud Monitoring |
+   | `mssql-exporter-azure-mi-dashboard.json` | Azure SQL Managed Instance | Azure Monitor |
+
+   [`dashboards/README.md`](../dashboards/README.md) describes each one, the
+   permissions of the cloud data sources and the variables.
+
+2. **Alerting rules.** Copy
+   [`contrib/prometheus/alerts.yml`](../contrib/prometheus/alerts.yml) (also
+   in the release archives) next to `prometheus.yml`, reference it and
+   reload Prometheus:
+
+   ```yaml
+   rule_files:
+     - alerts.yml
+   ```
+
+   The compose stack already mounts it, and the `prometheus.yml` example
+   above loads it. Check the rules on the **Alerts** page of Prometheus
+   (http://localhost:9090/alerts), or with `promtool check rules alerts.yml`. The `MSSQLExporterDown` rule
+   selects `job="sqlserver_exporter"`: adjust it if your job has another
+   name. See [Alerting rules](alerting.md) for what each group covers and
+   how to tune it.
+
+![Main dashboard: databases row, with data and log file sizes and log used per database](../dashboards/img/databases.jpg)
