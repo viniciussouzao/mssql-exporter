@@ -43,6 +43,7 @@ mssql-exporter/
 │
 ├── SECURITY.md                      # How to report a vulnerability, supported versions
 ├── docs/                            # User documentation (shipped in the release archives, except validation/)
+│   ├── README.md                    # Index of the documentation
 │   ├── install.md                   # Windows service, systemd, Docker, docker-compose stack
 │   ├── configuration.md             # Flags, env vars, config file, precedence, pool, web security
 │   ├── permissions.md               # Grants per collector and platform, DMVs read
@@ -51,7 +52,8 @@ mssql-exporter/
 │   ├── alerting.md                  # contrib/prometheus/alerts.yml
 │   ├── upgrading.md                 # Changes to check per version, newest first
 │   ├── validation.md                # English summary of the homologation
-│   └── validation/BACKLOG-HOMOLOG.md # Homologation findings (HML-NNN), in Portuguese
+│   └── validation/                  # Homologation findings (HML-NNN): BACKLOG-HOMOLOG.md (Portuguese,
+│                                    #   original) and BACKLOG-HOMOLOG.en.md (English); update both
 ├── CONTRIBUTING.md                  # Development setup, PR checklist, adding a collector
 │
 ├── .github/
@@ -497,7 +499,8 @@ Other platform facts from the homologation (details in
   needs a grant, add it to the fixture AND to `docs/permissions.md`. Not covered: AG, mirroring,
   log shipping and replication topologies, Windows, managed platforms
 - Manual homologation recorded in `docs/validation/BACKLOG-HOMOLOG.md` (HML-001..059,
-  summarised in English in `docs/validation.md`), all
+  in Portuguese; English translation in `docs/validation/BACKLOG-HOMOLOG.en.md`, kept
+  in sync; summarised in `docs/validation.md`), all
   cloud resources destroyed after each phase:
   - AWS: EC2 Windows (2019 → 2022 → 2025, AG, mirroring, log shipping) and
     RDS for SQL Server 2025 SE (Single/Multi-AZ)

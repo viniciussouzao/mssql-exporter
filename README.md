@@ -167,6 +167,8 @@ local `prometheus.yml` that you create first (see
 
 ## Documentation
 
+The [documentation index](docs/README.md) lists every page. The main ones:
+
 - [Installation](docs/install.md): Windows service, systemd, Docker, and a
   local Prometheus + Grafana stack
 - [Configuration](docs/configuration.md): flags, environment variables,
