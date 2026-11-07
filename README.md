@@ -28,11 +28,16 @@ health, HA/DR state and workload signals in Prometheus and Grafana.
 
 ![Overview row of the main Grafana dashboard](dashboards/img/overview.jpg)
 
-**Contents:** [Why another exporter?](#why-another-sql-server-exporter) ·
-[Supported platforms](#supported-platforms) ·
-[What's included](#whats-included) · [Quick Start](#quick-start) ·
-[Documentation](#documentation) · [Troubleshooting](#troubleshooting) ·
-[Roadmap](#roadmap) · [Contributing](#contributing)
+**Contents**
+
+- [Why another SQL Server exporter?](#why-another-sql-server-exporter)
+- [Supported platforms](#supported-platforms)
+- [What's included](#whats-included)
+- [Quick Start](#quick-start)
+- [Documentation](#documentation)
+- [Troubleshooting](#troubleshooting)
+- [Roadmap](#roadmap)
+- [Contributing](#contributing)
 
 ## Why another SQL Server exporter?
 
