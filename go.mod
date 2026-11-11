@@ -10,9 +10,9 @@ require (
 	github.com/prometheus/client_model v0.6.3
 	github.com/prometheus/exporter-toolkit v0.20.0
 	github.com/shirou/gopsutil/v4 v4.26.10
-	github.com/spf13/pflag v1.0.10
+	github.com/spf13/pflag v1.1.0
 	github.com/yusufpapurcu/wmi v1.2.4
-	golang.org/x/sys v0.49.0
+	golang.org/x/sys v0.50.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
